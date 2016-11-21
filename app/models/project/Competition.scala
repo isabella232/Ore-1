@@ -4,13 +4,18 @@ import java.sql.Timestamp
 
 import db.impl.model.common.{Describable, Named}
 import db.impl.schema.CompetitionTable
-import db.{InsertFunc, Model, ModelQuery, ObjId, ObjectTimestamp}
+import db.{DbRef, InsertFunc, Model, ModelQuery, ObjId, ObjectTimestamp}
+import form.project.CompetitionData
+import models.user.User
+import ore.user.UserOwned
+import util.StringUtils.noneIfEmpty
 
 import slick.lifted.TableQuery
 
 case class Competition(
     id: ObjId[Competition],
     createdAt: ObjectTimestamp,
+    userId: DbRef[User],
     name: String,
     description: Option[String],
     startDate: Timestamp,
@@ -35,7 +40,8 @@ object Competition {
 
   def partial(
       name: String,
-      description: Option[String],
+      description: Option[String] = None,
+      userId: DbRef[User],
       startDate: Timestamp,
       endDate: Timestamp,
       isVotingEnabled: Boolean = true,
@@ -52,6 +58,7 @@ object Competition {
       Competition(
         id,
         time,
+        userId,
         name,
         description,
         startDate,
@@ -67,6 +74,26 @@ object Competition {
         maxEntryTotal
     )
 
+  def partial(user: User, formData: CompetitionData): InsertFunc[Competition] =
+    partial(
+      userId = user.id.value,
+      name = formData.name.trim,
+      description = formData.description.flatMap(noneIfEmpty),
+      startDate = new Timestamp(formData.startDate.getTime),
+      endDate = new Timestamp(formData.endDate.getTime),
+      isVotingEnabled = formData.isVotingEnabled,
+      isStaffVotingOnly = formData.isStaffVotingOnly,
+      shouldShowVoteCount = formData.shouldShowVoteCount,
+      isSpongeOnly = formData.isSpongeOnly,
+      isSourceRequired = formData.isSourceRequired,
+      defaultVotes = formData.defaultVotes,
+      staffVotes = formData.staffVotes,
+      allowedEntries = formData.allowedEntries,
+      maxEntryTotal = Some(formData.maxEntryTotal).filter(_ != -1)
+    )
+
   implicit val query: ModelQuery[Competition] =
     ModelQuery.from[Competition](TableQuery[CompetitionTable], _.copy(_, _))
+
+  implicit val competitionIsUserOwned: UserOwned[Competition] = _.userId
 }

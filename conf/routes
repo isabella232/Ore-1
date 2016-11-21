@@ -18,6 +18,7 @@ GET     /admin/stats                                                @controllers
 GET     /admin/log                                                  @controllers.Application.showLog(page: Option[Int], userFilter: Option[DbRef[User]], projectFilter: Option[DbRef[Project]], versionFilter: Option[DbRef[Version]], pageFilter: Option[DbRef[Page]], actionFilter: Option[Int], subjectFilter: Option[DbRef[_]])
 GET     /admin/competitions                                         @controllers.project.Competitions.showManager()
 GET     /admin/competitions/new                                     @controllers.project.Competitions.showCreator()
+POST    /admin/competitions/new                                     @controllers.project.Competitions.create()
 
 GET     /statusz                                                    @controllers.ApiController.showStatusZ()
 

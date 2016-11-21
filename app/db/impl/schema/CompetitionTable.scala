@@ -2,16 +2,19 @@ package db.impl.schema
 
 import java.sql.Timestamp
 
+import db.DbRef
 import db.impl.OrePostgresDriver.api._
 import db.impl.table.common.{DescriptionColumn, NameColumn}
 import db.table.ModelTable
 import models.project.Competition
+import models.user.User
 
 class CompetitionTable(tag: Tag)
     extends ModelTable[Competition](tag, "project_competitions")
     with NameColumn[Competition]
     with DescriptionColumn[Competition] {
 
+  def userId              = column[DbRef[User]]("user_id")
   def startDate           = column[Timestamp]("start_date")
   def endDate             = column[Timestamp]("end_date")
   def isVotingEnabled     = column[Boolean]("is_voting_enabled")
@@ -29,6 +32,7 @@ class CompetitionTable(tag: Tag)
       (
         id.?,
         createdAt.?,
+        userId,
         name,
         description.?,
         startDate,

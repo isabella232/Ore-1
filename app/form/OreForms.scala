@@ -234,6 +234,22 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
     )(VersionData.apply)(VersionData.unapply)
   )
 
+  lazy val CompetitionCreate = Form(mapping(
+    "name" -> nonEmptyText(0, this.config.ore.competitions.name.maxLen),
+    "description" -> optional(nonEmptyText),
+    "start-date" -> date,
+    "end-date" -> date,
+    "enable-voting" -> default(boolean, true),
+    "staff-only" -> default(boolean, false),
+    "show-vote-count" -> default(boolean, true),
+    "sponge-only" -> default(boolean, false),
+    "source-required" -> default(boolean, false),
+    "default-votes" -> default(number(0), 1),
+    "staff-votes" -> default(number(0), 1),
+    "default-entries" -> default(number(1), 1),
+    "max-entries-total" -> default(number(-1), -1)
+  )(CompetitionData.apply)(CompetitionData.unapply))
+
   /**
     * Submits a change to a Version's description.
     */

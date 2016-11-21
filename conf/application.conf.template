@@ -123,6 +123,8 @@ ore {
     queue {
         max-review-time = 1d
     }
+
+    competitions.name.max-len = 20
 }
 
 mail {
