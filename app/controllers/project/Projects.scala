@@ -469,7 +469,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     *
     * @param author Project owner
     * @param slug   Project slug
-    * @return Project manager
+    * @return Project manage
     */
   def showSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
     implicit request =>
@@ -565,7 +565,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     }
 
   /**
-    * Saves the specified Project from the settings manager.
+    * Saves the specified Project from the settings manage.
     *
     * @param author Project owner
     * @param slug   Project slug

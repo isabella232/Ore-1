@@ -42,3 +42,10 @@
 .list-group-health {
   padding: 0;
 }
+
+.form-competition {
+  input[type="number"] { max-width: 40px; }
+  .setting-content {
+    text-align: right;
+  }
+}
