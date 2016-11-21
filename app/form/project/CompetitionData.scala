@@ -19,4 +19,6 @@ case class CompetitionData(name: String,
 
   val timeZone: ZoneId = ZoneId.of(this.timeZoneId)
 
+  def checkDates(): Boolean = startDate.isAfter(LocalDateTime.now(this.timeZone)) && startDate.isBefore(this.endDate)
+
 }

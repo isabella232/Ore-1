@@ -9,16 +9,18 @@ import play.api.i18n.MessagesApi
 import play.api.mvc.{Action, ActionBuilder, AnyContent}
 
 import controllers.OreBaseController
+import controllers.sugar.{Bakery, Requests}
 import db.ModelService
 import form.OreForms
-import models.project.Competition
-import ore.{OreConfig, OreEnv}
-import ore.permission.EditCompetitions
-import controllers.sugar.{Bakery, Requests}
 import form.project.CompetitionData
+import models.project.Competition
+import ore.permission.EditCompetitions
+import ore.{OreConfig, OreEnv}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
+import util.StringUtils
 import views.{html => views}
 
+import cats.effect.IO
 import cats.syntax.all._
 
 class Competitions @Inject()(forms: OreForms)(
@@ -51,6 +53,11 @@ class Competitions @Inject()(forms: OreForms)(
   def create(): Action[CompetitionData] =
     EditCompetitionsAction(parse.form(forms.CompetitionCreate, onErrors = FormError(self.showCreator()))).asyncF {
       implicit request =>
-        this.competitions.add(Competition.partial(request.user, request.body)).as(Redirect(self.showManager()))
+        competitions
+          .exists(StringUtils.equalsIgnoreCase(_.name, request.body.name))
+          .ifM(
+            IO.pure(Redirect(self.showCreator()).withError("error.unique.competition.name")),
+            competitions.add(Competition.partial(request.user, request.body)).as(Redirect(self.showManager()))
+          )
     }
 }

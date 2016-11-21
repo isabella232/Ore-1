@@ -249,7 +249,8 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
     "staff-votes" -> default(number(0), 1),
     "default-entries" -> default(number(1), 1),
     "max-entries-total" -> default(number(-1), -1)
-  )(CompetitionData.apply)(CompetitionData.unapply))
+  )(CompetitionData.apply)(CompetitionData.unapply)
+    .verifying("error.dates.competition", _.checkDates()))
 
   /**
     * Submits a change to a Version's description.
