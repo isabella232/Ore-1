@@ -1,6 +1,10 @@
 package models.project
 
+import scala.concurrent.duration._
+
 import java.sql.Timestamp
+import java.time.{LocalDateTime, ZoneId}
+import java.util.Date
 
 import db.impl.model.common.{Describable, Named}
 import db.impl.schema.CompetitionTable
@@ -35,6 +39,8 @@ case class Competition(
 
   override type M = Competition
   override type T = CompetitionTable
+
+  def timeRemaining: FiniteDuration = (this.endDate.getTime - new Date().getTime).millis
 }
 object Competition {
 
@@ -79,8 +85,8 @@ object Competition {
       userId = user.id.value,
       name = formData.name.trim,
       description = formData.description.flatMap(noneIfEmpty),
-      startDate = new Timestamp(formData.startDate.getTime),
-      endDate = new Timestamp(formData.endDate.getTime),
+      startDate = new Timestamp(formData.startDate.atZone(formData.timeZone).toEpochSecond * 1000),
+      endDate = new Timestamp(formData.endDate.atZone(formData.timeZone).toEpochSecond * 1000),
       isVotingEnabled = formData.isVotingEnabled,
       isStaffVotingOnly = formData.isStaffVotingOnly,
       shouldShowVoteCount = formData.shouldShowVoteCount,

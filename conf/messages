@@ -145,6 +145,7 @@ project.competition.active.create = Create one now!
 project.competition.create.title = Create a new competition
 project.competition.create.startDate = Start Date
 project.competition.create.endDate = End Date
+project.competition.create.timeZone = Time Zone
 project.competition.create.enableVoting = Enable voting
 project.competition.create.showVoteCount = Show vote count
 project.competition.create.spongeOnly = Sponge plugins only

@@ -4,6 +4,8 @@
 @import views.html.helper.form
 @import java.util.Date
 @import controllers.sugar.Requests.OreRequest
+@import java.time.ZoneId
+@import scala.collection.JavaConverters._
 
 @()(implicit messages: Messages, request: OreRequest[_], config: OreConfig, flash: Flash)
 
@@ -35,12 +37,21 @@
 
                             <div class="setting setting-no-border">
                                 <h4>@messages("project.competition.create.startDate")</h4>
-                                <input type="date" name="start-date" value="@(new Date().format("Y-m-d"))" required />
+                                <input type="datetime-local" name="start-date" value="@(new Date().format("Y-m-d"))" required />
+                            </div>
+
+                            <div class="setting setting-no-border">
+                                <h4>@messages("project.competition.create.endDate")</h4>
+                                <input type="datetime-local" name="end-date" required />
                             </div>
 
                             <div class="setting">
-                                <h4>@messages("project.competition.create.endDate")</h4>
-                                <input type="date" name="end-date" required />
+                                <h4>@messages("project.competition.create.timeZone")</h4>
+                                <select name="time-zone" required>
+                                    @for(id <- ZoneId.getAvailableZoneIds.asScala.toList.sorted) {
+                                        <option value="@id">@id</option>
+                                    }
+                                </select>
                             </div>
 
                             <div class="setting">

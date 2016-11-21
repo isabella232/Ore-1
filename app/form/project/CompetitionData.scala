@@ -1,11 +1,12 @@
 package form.project
 
-import java.util.Date
+import java.time.{LocalDateTime, ZoneId}
 
 case class CompetitionData(name: String,
                            description: Option[String],
-                           startDate: Date,
-                           endDate: Date,
+                           startDate: LocalDateTime,
+                           endDate: LocalDateTime,
+                           timeZoneId: String,
                            isVotingEnabled: Boolean,
                            isStaffVotingOnly: Boolean,
                            shouldShowVoteCount: Boolean,
@@ -14,4 +15,8 @@ case class CompetitionData(name: String,
                            defaultVotes: Int,
                            staffVotes: Int,
                            allowedEntries: Int,
-                           maxEntryTotal: Int)
+                           maxEntryTotal: Int) {
+
+  val timeZone: ZoneId = ZoneId.of(this.timeZoneId)
+
+}

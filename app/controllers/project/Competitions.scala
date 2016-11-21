@@ -53,5 +53,4 @@ class Competitions @Inject()(forms: OreForms)(
       implicit request =>
         this.competitions.add(Competition.partial(request.user, request.body)).as(Redirect(self.showManager()))
     }
-
 }

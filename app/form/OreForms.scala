@@ -237,8 +237,9 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
   lazy val CompetitionCreate = Form(mapping(
     "name" -> nonEmptyText(0, this.config.ore.competitions.name.maxLen),
     "description" -> optional(nonEmptyText),
-    "start-date" -> date,
-    "end-date" -> date,
+    "start-date" -> localDateTime("yyyy-MM-dd'T'HH:mm"),
+    "end-date" -> localDateTime("yyyy-MM-dd'T'HH:mm"),
+    "time-zone" -> nonEmptyText,
     "enable-voting" -> default(boolean, true),
     "staff-only" -> default(boolean, false),
     "show-vote-count" -> default(boolean, true),

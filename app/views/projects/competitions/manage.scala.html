@@ -2,21 +2,42 @@
 @import ore.OreConfig
 @import db.impl.access.UserBase
 @import controllers.sugar.Requests.OreRequest
+@import models.project.Competition
+
 @()(implicit messages: Messages, request: OreRequest[_], config: OreConfig)
 
+@formatTime(competition: Competition) = @{
+    val seconds = competition.timeRemaining.toSeconds
+    "%d %d:%02d:%02d".format(seconds / 86400, (seconds % 86400) / 3600, (seconds % 3600) / 60, seconds % 60)
+}
+
 @bootstrap.layout(messages("project.competition.title")) {
+
+    <script type="text/javascript" src="@routes.Assets.at("javascripts/competitionManage.js")"></script>
 
     <div class="container" style="margin-top: 90px;">
         <div class="row">
             <div class="col-md-12">
                 <h1>@messages("project.competition.active")</h1>
 
-                <div class="list-group-item">
-                    <p>@messages("project.competition.active.none")</p>
-                    <a href="@controllers.project.routes.Competitions.showCreator()">
-                    @messages("project.competition.active.create")
-                    </a>
-                </div>
+                @if(competitions.isEmpty) {
+                    <div class="list-group-item">
+                        <p>@messages("project.competition.active.none")</p>
+                        <a href="@controllers.project.routes.Competitions.showCreator()">
+                        @messages("project.competition.active.create")
+                        </a>
+                    </div>
+                } else {
+                    <ul class="list-group list-competitions">
+                        @competitions.all.map { competition =>
+                          <li class="list-group-item">
+                              <h4 class="pull-left">@competition.name</h4>
+                              <h4 class="counter pull-right">@formatTime(competition)</h4>
+                              <div class="clearfix"></div>
+                          </li>
+                        }
+                    </ul>
+                }
             </div>
         </div>
     </div>
