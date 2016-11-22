@@ -14,9 +14,33 @@
     margin-bottom: 10px;
   }
 
+  .btn-results {
+    margin-top: 5px;
+    margin-right: 5px;
+  }
+
   .counter {
     color: gray;
     font-weight: bold;
+  }
+
+  .competition-expand {
+    .down {
+      -webkit-transform: rotate(90deg);
+      -moz-transform: rotate(90deg);
+      -ms-transform: rotate(90deg);
+      -o-transform: rotate(90deg);
+      transform: rotate(90deg);
+    }
+
+    .fa-chevron-right {
+      font-size: 75%;
+      -webkit-transition: all 0.1s linear;
+      -moz-transition: all 0.1s linear;
+      -ms-transition: all 0.1s linear;
+      -o-transition: all 0.1s linear;
+      transition: all 0.1s linear;
+    }
   }
 
   .competition-drawer {

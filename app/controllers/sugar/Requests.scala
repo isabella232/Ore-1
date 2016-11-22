@@ -2,7 +2,7 @@ package controllers.sugar
 
 import play.api.mvc.{Request, WrappedRequest}
 
-import models.project.Project
+import models.project.{Competition, Project}
 import models.user.{Organization, User}
 import models.viewhelper._
 import ore.permission.scope.{GlobalScope, HasScope}
@@ -132,5 +132,21 @@ object Requests {
   }
   object AuthedOrganizationRequest {
     implicit def hasScope: HasScope[AuthedOrganizationRequest[_]] = HasScope.orgScope(_.subject.id.value)
+  }
+
+  sealed class CompetitionRequest[A](val competition: Competition, val headerData: HeaderData, val request: Request[A])
+      extends WrappedRequest[A](request)
+      with OreRequest[A]
+
+  final case class AuthedCompetitionRequest[A](
+      override val competition: Competition,
+      override val headerData: HeaderData,
+      override val request: AuthRequest[A]
+  ) extends CompetitionRequest(competition, headerData, request)
+      with ScopedRequest[A]
+      with OreRequest[A] {
+    type Subject = Competition
+    override def user: User           = request.user
+    override def subject: Competition = competition
   }
 }

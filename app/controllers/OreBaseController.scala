@@ -10,11 +10,11 @@ import play.api.mvc._
 
 import controllers.sugar.Requests.{AuthRequest, AuthedProjectRequest, OreRequest}
 import controllers.sugar.{Actions, Bakery, Requests}
-import db.ModelService
+import db.{DbRef, ModelService}
 import db.access.ModelAccess
 import db.impl.OrePostgresDriver.api._
 import db.impl.schema.VersionTable
-import models.project.{Project, Version, Visibility}
+import models.project.{Competition, Project, Version, Visibility}
 import models.user.SignOn
 import ore.permission.ReviewProjects
 import ore.{OreConfig, OreEnv}
@@ -171,6 +171,10 @@ abstract class OreBaseController(
     val first = if (requireUnlock) UserLock(ShowUser(organization)) else Authenticated
     first.andThen(authedOrganizationAction(organization))
   }
+
+  def CompetitionAction(id: DbRef[Competition]) = OreAction andThen competitionAction(id)
+
+  def AuthedCompetitionAction(id: DbRef[Competition]) = Authenticated andThen authedCompetitionAction(id)
 
   /**
     * A request that ensures that a user has permission to edit a specified

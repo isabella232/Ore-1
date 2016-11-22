@@ -142,6 +142,7 @@ project.competition.title       =   Competitions
 project.competition.active      =   Active Competitions
 project.competition.active.none =   There are no active competitions right now.
 project.competition.active.create = Create one now!
+project.competition.viewResults =   View results
 project.competition.create.title = Create a new competition
 project.competition.create.startDate = Start Date
 project.competition.create.endDate = End Date
@@ -155,6 +156,8 @@ project.competition.create.staffOnly = Staff votes only
 project.competition.create.staffVotes = Votes per staff member
 project.competition.create.defaultEntries = Allowed entries
 project.competition.create.maxEntriesTotal = Maximum entry total
+project.competition.delete.title = Delete Competition
+project.competition.delete.body = Are you sure you want to delete this competition? This cannot be undone.
 
 project.author                  =   Author
 project.category                =   Category

@@ -12,11 +12,11 @@ import play.api.mvc._
 
 import controllers.routes
 import controllers.sugar.Requests._
-import db.ModelService
+import db.{DbRef, ModelService}
 import db.access.ModelAccess
 import db.impl.OrePostgresDriver.api._
 import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
-import models.project.{Project, Visibility}
+import models.project.{Competition, Project, Visibility}
 import models.user.{Organization, SignOn, User}
 import models.viewhelper._
 import ore.permission.scope.{GlobalScope, HasScope}
@@ -40,9 +40,10 @@ trait Actions extends Calls with ActionHelpers {
   def bakery: Bakery
   implicit def auth: SpongeAuthApi
 
-  def users: UserBase                 = UserBase()
-  def projects: ProjectBase           = ProjectBase()
-  def organizations: OrganizationBase = OrganizationBase()
+  def users: UserBase                        = UserBase()
+  def projects: ProjectBase                  = ProjectBase()
+  def organizations: OrganizationBase        = OrganizationBase()
+  def competitions: ModelAccess[Competition] = service.access[Competition]()
 
   private val PermsLogger    = scalalogging.Logger("Permissions")
   private val MDCPermsLogger = scalalogging.Logger.takingImplicit[OreMDC](PermsLogger.underlying)
@@ -406,6 +407,40 @@ trait Actions extends Calls with ActionHelpers {
         .unsafeToFuture()
     }
 
+  }
+
+  def competitionAction(id: DbRef[Competition])(
+      implicit ec: ExecutionContext
+  ): ActionRefiner[OreRequest, CompetitionRequest] = new ActionRefiner[OreRequest, CompetitionRequest] {
+    def executionContext: ExecutionContext = ec
+
+    def refine[A](request: OreRequest[A]): Future[Either[Result, CompetitionRequest[A]]] = {
+      implicit val r: OreRequest[A] = request
+
+      competitions
+        .get(id)
+        .map(new CompetitionRequest(_, request.headerData, request))
+        .toRight(notFound)
+        .value
+        .unsafeToFuture()
+    }
+  }
+
+  def authedCompetitionAction(id: DbRef[Competition])(
+      implicit ec: ExecutionContext
+  ): ActionRefiner[AuthRequest, AuthedCompetitionRequest] = new ActionRefiner[AuthRequest, AuthedCompetitionRequest] {
+    def executionContext: ExecutionContext = ec
+
+    def refine[A](request: AuthRequest[A]): Future[Either[Result, AuthedCompetitionRequest[A]]] = {
+      implicit val r: AuthRequest[A] = request
+
+      competitions
+        .get(id)
+        .map(AuthedCompetitionRequest(_, request.headerData, request))
+        .toRight(notFound)
+        .value
+        .unsafeToFuture()
+    }
   }
 
   private def toOrgaRequest[T](orga: Organization)(f: (OrganizationData, ScopedOrganizationData) => T)(

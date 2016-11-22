@@ -11,6 +11,7 @@ import play.api.mvc.{Action, ActionBuilder, AnyContent}
 import controllers.OreBaseController
 import controllers.sugar.{Bakery, Requests}
 import db.{DbRef, ModelService}
+import db.impl.OrePostgresDriver.api._
 import form.OreForms
 import form.project.competition.{CompetitionCreateForm, CompetitionSaveForm}
 import models.project.Competition
@@ -36,14 +37,13 @@ class Competitions @Inject()(forms: OreForms)(
 ) extends OreBaseController {
   identity(messagesApi)
 
-  private val self         = routes.Competitions
-  private val competitions = this.service.access[Competition]()
+  private val self = routes.Competitions
 
   def EditCompetitionsAction: ActionBuilder[Requests.AuthRequest, AnyContent] =
     Authenticated.andThen(PermissionAction(EditCompetitions))
 
   def showManager(): Action[AnyContent] = EditCompetitionsAction.asyncF { implicit request =>
-    competitions.all.map(all => Ok(views.projects.competitions.manage(all.toSeq)))
+    competitions.sorted(_.createdAt).map(all => Ok(views.projects.competitions.manage(all)))
   }
 
   def showCreator(): Action[AnyContent] = EditCompetitionsAction { implicit request =>
@@ -62,10 +62,17 @@ class Competitions @Inject()(forms: OreForms)(
     }
 
   def save(id: DbRef[Competition]): Action[CompetitionSaveForm] =
-    EditCompetitionsAction(parse.form(forms.CompetitionSave, onErrors = FormError(self.showManager()))).asyncEitherT {
-      implicit request =>
+    EditCompetitionsAction
+      .andThen(AuthedCompetitionAction(id))(parse.form(forms.CompetitionSave, onErrors = FormError(self.showManager())))
+      .asyncEitherT { implicit request =>
         competitions.get(id).toRight(notFound).semiflatMap { competition =>
           competition.save(request.body).as(Redirect(self.showManager()).withSuccess("success.saved.competition"))
         }
-    }
+      }
+
+  def delete(id: DbRef[Competition]): Action[AnyContent] = EditCompetitionsAction.andThen(AuthedCompetitionAction(id)).asyncF { implicit request =>
+    this.competitions
+      .remove(request.competition)
+      .as(Redirect(self.showManager()).withSuccess("success.deleted.competition"))
+  }
 }
