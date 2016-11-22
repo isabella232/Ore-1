@@ -15,6 +15,7 @@ import db.impl.OrePostgresDriver.api._
 import db.{DbRef, ModelService}
 import form.organization.{OrganizationAvatarUpdate, OrganizationMembersUpdate, OrganizationRoleSetBuilder}
 import form.project._
+import form.project.competition.{CompetitionCreateForm, CompetitionSaveForm}
 import models.api.ProjectApiKey
 import models.project.Page._
 import models.project.{Channel, Page}
@@ -234,22 +235,39 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
     )(VersionData.apply)(VersionData.unapply)
   )
 
+  private val dateFormat = this.config.ore.competitions.date.format
+
   lazy val CompetitionCreate = Form(mapping(
     "name" -> nonEmptyText(0, this.config.ore.competitions.name.maxLen),
     "description" -> optional(nonEmptyText),
-    "start-date" -> localDateTime("yyyy-MM-dd'T'HH:mm"),
-    "end-date" -> localDateTime("yyyy-MM-dd'T'HH:mm"),
+    "start-date" -> localDateTime(this.dateFormat),
+    "end-date" -> localDateTime(this.dateFormat),
     "time-zone" -> nonEmptyText,
-    "enable-voting" -> default(boolean, true),
+    "enable-voting" -> default(boolean, false),
     "staff-only" -> default(boolean, false),
-    "show-vote-count" -> default(boolean, true),
+    "show-vote-count" -> default(boolean, false),
     "sponge-only" -> default(boolean, false),
     "source-required" -> default(boolean, false),
     "default-votes" -> default(number(0), 1),
     "staff-votes" -> default(number(0), 1),
     "default-entries" -> default(number(1), 1),
     "max-entries-total" -> default(number(-1), -1)
-  )(CompetitionData.apply)(CompetitionData.unapply)
+  )(CompetitionCreateForm.apply)(CompetitionCreateForm.unapply)
+    .verifying("error.dates.competition", _.checkDates()))
+
+  lazy val CompetitionSave = Form(mapping(
+    "start-date" -> localDateTime(this.dateFormat),
+    "end-date" -> localDateTime(this.dateFormat),
+    "time-zone" -> nonEmptyText,
+    "enable-voting" -> default(boolean, false),
+    "staff-only" -> default(boolean, false),
+    "show-vote-count" -> default(boolean, false),
+    "source-required" -> default(boolean, false),
+    "default-votes" -> default(number(0), 1),
+    "staff-votes" -> default(number(0), 1),
+    "default-entries" -> default(number(1), 1),
+    "max-entries-total" -> default(number(-1), -1)
+  )(CompetitionSaveForm.apply)(CompetitionSaveForm.unapply)
     .verifying("error.dates.competition", _.checkDates()))
 
   /**

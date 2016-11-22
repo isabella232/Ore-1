@@ -2,6 +2,8 @@ package util
 
 import java.nio.file.{Files, Path}
 import java.text.{DateFormat, MessageFormat}
+import java.sql.Timestamp
+import java.time.{LocalDateTime, ZoneId}
 import java.util.Date
 
 import play.api.i18n.Messages
@@ -79,4 +81,7 @@ object StringUtils {
     */
   def prettifyDateAndTime(date: Date)(implicit messages: Messages): String =
     DateFormat.getDateTimeInstance(DateFormat.DEFAULT, DateFormat.DEFAULT, messages.lang.locale).format(date)
+
+  def localDateTime2timestamp(date: LocalDateTime, timeZone: String): Timestamp =
+    new Timestamp(date.atZone(ZoneId.of(timeZone)).toEpochSecond * 1000)
 }

@@ -11,6 +11,18 @@
 
 @bootstrap.layout(messages("project.competition.create.title")) {
 
+    <script>
+        $(function() {
+            var timezone = jstz.determine().name();
+            $('select[name="time-zone"]').find('option[value="' + timezone + '"]').prop('selected', true);
+            var now = new Date();
+            now.setDate(now.getDate() + 1);
+            $('input[name="start-date"]').attr('value', now.toJSON().slice(0, 10) + 'T00:00');
+            now.setDate(now.getDate() + 7);
+            $('input[name="end-date"]').attr('value', now.toJSON().slice(0, 10) + 'T00:00');
+        });
+    </script>
+
     <div class="container" style="margin-top: 90px;">
         <div class="row">
             <div class="col-md-12">
@@ -37,7 +49,7 @@
 
                             <div class="setting setting-no-border">
                                 <h4>@messages("project.competition.create.startDate")</h4>
-                                <input type="datetime-local" name="start-date" value="@(new Date().format("Y-m-d"))" required />
+                                <input type="datetime-local" name="start-date" required />
                             </div>
 
                             <div class="setting setting-no-border">

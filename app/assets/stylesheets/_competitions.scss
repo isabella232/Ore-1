@@ -1,0 +1,54 @@
+.form-competition {
+  input[type="number"] { max-width: 40px; }
+  .setting-content {
+    text-align: right;
+  }
+}
+
+.header-competitions {
+  .btn { margin-top: 25px; }
+}
+
+.list-competitions {
+  .list-group-item {
+    margin-bottom: 10px;
+  }
+
+  .counter {
+    color: gray;
+    font-weight: bold;
+  }
+
+  .competition-drawer {
+    display: none;
+    z-index: -1;
+    height: 0;
+    width: 100%;
+    background-color: white;
+    border-top: 1px solid #ddd;
+
+    .col-drawer {
+      padding-top: 20px;
+      input[type="number"] { max-width: 40px; }
+      table td {
+        padding: 5px;
+      }
+    }
+
+    .row:last-child {
+      border-top: 1px solid #ddd;
+      padding: 10px;
+    }
+
+    .competition-delete {
+      position: absolute;
+      right: 15px;
+      top: 55px;
+    }
+
+    select[name="time-zone"] {
+      margin-top: 5px;
+    }
+  }
+
+}

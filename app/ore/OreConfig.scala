@@ -112,6 +112,11 @@ final class OreConfig @Inject()(config: Configuration) {
         val raw: Configuration = competitions.raw.get[Configuration]("name")
         val maxLen: Int = raw.get[Int]("max-len")
       }
+
+      object date extends ConfigCategory {
+        val raw: Configuration = competitions.raw.get[Configuration]("date")
+        val format: String = raw.get[String]("format")
+      }
     }
   }
 
@@ -189,6 +194,8 @@ final class OreConfig @Inject()(config: Configuration) {
   ore.orgs.load()
   ore.queue.load()
   ore.competitions.load()
+  ore.competitions.name.load()
+  ore.competitions.date.load()
   forums.load()
   forums.api.load()
   sponge.load()

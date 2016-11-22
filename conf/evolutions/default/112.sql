@@ -6,6 +6,7 @@ CREATE TABLE project_competitions
   created_at             TIMESTAMP           NOT NULL,
   user_id                BIGINT              NOT NULL REFERENCES users ON DELETE RESTRICT,
   name                   VARCHAR(255) UNIQUE NOT NULL,
+  time_zone              VARCHAR(255)        NOT NULL,
   description            TEXT,
   start_date             TIMESTAMP           NOT NULL,
   end_date               TIMESTAMP           NOT NULL,

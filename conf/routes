@@ -19,6 +19,7 @@ GET     /admin/log                                                  @controllers
 GET     /admin/competitions                                         @controllers.project.Competitions.showManager()
 GET     /admin/competitions/new                                     @controllers.project.Competitions.showCreator()
 POST    /admin/competitions/new                                     @controllers.project.Competitions.create()
+POST    /admin/competitions/:id/save                                @controllers.project.Competitions.save(id: DbRef[Competition])
 
 GET     /statusz                                                    @controllers.ApiController.showStatusZ()
 

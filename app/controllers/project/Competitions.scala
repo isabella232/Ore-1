@@ -10,9 +10,9 @@ import play.api.mvc.{Action, ActionBuilder, AnyContent}
 
 import controllers.OreBaseController
 import controllers.sugar.{Bakery, Requests}
-import db.ModelService
+import db.{DbRef, ModelService}
 import form.OreForms
-import form.project.CompetitionData
+import form.project.competition.{CompetitionCreateForm, CompetitionSaveForm}
 import models.project.Competition
 import ore.permission.EditCompetitions
 import ore.{OreConfig, OreEnv}
@@ -42,15 +42,15 @@ class Competitions @Inject()(forms: OreForms)(
   def EditCompetitionsAction: ActionBuilder[Requests.AuthRequest, AnyContent] =
     Authenticated.andThen(PermissionAction(EditCompetitions))
 
-  def showManager(): Action[AnyContent] = EditCompetitionsAction { implicit request =>
-    Ok(views.projects.competitions.manage())
+  def showManager(): Action[AnyContent] = EditCompetitionsAction.asyncF { implicit request =>
+    competitions.all.map(all => Ok(views.projects.competitions.manage(all.toSeq)))
   }
 
   def showCreator(): Action[AnyContent] = EditCompetitionsAction { implicit request =>
     Ok(views.projects.competitions.create())
   }
 
-  def create(): Action[CompetitionData] =
+  def create(): Action[CompetitionCreateForm] =
     EditCompetitionsAction(parse.form(forms.CompetitionCreate, onErrors = FormError(self.showCreator()))).asyncF {
       implicit request =>
         competitions
@@ -59,5 +59,13 @@ class Competitions @Inject()(forms: OreForms)(
             IO.pure(Redirect(self.showCreator()).withError("error.unique.competition.name")),
             competitions.add(Competition.partial(request.user, request.body)).as(Redirect(self.showManager()))
           )
+    }
+
+  def save(id: DbRef[Competition]): Action[CompetitionSaveForm] =
+    EditCompetitionsAction(parse.form(forms.CompetitionSave, onErrors = FormError(self.showManager()))).asyncEitherT {
+      implicit request =>
+        competitions.get(id).toRight(notFound).semiflatMap { competition =>
+          competition.save(request.body).as(Redirect(self.showManager()).withSuccess("success.saved.competition"))
+        }
     }
 }

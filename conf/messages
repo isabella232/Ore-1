@@ -139,7 +139,7 @@ page.plural                     =   Pages
 
 project.competition.plural      =   Competitions
 project.competition.title       =   Competitions
-project.competition.active      =   Active competitions
+project.competition.active      =   Active Competitions
 project.competition.active.none =   There are no active competitions right now.
 project.competition.active.create = Create one now!
 project.competition.create.title = Create a new competition

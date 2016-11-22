@@ -23,17 +23,30 @@ $(function() {
             var hours = parseInt(time.substring(time.indexOf(' ') + 1, sep2));
             var days = parseInt(time.substring(0, sep1));
             var totalSeconds = days * 86400 + hours * 3600 + minutes * 60 + seconds - 1;
-            var newTime = "{0} {1}:{2}:{3}".format(
+            var newTime = "{0}d {1}:{2}:{3}".format(
                 Math.floor(totalSeconds / 86400),
                 Math.floor((totalSeconds % 86400) / 3600),
                 int2digits(Math.floor((totalSeconds % 3600) / 60)),
                 int2digits(Math.floor((totalSeconds % 60))));
 
-            console.log(newTime);
-
             $(this).text(newTime);
         });
 
     }, 1000);
+
+    $('.competition-expand').click(function() {
+        var drawer = $(this).closest('.list-group-item').find('.competition-drawer');
+        var opened = drawer.hasClass('opened');
+        var sign = opened ? '-' : '+';
+        drawer.show().animate({
+            height: sign + '=260'
+        }, 200, function() {
+            if (!opened)
+                drawer.addClass('opened');
+            else {
+                drawer.removeClass('opened').hide();
+            }
+        });
+    });
 
 });
