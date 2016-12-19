@@ -237,6 +237,9 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
 
   private val dateFormat = this.config.ore.competitions.date.format
 
+  /**
+    * Submits a new [[models.project.Competition]].
+    */
   lazy val CompetitionCreate = Form(mapping(
     "name" -> nonEmptyText(0, this.config.ore.competitions.name.maxLen),
     "description" -> optional(nonEmptyText),
@@ -255,6 +258,9 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
   )(CompetitionCreateForm.apply)(CompetitionCreateForm.unapply)
     .verifying("error.dates.competition", _.checkDates()))
 
+  /**
+    * Saves a Competition.
+    */
   lazy val CompetitionSave = Form(mapping(
     "start-date" -> localDateTime(this.dateFormat),
     "end-date" -> localDateTime(this.dateFormat),

@@ -172,9 +172,23 @@ abstract class OreBaseController(
     first.andThen(authedOrganizationAction(organization))
   }
 
-  def CompetitionAction(id: DbRef[Competition]) = OreAction andThen competitionAction(id)
+  /**
+    * Retrieves a [[Competition]] and adds it to the request.
+    *
+    * @param id Competition ID
+    * @return   Request with competition
+    */
+  def CompetitionAction(id: DbRef[Competition]): ActionBuilder[Requests.CompetitionRequest, AnyContent] =
+    OreAction.andThen(competitionAction(id))
 
-  def AuthedCompetitionAction(id: DbRef[Competition]) = Authenticated andThen authedCompetitionAction(id)
+  /**
+    * Authenticates and then adds a [[Competition]] to the request.
+    *
+    * @param id Competition ID
+    * @return   Authenticated request with competition
+    */
+  def AuthedCompetitionAction(id: DbRef[Competition]): ActionBuilder[Requests.AuthedCompetitionRequest, AnyContent] =
+    Authenticated.andThen(authedCompetitionAction(id))
 
   /**
     * A request that ensures that a user has permission to edit a specified

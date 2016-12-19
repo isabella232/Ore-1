@@ -15,6 +15,27 @@ import form.project.competition.{CompetitionCreateForm, CompetitionSaveForm}
 import cats.effect.IO
 import slick.lifted.TableQuery
 
+/**
+  * Represents a [[Project]] competition.
+  *
+  * @param id                  Unique ID
+  * @param createdAt           Instant of creation
+  * @param userId              Owner ID
+  * @param name                Competition name
+  * @param description         Competition description
+  * @param startDate           Date when the competition begins
+  * @param endDate             Date when the competition ends
+  * @param timeZone            Time zone of competition
+  * @param isVotingEnabled     True if project voting is enabled
+  * @param isStaffVotingOnly   True if only staff members can vote
+  * @param shouldShowVoteCount True if the vote count should be displayed
+  * @param isSpongeOnly        True if only Sponge plugins are permitted in the competition
+  * @param isSourceRequired    True if source-code is required for entry to the competition
+  * @param defaultVotes        Default amount of votes a user has
+  * @param staffVotes          The amount of votes staff-members have
+  * @param allowedEntries      The amount of entries a user may submit
+  * @param maxEntryTotal       The total amount of projects allowed in the competition
+  */
 case class Competition(
     id: ObjId[Competition],
     createdAt: ObjectTimestamp,
@@ -40,6 +61,11 @@ case class Competition(
   override type M = Competition
   override type T = CompetitionTable
 
+  /**
+    * Saves this competition from the submitted form data.
+    *
+    * @param formData Submitted form data
+    */
   def save(formData: CompetitionSaveForm)(implicit service: ModelService): IO[Competition] = service.update(
     copy(
       startDate = localDateTime2timestamp(formData.startDate, formData.timeZoneId),
@@ -55,6 +81,11 @@ case class Competition(
     )
   )
 
+  /**
+    * Returns the amount of time remaining in the competition.
+    *
+    * @return Time remaining in competition
+    */
   def timeRemaining: FiniteDuration = (this.endDate.getTime - new Date().getTime).millis
 }
 object Competition {

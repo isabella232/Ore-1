@@ -134,10 +134,22 @@ object Requests {
     implicit def hasScope: HasScope[AuthedOrganizationRequest[_]] = HasScope.orgScope(_.subject.id.value)
   }
 
+  /**
+    * A request with a [[Competition]].
+    *
+    * @param competition  Competition
+    * @param request      Wrapped request
+    */
   sealed class CompetitionRequest[A](val competition: Competition, val headerData: HeaderData, val request: Request[A])
       extends WrappedRequest[A](request)
       with OreRequest[A]
 
+  /**
+    * An authenticated request with a [[Competition]].
+    *
+    * @param competition  Competition
+    * @param request      Wrapped request
+    */
   final case class AuthedCompetitionRequest[A](
       override val competition: Competition,
       override val headerData: HeaderData,

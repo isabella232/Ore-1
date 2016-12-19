@@ -24,6 +24,9 @@ import views.{html => views}
 import cats.effect.IO
 import cats.syntax.all._
 
+/**
+  * Handles competition based actions.
+  */
 class Competitions @Inject()(forms: OreForms)(
     implicit val ec: ExecutionContext,
     env: OreEnv,
@@ -39,17 +42,32 @@ class Competitions @Inject()(forms: OreForms)(
 
   private val self = routes.Competitions
 
-  def EditCompetitionsAction: ActionBuilder[Requests.AuthRequest, AnyContent] =
+  private def EditCompetitionsAction: ActionBuilder[Requests.AuthRequest, AnyContent] =
     Authenticated.andThen(PermissionAction(EditCompetitions))
 
+  /**
+    * Shows the competition administrative panel.
+    *
+    * @return Competition manager
+    */
   def showManager(): Action[AnyContent] = EditCompetitionsAction.asyncF { implicit request =>
     competitions.sorted(_.createdAt).map(all => Ok(views.projects.competitions.manage(all)))
   }
 
+  /**
+    * Shows the competition creator.
+    *
+    * @return Competition creator
+    */
   def showCreator(): Action[AnyContent] = EditCompetitionsAction { implicit request =>
     Ok(views.projects.competitions.create())
   }
 
+  /**
+    * Creates a new competition.
+    *
+    * @return Redirect to manager or creator with errors.
+    */
   def create(): Action[CompetitionCreateForm] =
     EditCompetitionsAction(parse.form(forms.CompetitionCreate, onErrors = FormError(self.showCreator()))).asyncF {
       implicit request =>
@@ -61,6 +79,12 @@ class Competitions @Inject()(forms: OreForms)(
           )
     }
 
+  /**
+    * Saves the competition with the specified ID.
+    *
+    * @param id Competition ID
+    * @return   Redirect to manager
+    */
   def save(id: DbRef[Competition]): Action[CompetitionSaveForm] =
     EditCompetitionsAction
       .andThen(AuthedCompetitionAction(id))(parse.form(forms.CompetitionSave, onErrors = FormError(self.showManager())))
@@ -70,6 +94,12 @@ class Competitions @Inject()(forms: OreForms)(
         }
       }
 
+  /**
+    * Deletes the competition with the specified ID.
+    *
+    * @param id Competition ID
+    * @return   Redirect to manager
+    */
   def delete(id: DbRef[Competition]): Action[AnyContent] = EditCompetitionsAction.andThen(AuthedCompetitionAction(id)).asyncF { implicit request =>
     this.competitions
       .remove(request.competition)
