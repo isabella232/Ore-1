@@ -2,7 +2,8 @@ package controllers.sugar
 
 import play.api.mvc.{Request, WrappedRequest}
 
-import models.project.{Competition, Project}
+import models.competition.Competition
+import models.project.Project
 import models.user.{Organization, User}
 import models.viewhelper._
 import ore.permission.scope.{GlobalScope, HasScope}

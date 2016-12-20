@@ -6,7 +6,7 @@ import db.DbRef
 import db.impl.OrePostgresDriver.api._
 import db.impl.table.common.{DescriptionColumn, NameColumn}
 import db.table.ModelTable
-import models.project.Competition
+import models.competition.Competition
 import models.user.User
 
 class CompetitionTable(tag: Tag)

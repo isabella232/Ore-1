@@ -1,12 +1,13 @@
 @import controllers.sugar.Requests.OreRequest
 @import models.api.ProjectApiKey
 @import models.viewhelper.{ProjectData, ScopedProjectData}
+@import models.competition.Competition
 @import ore.OreConfig
 @import ore.permission.{HardRemoveProject, HideProjects}
 @import security.NonceFilter._
 @import views.html.helper.{CSRF, form}
 @import views.html.utils
-@(p: ProjectData, sp: ScopedProjectData, deploymentKey: Option[ProjectApiKey])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@(p: ProjectData, sp: ScopedProjectData, deploymentKey: Option[ProjectApiKey], competitions: Seq[Competition])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
 
 @projectRoutes = @{controllers.project.routes.Projects}
 
@@ -117,6 +118,22 @@
                             </form>
                         </div>
 
+                        <!-- Competition entry -->
+                        <div class="setting">
+                            <div class="setting-description">
+                                <h4>@messages("project.competitions")</h4>
+                                <p>@messages("project.competitions.info")</p>
+                            </div>
+                            <select class="form-control" form="save" name="competition">
+                                <option selected value="-1">@Html(messages("project.competitions.select"))</option>
+                                @competitions.map { competition =>
+                                  <option value="@competition.id">@competition.name</option>
+                                }
+                            </select>
+                            <div class="clearfix"></div>
+                        </div>
+
+                        <!-- Rename -->
                         <div class="setting">
                             <div class="setting-description">
                                 <h4>@messages("project.settings.deployKey")</h4>

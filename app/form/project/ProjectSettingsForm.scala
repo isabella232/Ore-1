@@ -1,6 +1,7 @@
 package form.project
 
 import db.DbRef
+import models.competition.Competition
 import models.user.User
 
 /**
@@ -20,5 +21,6 @@ case class ProjectSettingsForm(
     roleUps: List[String],
     updateIcon: Boolean,
     ownerId: Option[DbRef[User]],
+    competitionId: Option[DbRef[Competition]],
     forumSync: Boolean
 ) extends TProjectRoleSetBuilder

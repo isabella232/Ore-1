@@ -473,10 +473,12 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     */
   def showSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
     implicit request =>
-      request.project.apiKeys
-        .find(_.keyType === (ProjectApiKeyType.Deployment: ProjectApiKeyType))
-        .value
-        .map(deployKey => Ok(views.settings(request.data, request.scoped, deployKey)))
+      val apiKey = request.project.apiKeys.find(_.keyType === (ProjectApiKeyType.Deployment: ProjectApiKeyType)).value
+      val activeCompetitions = competitions.filter(_.endDate > service.theTime)
+
+      (apiKey, activeCompetitions).parTupled.map { case (deployKey, competitions) =>
+        Ok(views.settings(request.data, request.scoped, deployKey, competitions))
+      }
   }
 
   /**

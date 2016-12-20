@@ -53,6 +53,7 @@ routesImport ++= Seq(
   "db.DbRef",
   "models.admin._",
   "models.project._",
+  "models.competition._",
   "models.user._",
   "models.user.role._",
   "ore.user._"

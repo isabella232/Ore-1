@@ -21,6 +21,26 @@ CREATE TABLE project_competitions
   max_entry_total        INT
 );
 
+CREATE TABLE project_competition_entries
+(
+  id             BIGSERIAL NOT NULL PRIMARY KEY,
+  created_at     TIMESTAMP NOT NULL,
+  project_id     BIGINT    NOT NULL REFERENCES projects ON DELETE CASCADE,
+  user_id        BIGINT    NOT NULL REFERENCES users ON DELETE CASCADE,
+  competition_id BIGINT    NOT NULL REFERENCES project_competitions ON DELETE CASCADE,
+  UNIQUE (project_id, user_id, competition_id)
+);
+
+CREATE TABLE project_competition_entry_votes
+(
+  user_id  BIGSERIAL NOT NULL REFERENCES users ON DELETE CASCADE,
+  entry_id BIGSERIAL NOT NULL REFERENCES project_competition_entries ON DELETE CASCADE,
+  PRIMARY KEY (user_id, entry_id)
+);
+
 # --- !Downs
+
+DROP TABLE project_competition_entry_votes;
+DROP TABLE project_competition_entries;
 
 DROP TABLE project_competitions;

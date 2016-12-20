@@ -14,7 +14,8 @@ import db.{DbRef, ModelService}
 import db.access.ModelAccess
 import db.impl.OrePostgresDriver.api._
 import db.impl.schema.VersionTable
-import models.project.{Competition, Project, Version, Visibility}
+import models.competition.Competition
+import models.project.{Project, Version, Visibility}
 import models.user.SignOn
 import ore.permission.ReviewProjects
 import ore.{OreConfig, OreEnv}

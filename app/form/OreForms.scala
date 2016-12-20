@@ -17,6 +17,7 @@ import form.organization.{OrganizationAvatarUpdate, OrganizationMembersUpdate, O
 import form.project._
 import form.project.competition.{CompetitionCreateForm, CompetitionSaveForm}
 import models.api.ProjectApiKey
+import models.competition.Competition
 import models.project.Page._
 import models.project.{Channel, Page}
 import models.user.Organization
@@ -103,6 +104,7 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
         "roleUps"      -> list(text),
         "update-icon"  -> boolean,
         "owner"        -> optional(longNumber).verifying(ownerIdInList(organisationUserCanUploadTo)),
+        "competition"  -> optional(longNumber.transform[DbRef[Competition]](i => i, i => i)),
         "forum-sync"   -> boolean
       )(ProjectSettingsForm.apply)(ProjectSettingsForm.unapply)
     )
@@ -238,7 +240,7 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
   private val dateFormat = this.config.ore.competitions.date.format
 
   /**
-    * Submits a new [[models.project.Competition]].
+    * Submits a new [[Competition]].
     */
   lazy val CompetitionCreate = Form(mapping(
     "name" -> nonEmptyText(0, this.config.ore.competitions.name.maxLen),

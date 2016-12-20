@@ -16,7 +16,8 @@ import db.{DbRef, ModelService}
 import db.access.ModelAccess
 import db.impl.OrePostgresDriver.api._
 import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
-import models.project.{Competition, Project, Visibility}
+import models.competition.Competition
+import models.project.{Project, Visibility}
 import models.user.{Organization, SignOn, User}
 import models.viewhelper._
 import ore.permission.scope.{GlobalScope, HasScope}

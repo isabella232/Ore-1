@@ -8,6 +8,7 @@ import db.impl.OrePostgresDriver.api._
 import db.impl.schema.{ProjectRoleTable, ProjectSettingsTable, UserTable}
 import db.{DbRef, InsertFunc, Model, ModelQuery, ModelService, ObjId, ObjectTimestamp}
 import form.project.ProjectSettingsForm
+import models.competition.{Competition, CompetitionEntry}
 import models.user.{Notification, User}
 import ore.permission.role.Role
 import ore.project.factory.PendingProject
@@ -16,7 +17,7 @@ import ore.project.{Category, ProjectOwned}
 import ore.user.notification.NotificationType
 import util.StringUtils._
 
-import cats.data.NonEmptyList
+import cats.data.{NonEmptyList, OptionT}
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import slick.lifted.TableQuery
@@ -143,6 +144,26 @@ case class ProjectSettings(
               }
             }
             .flatMap(updates => service.runDBIO(DBIO.sequence(updates)).as(t))
+        }
+        .productL {
+          OptionT
+            .fromOption[IO](formData.competitionId)
+            .flatMap(service.get[Competition](_))
+            .semiflatMap(comp => comp.entries.exists(_.projectId === this.projectId).map(comp -> _))
+            .semiflatMap {
+              case (competition, existsPreviousEntry) =>
+                if (!existsPreviousEntry) {
+                  service.insert[CompetitionEntry](
+                    CompetitionEntry.partial(
+                      projectId = this.projectId,
+                      userId = newOwnerId,
+                      competitionId = competition.id.value
+                    )
+                  )
+                } else IO.unit
+            }
+            .getOrElse(IO.unit)
+            .void
         }
     }
   }

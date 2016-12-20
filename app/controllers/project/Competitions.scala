@@ -14,7 +14,7 @@ import db.{DbRef, ModelService}
 import db.impl.OrePostgresDriver.api._
 import form.OreForms
 import form.project.competition.{CompetitionCreateForm, CompetitionSaveForm}
-import models.project.Competition
+import models.competition.Competition
 import ore.permission.EditCompetitions
 import ore.{OreConfig, OreEnv}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
