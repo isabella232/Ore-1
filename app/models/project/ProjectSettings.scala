@@ -17,7 +17,7 @@ import ore.project.{Category, ProjectOwned}
 import ore.user.notification.NotificationType
 import util.StringUtils._
 
-import cats.data.{NonEmptyList, OptionT}
+import cats.data.{EitherT, NonEmptyList, OptionT}
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import slick.lifted.TableQuery
@@ -59,7 +59,7 @@ case class ProjectSettings(
       implicit fileManager: ProjectFiles,
       service: ModelService,
       cs: ContextShift[IO]
-  ): IO[(Project, ProjectSettings)] = {
+  ): EitherT[IO, NonEmptyList[String], (Project, ProjectSettings)] = EitherT {
     import cats.instances.vector._
     Logger.debug("Saving project settings")
     Logger.debug(formData.toString)
@@ -90,81 +90,133 @@ case class ProjectSettings(
 
     val modelUpdates = (updateProject, updateSettings).parTupled
 
-    modelUpdates.flatMap { t =>
-      // Update icon
-      if (formData.updateIcon) {
-        fileManager.getPendingIconPath(project).foreach { pendingPath =>
-          val iconDir = fileManager.getIconDir(project.ownerName, project.name)
-          if (notExists(iconDir))
-            createDirectories(iconDir)
-          list(iconDir).forEach(delete(_))
-          move(pendingPath, iconDir.resolve(pendingPath.getFileName))
-        }
-      }
-
-      // Add new roles
-      val dossier = project.memberships
-      formData
-        .build()
-        .toVector
-        .parTraverse { role =>
-          dossier.addRole(project, role.userId, role.copy(projectId = project.id.value).asFunc)
-        }
-        .flatMap { roles =>
-          val notifications = roles.map { role =>
-            Notification.partial(
-              userId = role.userId,
-              originId = project.ownerId,
-              notificationType = NotificationType.ProjectInvite,
-              messageArgs = NonEmptyList.of("notification.project.invite", role.role.title, project.name)
-            )
+    modelUpdates.flatMap {
+      case t @ (newProject, newProjectSettings) =>
+        // Update icon
+        if (formData.updateIcon) {
+          fileManager.getPendingIconPath(newProject).foreach { pendingPath =>
+            val iconDir = fileManager.getIconDir(newProject.ownerName, newProject.name)
+            if (notExists(iconDir))
+              createDirectories(iconDir)
+            list(iconDir).forEach(delete(_))
+            move(pendingPath, iconDir.resolve(pendingPath.getFileName))
           }
-
-          service.bulkInsert(notifications)
         }
-        .productR {
-          // Update existing roles
-          val usersTable = TableQuery[UserTable]
-          // Select member userIds
-          service
-            .runDBIO(usersTable.filter(_.name.inSetBind(formData.userUps)).map(_.id).result)
-            .flatMap { userIds =>
-              import cats.instances.list._
-              val roles = formData.roleUps.traverse { role =>
-                Role.projectRoles
-                  .find(_.value == role)
-                  .fold(IO.raiseError[Role](new RuntimeException("supplied invalid role type")))(IO.pure)
-              }
 
-              roles.map(xs => userIds.zip(xs))
+        // Add new roles
+        val dossier = newProject.memberships
+        formData
+          .build()
+          .toVector
+          .parTraverse { role =>
+            dossier.addRole(newProject, role.userId, role.copy(projectId = newProject.id.value).asFunc)
+          }
+          .flatMap { roles =>
+            val notifications = roles.map { role =>
+              Notification.partial(
+                userId = role.userId,
+                originId = newProject.ownerId,
+                notificationType = NotificationType.ProjectInvite,
+                messageArgs = NonEmptyList.of("notification.project.invite", role.role.title, newProject.name)
+              )
             }
-            .map {
-              _.map {
-                case (userId, role) => updateMemberShip(userId).update(role)
+
+            service.bulkInsert(notifications)
+          }
+          .productR {
+            // Update existing roles
+            val usersTable = TableQuery[UserTable]
+            // Select member userIds
+            service
+              .runDBIO(usersTable.filter(_.name.inSetBind(formData.userUps)).map(_.id).result)
+              .flatMap { userIds =>
+                import cats.instances.list._
+                val roles = formData.roleUps.traverse { role =>
+                  Role.projectRoles
+                    .find(_.value == role)
+                    .fold(IO.raiseError[Role](new RuntimeException("supplied invalid role type")))(IO.pure)
+                }
+
+                roles.map(xs => userIds.zip(xs))
               }
-            }
-            .flatMap(updates => service.runDBIO(DBIO.sequence(updates)).as(t))
-        }
-        .productL {
-          OptionT
-            .fromOption[IO](formData.competitionId)
-            .flatMap(service.get[Competition](_))
-            .semiflatMap(comp => comp.entries.exists(_.projectId === this.projectId).map(comp -> _))
-            .semiflatMap {
-              case (competition, existsPreviousEntry) =>
-                if (!existsPreviousEntry) {
-                  service.insert[CompetitionEntry](
-                    CompetitionEntry.partial(
-                      projectId = this.projectId,
-                      userId = newOwnerId,
-                      competitionId = competition.id.value
-                    )
+              .map {
+                _.map {
+                  case (userId, role) => updateMemberShip(userId).update(role)
+                }
+              }
+              .flatMap(updates => service.runDBIO(DBIO.sequence(updates)))
+          }
+          .productR {
+            OptionT
+              .fromOption[IO](formData.competitionId)
+              .flatMap(service.get[Competition](_))
+              .toRight(NonEmptyList.one("not.found"))
+              .semiflatMap { comp =>
+                val entries               = comp.entries
+                val projectAlreadyEntered = entries.exists(_.projectId === this.projectId)
+                val projectLimitReached   = entries.count(_.userId === newOwnerId).map(_ >= comp.allowedEntries)
+                val competitionCapacityReached =
+                  comp.maxEntryTotal.fold(IO.pure(false))(capacity => entries.size.map(_ >= capacity))
+                val deadlinePassed = IO.pure(comp.timeRemaining.toSeconds <= 0)
+                val onlySpongePlugins =
+                  if (comp.isSpongeOnly)
+                    newProject.recommendedVersion
+                      .semiflatMap(_.tags)
+                      .map(_.forall(!_.name.startsWith("Sponge")))
+                      .getOrElse(true)
+                  else IO.pure(false)
+                val onlyVisibleSource =
+                  if (comp.isSourceRequired) IO.pure(newProjectSettings.source.isEmpty) else IO.pure(false)
+
+                (
+                  projectAlreadyEntered,
+                  projectLimitReached,
+                  competitionCapacityReached,
+                  deadlinePassed,
+                  onlySpongePlugins,
+                  onlyVisibleSource,
+                  IO.pure(comp)
+                ).parTupled
+              }
+              .flatMap {
+                case (
+                    projectAlreadyEntered,
+                    projectLimitReached,
+                    competitionCapacityReached,
+                    deadlinePassed,
+                    onlySpongePlugins,
+                    onlyVisibleSource,
+                    competition
+                    ) =>
+                  val errors = Seq(
+                    projectAlreadyEntered      -> "error.project.competition.alreadyEntered",
+                    projectLimitReached        -> "error.project.competition.entryLimit",
+                    competitionCapacityReached -> "error.project.competition.capacity",
+                    deadlinePassed             -> "error.project.competition.over",
+                    onlySpongePlugins          -> "error.project.competition.spongeOnly",
+                    onlyVisibleSource          -> "error.project.competition.sourceOnly"
                   )
-                } else IO.unit
-            }
-            .getOrElse(IO.unit)
-            .void
-        }
+
+                  val applicableErrors = errors.collect {
+                    case (pred, msg) if pred => msg
+                  }
+
+                  applicableErrors.toList.toNel.fold(
+                    EitherT.right[NonEmptyList[String]](
+                      service
+                        .insert[CompetitionEntry](
+                          CompetitionEntry.partial(
+                            projectId = this.projectId,
+                            userId = newOwnerId,
+                            competitionId = competition.id.value
+                          )
+                        )
+                        .as(t)
+                    )
+                  )(errs => EitherT.leftT(errs))
+              }
+              .value
+          }
     }
   }
 

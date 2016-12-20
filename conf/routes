@@ -88,6 +88,10 @@ POST    /invite/:id/:status/:behalf                                 @controllers
 
 POST    /pages/preview                                              @controllers.project.Pages.showPreview()
 
+# ---------- Competitions  ----------
+
+GET     /competitions/:id                                           @controllers.project.Competitions.showProjects(id: DbRef[Competition], page: Option[Int])
+
 # ---------- Organizations ----------
 
 GET     /organizations/new                                          @controllers.Organizations.showCreator()

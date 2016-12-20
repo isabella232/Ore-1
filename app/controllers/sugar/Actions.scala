@@ -15,7 +15,7 @@ import controllers.sugar.Requests._
 import db.{DbRef, ModelService}
 import db.access.ModelAccess
 import db.impl.OrePostgresDriver.api._
-import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
+import db.impl.access.{CompetitionBase, OrganizationBase, ProjectBase, UserBase}
 import models.competition.Competition
 import models.project.{Project, Visibility}
 import models.user.{Organization, SignOn, User}
@@ -41,10 +41,10 @@ trait Actions extends Calls with ActionHelpers {
   def bakery: Bakery
   implicit def auth: SpongeAuthApi
 
-  def users: UserBase                        = UserBase()
-  def projects: ProjectBase                  = ProjectBase()
-  def organizations: OrganizationBase        = OrganizationBase()
-  def competitions: ModelAccess[Competition] = service.access[Competition]()
+  def users: UserBase                 = UserBase()
+  def projects: ProjectBase           = ProjectBase()
+  def organizations: OrganizationBase = OrganizationBase()
+  def competitions: CompetitionBase   = CompetitionBase()
 
   private val PermsLogger    = scalalogging.Logger("Permissions")
   private val MDCPermsLogger = scalalogging.Logger.takingImplicit[OreMDC](PermsLogger.underlying)

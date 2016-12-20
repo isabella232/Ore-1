@@ -11,4 +11,5 @@ abstract class OreDBOs(driver: JdbcProfile, env: OreEnv, config: OreConfig) exte
   val userBase         = new UserBase()(this, this.config)
   val projectBase      = new ProjectBase()(this, this.env, this.config)
   val organizationBase = new OrganizationBase()(this, this.config)
+  val competitionBase  = new CompetitionBase()(this)
 }

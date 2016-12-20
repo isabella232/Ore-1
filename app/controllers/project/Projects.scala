@@ -473,11 +473,9 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     */
   def showSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
     implicit request =>
-      val apiKey = request.project.apiKeys.find(_.keyType === (ProjectApiKeyType.Deployment: ProjectApiKeyType)).value
-      val activeCompetitions = competitions.filter(_.endDate > service.theTime)
-
-      (apiKey, activeCompetitions).parTupled.map { case (deployKey, competitions) =>
-        Ok(views.settings(request.data, request.scoped, deployKey, competitions))
+      request.project.apiKeys.find(_.keyType === (ProjectApiKeyType.Deployment: ProjectApiKeyType)).value.map {
+        deployKey =>
+          Ok(views.settings(request.data, request.scoped, deployKey, request.headerData.activeCompetitions))
       }
   }
 
@@ -573,31 +571,26 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     * @param slug   Project slug
     * @return View of project
     */
-  def save(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
+  def save(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncEitherT {
     implicit request =>
-      orgasUserCanUploadTo(request.user).flatMap { organisationUserCanUploadTo =>
-        val data = request.data
-        this.forms
+      for {
+        organisationUserCanUploadTo <- EitherT.right[Result](orgasUserCanUploadTo(request.user))
+        formData <- forms
           .ProjectSave(organisationUserCanUploadTo.toSeq)
-          .bindFromRequest()
-          .fold(
-            FormErrorLocalized(self.showSettings(author, slug)).andThen(IO.pure),
-            formData => {
-              data.settings
-                .save(data.project, formData)
-                .productR {
-                  UserActionLogger.log(
-                    request.request,
-                    LoggedAction.ProjectSettingsChanged,
-                    request.data.project.id.value,
-                    "",
-                    ""
-                  ) //todo add old new data
-                }
-                .as(Redirect(self.show(author, slug)))
-            }
-          )
-      }
+          .bindEitherT[IO](FormErrorLocalized(self.showSettings(author, slug)))
+        _ <- request.data.settings
+          .save(request.project, formData)
+          .leftMap(errs => Redirect(self.showSettings(author, slug)).withErrors(errs.toList))
+        _ <- EitherT.right[Result](
+          UserActionLogger.log(
+            request.request,
+            LoggedAction.ProjectSettingsChanged,
+            request.data.project.id.value,
+            "",
+            ""
+          ) //todo add old new data
+        )
+      } yield Redirect(self.show(author, slug))
   }
 
   /**

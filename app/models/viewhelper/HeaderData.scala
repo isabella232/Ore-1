@@ -5,11 +5,13 @@ import play.api.mvc.Request
 import db.impl.OrePostgresDriver.api._
 import db.impl.schema.{FlagTable, NotificationTable, ProjectTableMain, SessionTable, UserTable, VersionTable}
 import db.{DbRef, ModelService}
+import models.competition.Competition
 import models.project.{ReviewState, Visibility}
 import models.user.User
 import ore.permission._
 import ore.permission.scope.GlobalScope
 
+import cats.syntax.all._
 import cats.Parallel
 import cats.data.OptionT
 import cats.effect.{ContextShift, IO}
@@ -25,7 +27,8 @@ case class HeaderData(
     hasUnreadNotifications: Boolean = false,
     unresolvedFlags: Boolean = false,
     hasProjectApprovals: Boolean = false,
-    hasReviewQueue: Boolean = false // queue.nonEmpty
+    hasReviewQueue: Boolean = false, // queue.nonEmpty
+    activeCompetitions: Seq[Competition]
 ) {
 
   // Just some helpers in templates:
@@ -56,7 +59,8 @@ object HeaderData {
 
   val noPerms: Map[Permission, Boolean] = globalPerms.map(_ -> false).toMap
 
-  val unAuthenticated: HeaderData = HeaderData(None, noPerms)
+  def unAuthenticated(implicit service: ModelService): IO[HeaderData] =
+    service.competitionBase.active.toSeq.map(comps => HeaderData(None, noPerms, activeCompetitions = comps))
 
   def cacheKey(user: User) = s"""user${user.id.value}"""
 
@@ -68,7 +72,7 @@ object HeaderData {
       .fromOption[IO](request.cookies.get("_oretoken"))
       .flatMap(cookie => getSessionUser(cookie.value))
       .semiflatMap(getHeaderData)
-      .getOrElse(unAuthenticated)
+      .getOrElseF(unAuthenticated)
 
   private def getSessionUser(token: String)(implicit service: ModelService) = {
     val query = for {
@@ -94,28 +98,30 @@ object HeaderData {
   private def getHeaderData(
       user: User
   )(implicit service: ModelService, cs: ContextShift[IO]) = {
-    perms(user).flatMap { perms =>
-      val query = Query.apply(
-        (
-          TableQuery[NotificationTable].filter(n => n.userId === user.id.value && !n.read).exists,
-          if (perms(ReviewFlags)) flagQueue else false.bind,
-          if (perms(ReviewVisibility)) projectApproval(user) else false.bind,
-          if (perms(ReviewProjects)) reviewQueue else false.bind
-        )
-      )
-
-      service.runDBIO(query.result.head).map {
-        case (unreadNotif, unresolvedFlags, hasProjectApprovals, hasReviewQueue) =>
-          HeaderData(
-            Some(user),
-            perms,
-            unreadNotif || unresolvedFlags || hasProjectApprovals || hasReviewQueue,
-            unreadNotif,
-            unresolvedFlags,
-            hasProjectApprovals,
-            hasReviewQueue
+    (perms(user), service.competitionBase.active.toSeq).parTupled.flatMap {
+      case (perms, activeCompetitions) =>
+        val query = Query.apply(
+          (
+            TableQuery[NotificationTable].filter(n => n.userId === user.id.value && !n.read).exists,
+            if (perms(ReviewFlags)) flagQueue else false.bind,
+            if (perms(ReviewVisibility)) projectApproval(user) else false.bind,
+            if (perms(ReviewProjects)) reviewQueue else false.bind
           )
-      }
+        )
+
+        service.runDBIO(query.result.head).map {
+          case (unreadNotif, unresolvedFlags, hasProjectApprovals, hasReviewQueue) =>
+            HeaderData(
+              Some(user),
+              perms,
+              unreadNotif || unresolvedFlags || hasProjectApprovals || hasReviewQueue,
+              unreadNotif,
+              unresolvedFlags,
+              hasProjectApprovals,
+              hasReviewQueue,
+              activeCompetitions
+            )
+        }
     }
   }
 

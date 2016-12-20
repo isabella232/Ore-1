@@ -19,6 +19,7 @@ import ore.permission.EditCompetitions
 import ore.{OreConfig, OreEnv}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
 import util.StringUtils
+import util.syntax._
 import views.{html => views}
 
 import cats.effect.IO
@@ -100,9 +101,35 @@ class Competitions @Inject()(forms: OreForms)(
     * @param id Competition ID
     * @return   Redirect to manager
     */
-  def delete(id: DbRef[Competition]): Action[AnyContent] = EditCompetitionsAction.andThen(AuthedCompetitionAction(id)).asyncF { implicit request =>
-    this.competitions
-      .remove(request.competition)
-      .as(Redirect(self.showManager()).withSuccess("success.deleted.competition"))
+  def delete(id: DbRef[Competition]): Action[AnyContent] =
+    EditCompetitionsAction.andThen(AuthedCompetitionAction(id)).asyncF { implicit request =>
+      this.competitions
+        .remove(request.competition)
+        .as(Redirect(self.showManager()).withSuccess("success.deleted.competition"))
+    }
+
+  /**
+    * Displays the project entries in the specified competition.
+    *
+    * @param id Competition ID
+    * @return   List of project entries
+    */
+  def showProjects(id: DbRef[Competition], page: Option[Int]): Action[AnyContent] = CompetitionAction(id).asyncF {
+    implicit request =>
+      import cats.instances.vector._
+      request.competition.entries.toSeq
+        .flatMap(_.toVector.traverse(_.project))
+        .flatMap(_.traverse { project =>
+          val owner              = project.owner.user
+          val recommendedVersion = project.recommendedVersion.semiflatMap(v => v.tags.tupleLeft(v)).value
+
+          (IO.pure(project), owner, recommendedVersion).parTupled
+        })
+        .map { seq =>
+          val competitionEntries = seq.collect {
+            case (project, user, Some((version, tags))) => (project, user, version, tags)
+          }
+          Ok(views.projects.competitions.projects(request.competition, competitionEntries, page.getOrElse(1), config.ore.competitions.pageSize))
+        }
   }
 }

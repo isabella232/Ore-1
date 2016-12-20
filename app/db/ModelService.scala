@@ -7,7 +7,7 @@ import scala.concurrent.duration.Duration
 
 import db.ModelFilter._
 import db.access.ModelAccess
-import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
+import db.impl.access.{CompetitionBase, OrganizationBase, ProjectBase, UserBase}
 import db.table.ModelTable
 
 import cats.data.OptionT
@@ -45,6 +45,8 @@ abstract class ModelService(val driver: JdbcProfile) {
   def projectBase: ProjectBase
 
   def organizationBase: OrganizationBase
+
+  def competitionBase: CompetitionBase
 
   /**
     * Returns the base query for the specified Model class.
