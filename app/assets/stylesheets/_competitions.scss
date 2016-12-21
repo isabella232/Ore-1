@@ -76,3 +76,40 @@
   }
 
 }
+
+
+.comp-header {
+  margin-bottom: 20px;
+  .banner {
+    position: relative;
+    line-height: 100px;
+    text-align: center;
+    font-size: 18px;
+
+    .progress {
+      margin-bottom: 0;
+      width: 100%;
+      border-radius: 0 0 4px 4px;
+      max-height: 10px;
+      visibility: hidden;
+      background-color: #ddd;
+    }
+
+    .banner-image {
+      width: 100%;
+    }
+
+    .banner-edit {
+      display: none;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      top: 0;
+      a {
+        color: white;
+      }
+    }
+  }
+}

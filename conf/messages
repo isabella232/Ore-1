@@ -143,6 +143,10 @@ page.new.title                  =   Create a new page
 page.new.error                  =   Error creating page
 page.plural                     =   Pages
 
+competition.title = Competitions
+competition.addBanner = Add a banner
+competition.editBanner = Edit banner
+
 project.competition.plural      =   Competitions
 project.competition.title       =   Competitions
 project.competition.active      =   Active Competitions

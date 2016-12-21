@@ -2,7 +2,12 @@ package controllers
 
 import scala.language.higherKinds
 
+import java.nio.file.{Files, Path}
+import java.security.MessageDigest
+import java.util.Base64
+
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 import play.api.cache.AsyncCacheApi
 import play.api.i18n.I18nSupport
@@ -213,4 +218,12 @@ abstract class OreBaseController(
       sso: Option[String],
       sig: Option[String]
   ): ActionBuilder[AuthRequest, AnyContent] = UserAction(username).andThen(verifiedAction(sso, sig))
+
+  def showImage(path: Path): Result = {
+    val lastModified     = Files.getLastModifiedTime(path).toString.getBytes("UTF-8")
+    val lastModifiedHash = MessageDigest.getInstance("MD5").digest(lastModified)
+    val hashString       = Base64.getEncoder.encodeToString(lastModifiedHash)
+    Ok.sendPath(path)
+      .withHeaders(ETAG -> s""""$hashString"""", CACHE_CONTROL -> s"max-age=${1.hour.toSeconds.toString}")
+  }
 }

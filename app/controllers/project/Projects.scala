@@ -7,7 +7,6 @@ import javax.inject.Inject
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
 
 import play.api.cache.AsyncCacheApi
 import play.api.i18n.MessagesApi
@@ -324,14 +323,6 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
         }
       }
       .getOrElse(NotFound)
-  }
-
-  private def showImage(path: Path) = {
-    val lastModified     = Files.getLastModifiedTime(path).toString.getBytes("UTF-8")
-    val lastModifiedHash = MessageDigest.getInstance("MD5").digest(lastModified)
-    val hashString       = Base64.getEncoder.encodeToString(lastModifiedHash)
-    Ok.sendPath(path)
-      .withHeaders(ETAG -> s""""$hashString"""", CACHE_CONTROL -> s"max-age=${1.hour.toSeconds.toString}")
   }
 
   /**

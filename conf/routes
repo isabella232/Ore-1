@@ -16,6 +16,7 @@ GET     /admin/health                                               @controllers
 GET     /admin/activities/:user                                     @controllers.Application.showActivities(user: String)
 GET     /admin/stats                                                @controllers.Application.showStats()
 GET     /admin/log                                                  @controllers.Application.showLog(page: Option[Int], userFilter: Option[DbRef[User]], projectFilter: Option[DbRef[Project]], versionFilter: Option[DbRef[Version]], pageFilter: Option[DbRef[Page]], actionFilter: Option[Int], subjectFilter: Option[DbRef[_]])
+
 GET     /admin/competitions                                         @controllers.project.Competitions.showManager()
 GET     /admin/competitions/new                                     @controllers.project.Competitions.showCreator()
 POST    /admin/competitions/new                                     @controllers.project.Competitions.create()
@@ -91,6 +92,8 @@ POST    /pages/preview                                              @controllers
 # ---------- Competitions  ----------
 
 GET     /competitions/:id                                           @controllers.project.Competitions.showProjects(id: DbRef[Competition], page: Option[Int])
+POST    /competitions/:id/banner                                    @controllers.project.Competitions.setBanner(id: DbRef[Competition])
+GET     /competitions/:id/banner                                    @controllers.project.Competitions.showBanner(id: DbRef[Competition])
 
 # ---------- Organizations ----------
 

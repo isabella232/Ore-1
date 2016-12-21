@@ -6,7 +6,8 @@ import scala.concurrent.ExecutionContext
 
 import play.api.cache.AsyncCacheApi
 import play.api.i18n.MessagesApi
-import play.api.mvc.{Action, ActionBuilder, AnyContent}
+import play.api.libs.Files
+import play.api.mvc.{Action, ActionBuilder, AnyContent, MultipartFormData}
 
 import controllers.OreBaseController
 import controllers.sugar.{Bakery, Requests}
@@ -18,6 +19,8 @@ import models.competition.Competition
 import ore.permission.EditCompetitions
 import ore.{OreConfig, OreEnv}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
+import play.api.libs.json.Json
+
 import util.StringUtils
 import util.syntax._
 import views.{html => views}
@@ -109,6 +112,34 @@ class Competitions @Inject()(forms: OreForms)(
     }
 
   /**
+    * Sets the specified competition's banner image.
+    *
+    * @param id Competition ID
+    * @return   Json response
+    */
+  def setBanner(id: DbRef[Competition]): Action[MultipartFormData[Files.TemporaryFile]] =
+    EditCompetitionsAction.andThen(AuthedCompetitionAction(id))(parse.multipartFormData) { implicit request =>
+      request.body.file("banner") match {
+        case None =>
+          Ok(Json.obj("error" -> request.messages.apply("error.noFile")))
+        case Some(file) =>
+          this.competitions.saveBanner(request.competition, file.ref.path.toFile, file.filename)
+          Ok(Json.obj("bannerUrl" -> self.showBanner(id).path()))
+      }
+    }
+
+  /**
+    * Displays the specified competition's banner image, if any, NotFound
+    * otherwise.
+    *
+    * @param id Competition ID
+    * @return   Banner image
+    */
+  def showBanner(id: DbRef[Competition]): Action[AnyContent] = CompetitionAction(id) { implicit request =>
+    this.competitions.getBannerPath(request.competition).map(showImage).getOrElse(notFound)
+  }
+
+  /**
     * Displays the project entries in the specified competition.
     *
     * @param id Competition ID
@@ -129,7 +160,10 @@ class Competitions @Inject()(forms: OreForms)(
           val competitionEntries = seq.collect {
             case (project, user, Some((version, tags))) => (project, user, version, tags)
           }
-          Ok(views.projects.competitions.projects(request.competition, competitionEntries, page.getOrElse(1), config.ore.competitions.pageSize))
+          Ok(
+            views.projects.competitions
+              .projects(request.competition, competitionEntries, page.getOrElse(1), config.ore.competitions.pageSize)
+          )
         }
   }
 }
