@@ -21,6 +21,7 @@ import ore.{OreConfig, OreEnv}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
 import play.api.libs.json.Json
 
+import models.project.Project
 import util.StringUtils
 import util.syntax._
 import views.{html => views}
@@ -148,7 +149,9 @@ class Competitions @Inject()(forms: OreForms)(
   def showProjects(id: DbRef[Competition], page: Option[Int]): Action[AnyContent] = CompetitionAction(id).asyncF {
     implicit request =>
       import cats.instances.vector._
-      request.competition.entries.toSeq
+      val userProjectsF = request.currentUser.map(_.projects.toSeq).getOrElse(IO.pure(Nil))
+
+      val projectModelsF = request.competition.entries.toSeq
         .flatMap(_.toVector.traverse(_.project))
         .flatMap(_.traverse { project =>
           val owner              = project.owner.user
@@ -156,14 +159,40 @@ class Competitions @Inject()(forms: OreForms)(
 
           (IO.pure(project), owner, recommendedVersion).parTupled
         })
-        .map { seq =>
+
+      (userProjectsF, projectModelsF).parMapN {
+        case (userProjects, seq) =>
           val competitionEntries = seq.collect {
             case (project, user, Some((version, tags))) => (project, user, version, tags)
           }
+
           Ok(
             views.projects.competitions
-              .projects(request.competition, competitionEntries, page.getOrElse(1), config.ore.competitions.pageSize)
+              .projects(request.competition, competitionEntries, userProjects, page.getOrElse(1), config.ore.projects.initLoad)
           )
-        }
+      }
   }
+
+  /**
+    * Submits a project to the specified competition.
+    *
+    * @param id Competition ID
+    * @return   Redirect to project list
+    */
+  def submitProject(id: DbRef[Competition]): Action[DbRef[Project]] =
+    AuthedCompetitionAction(id)(
+      parse.form(forms.CompetitionSubmitProject, onErrors = FormError(self.showProjects(id, None)))
+    ).asyncEitherT { implicit request =>
+      val projectId = request.body
+      request.user.projects
+        .get(projectId)
+        .toRight(Redirect(self.showProjects(id, None)).withError("error.competition.submit.invalidProject"))
+        .semiflatMap(project => project.settings.tupleLeft(project))
+        .flatMap { case (project, projectSettings) =>
+          this.competitions
+            .submitProject(project, projectSettings, request.competition)
+            .leftMap(error => Redirect(self.showProjects(id, None)).withErrors(error.toList))
+        }
+        .as(Redirect(self.showProjects(id, None)))
+    }
 }

@@ -8,7 +8,7 @@ import db.impl.OrePostgresDriver.api._
 import db.impl.schema.{ProjectRoleTable, ProjectSettingsTable, UserTable}
 import db.{DbRef, InsertFunc, Model, ModelQuery, ModelService, ObjId, ObjectTimestamp}
 import form.project.ProjectSettingsForm
-import models.competition.{Competition, CompetitionEntry}
+import models.competition.Competition
 import models.user.{Notification, User}
 import ore.permission.role.Role
 import ore.project.factory.PendingProject
@@ -150,71 +150,9 @@ case class ProjectSettings(
             OptionT
               .fromOption[IO](formData.competitionId)
               .flatMap(service.get[Competition](_))
-              .toRight(NonEmptyList.one("not.found"))
-              .semiflatMap { comp =>
-                val entries               = comp.entries
-                val projectAlreadyEntered = entries.exists(_.projectId === this.projectId)
-                val projectLimitReached   = entries.count(_.userId === newOwnerId).map(_ >= comp.allowedEntries)
-                val competitionCapacityReached =
-                  comp.maxEntryTotal.fold(IO.pure(false))(capacity => entries.size.map(_ >= capacity))
-                val deadlinePassed = IO.pure(comp.timeRemaining.toSeconds <= 0)
-                val onlySpongePlugins =
-                  if (comp.isSpongeOnly)
-                    newProject.recommendedVersion
-                      .semiflatMap(_.tags)
-                      .map(_.forall(!_.name.startsWith("Sponge")))
-                      .getOrElse(true)
-                  else IO.pure(false)
-                val onlyVisibleSource =
-                  if (comp.isSourceRequired) IO.pure(newProjectSettings.source.isEmpty) else IO.pure(false)
-
-                (
-                  projectAlreadyEntered,
-                  projectLimitReached,
-                  competitionCapacityReached,
-                  deadlinePassed,
-                  onlySpongePlugins,
-                  onlyVisibleSource,
-                  IO.pure(comp)
-                ).parTupled
-              }
-              .flatMap {
-                case (
-                    projectAlreadyEntered,
-                    projectLimitReached,
-                    competitionCapacityReached,
-                    deadlinePassed,
-                    onlySpongePlugins,
-                    onlyVisibleSource,
-                    competition
-                    ) =>
-                  val errors = Seq(
-                    projectAlreadyEntered      -> "error.project.competition.alreadyEntered",
-                    projectLimitReached        -> "error.project.competition.entryLimit",
-                    competitionCapacityReached -> "error.project.competition.capacity",
-                    deadlinePassed             -> "error.project.competition.over",
-                    onlySpongePlugins          -> "error.project.competition.spongeOnly",
-                    onlyVisibleSource          -> "error.project.competition.sourceOnly"
-                  )
-
-                  val applicableErrors = errors.collect {
-                    case (pred, msg) if pred => msg
-                  }
-
-                  applicableErrors.toList.toNel.fold(
-                    EitherT.right[NonEmptyList[String]](
-                      service
-                        .insert[CompetitionEntry](
-                          CompetitionEntry.partial(
-                            projectId = this.projectId,
-                            userId = newOwnerId,
-                            competitionId = competition.id.value
-                          )
-                        )
-                        .as(t)
-                    )
-                  )(errs => EitherT.leftT(errs))
-              }
+              .toRight(NonEmptyList.one("error.competition.submit.invalidProject"))
+              .flatMap(comp => service.competitionBase.submitProject(newProject, newProjectSettings, comp))
+              .as(t)
               .value
           }
     }

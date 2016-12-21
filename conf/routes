@@ -91,6 +91,7 @@ POST    /pages/preview                                              @controllers
 
 # ---------- Competitions  ----------
 
+POST    /competitions/:id                                           @controllers.project.Competitions.submitProject(id: DbRef[Competition])
 GET     /competitions/:id                                           @controllers.project.Competitions.showProjects(id: DbRef[Competition], page: Option[Int])
 POST    /competitions/:id/banner                                    @controllers.project.Competitions.setBanner(id: DbRef[Competition])
 GET     /competitions/:id/banner                                    @controllers.project.Competitions.showBanner(id: DbRef[Competition])

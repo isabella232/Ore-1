@@ -2,7 +2,6 @@ var competitionId;
 
 function initEditBanner() {
     $('.banner-some').mouseenter(function() {
-        console.log('mouse enter');
         $('.banner-edit').show();
     }).mouseleave(function() {
         $('.banner-edit').hide();

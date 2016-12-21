@@ -77,9 +77,11 @@
 
 }
 
+.comp-container .row:not(:last-child) {
+  margin-bottom: 20px;
+}
 
 .comp-header {
-  margin-bottom: 20px;
   .banner {
     position: relative;
     line-height: 100px;

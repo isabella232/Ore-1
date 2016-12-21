@@ -10,8 +10,8 @@
 @import controllers.sugar.Requests.OreRequest
 @import ore.permission.EditCompetitions
 
-@(competition: Competition, models: Seq[(Project, User, Version, Seq[VersionTag])], page: Int, pageSize: Int)(implicit messages: Messages, request: OreRequest[_],
-        config: OreConfig, competitions: CompetitionBase)
+@(competition: Competition, models: Seq[(Project, User, Version, Seq[VersionTag])], userProjects: Seq[Project], page: Int, pageSize: Int)(implicit messages: Messages, request: OreRequest[_],
+        config: OreConfig, competitions: CompetitionBase, flash: Flash)
 
 @compRoutes = @{
     controllers.project.routes.Competitions
@@ -26,7 +26,10 @@
     <script type="text/javascript" src="@routes.Assets.versioned("javascripts/competition.js")"></script>
     <script>competitionId = '@competition.id.value';</script>
 
-    <div class="container" style="margin-top: 90px;">
+    <div class="container comp-container" style="margin-top: 90px;">
+        <div class="row">
+            @utils.alert("error")
+        </div>
         <div class="row">
             <div class="comp-header">
                 @if(request.headerData.globalPerm(EditCompetitions)) {
@@ -61,11 +64,35 @@
             </div>
         </div>
         <div class="row">
-            @projectList(
-                models = models,
-                page = page,
-                pageSize = pageSize,
-                call = i => compRoutes.showProjects(competition.id.value, Some(i)))
+            <div class="pull-right form-inline">
+                @helper.form(action = compRoutes.submitProject(competition.id.value)) {
+                    @if(userProjects.nonEmpty) {
+                        <select class="form-control" name="project">
+                            <option selected value="-1">@Html(messages("competition.submit.selectProject"))</option>
+                            @userProjects.map { project =>
+                                <option value="@project.id.value">@project.name</option>
+                            }
+                        </select>
+                    }
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-plus"></i> @messages("competition.submit")
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="row">
+            @if(models.nonEmpty) {
+                @projectList(
+                    models = models,
+                    page = page,
+                    pageSize = pageSize,
+                    call = i => compRoutes.showProjects(competition.id.value, Some(i)))
+            } else {
+                <div class="list-group-item">
+                    <p>@messages("competition.entries.empty")</p>
+                    <a href="#">@messages("competition.entries.empty.new")</a>
+                </div>
+            }
         </div>
     </div>
 

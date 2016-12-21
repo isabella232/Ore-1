@@ -107,7 +107,6 @@ final class OreConfig @Inject()(config: Configuration) {
 
     object competitions extends ConfigCategory {
       val raw: Configuration = ore.raw.get[Configuration]("competitions")
-      val pageSize: Int = raw.get[Int]("page-size")
 
       object name extends ConfigCategory {
         val raw: Configuration = competitions.raw.get[Configuration]("name")

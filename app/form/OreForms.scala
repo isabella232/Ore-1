@@ -19,7 +19,7 @@ import form.project.competition.{CompetitionCreateForm, CompetitionSaveForm}
 import models.api.ProjectApiKey
 import models.competition.Competition
 import models.project.Page._
-import models.project.{Channel, Page}
+import models.project.{Channel, Page, Project}
 import models.user.Organization
 import models.user.role.ProjectUserRole
 import ore.OreConfig
@@ -242,41 +242,52 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
   /**
     * Submits a new [[Competition]].
     */
-  lazy val CompetitionCreate = Form(mapping(
-    "name" -> nonEmptyText(0, this.config.ore.competitions.name.maxLen),
-    "description" -> optional(nonEmptyText),
-    "start-date" -> localDateTime(this.dateFormat),
-    "end-date" -> localDateTime(this.dateFormat),
-    "time-zone" -> nonEmptyText,
-    "enable-voting" -> default(boolean, false),
-    "staff-only" -> default(boolean, false),
-    "show-vote-count" -> default(boolean, false),
-    "sponge-only" -> default(boolean, false),
-    "source-required" -> default(boolean, false),
-    "default-votes" -> default(number(0), 1),
-    "staff-votes" -> default(number(0), 1),
-    "default-entries" -> default(number(1), 1),
-    "max-entries-total" -> default(number(-1), -1)
-  )(CompetitionCreateForm.apply)(CompetitionCreateForm.unapply)
-    .verifying("error.dates.competition", _.checkDates()))
+  lazy val CompetitionCreate = Form(
+    mapping(
+      "name"              -> nonEmptyText(0, this.config.ore.competitions.name.maxLen),
+      "description"       -> optional(nonEmptyText),
+      "start-date"        -> localDateTime(this.dateFormat),
+      "end-date"          -> localDateTime(this.dateFormat),
+      "time-zone"         -> nonEmptyText,
+      "enable-voting"     -> default(boolean, false),
+      "staff-only"        -> default(boolean, false),
+      "show-vote-count"   -> default(boolean, false),
+      "sponge-only"       -> default(boolean, false),
+      "source-required"   -> default(boolean, false),
+      "default-votes"     -> default(number(0), 1),
+      "staff-votes"       -> default(number(0), 1),
+      "default-entries"   -> default(number(1), 1),
+      "max-entries-total" -> default(number(-1), -1)
+    )(CompetitionCreateForm.apply)(CompetitionCreateForm.unapply)
+      .verifying("error.dates.competition", _.checkDates())
+  )
 
   /**
     * Saves a Competition.
     */
-  lazy val CompetitionSave = Form(mapping(
-    "start-date" -> localDateTime(this.dateFormat),
-    "end-date" -> localDateTime(this.dateFormat),
-    "time-zone" -> nonEmptyText,
-    "enable-voting" -> default(boolean, false),
-    "staff-only" -> default(boolean, false),
-    "show-vote-count" -> default(boolean, false),
-    "source-required" -> default(boolean, false),
-    "default-votes" -> default(number(0), 1),
-    "staff-votes" -> default(number(0), 1),
-    "default-entries" -> default(number(1), 1),
-    "max-entries-total" -> default(number(-1), -1)
-  )(CompetitionSaveForm.apply)(CompetitionSaveForm.unapply)
-    .verifying("error.dates.competition", _.checkDates()))
+  lazy val CompetitionSave = Form(
+    mapping(
+      "start-date"        -> localDateTime(this.dateFormat),
+      "end-date"          -> localDateTime(this.dateFormat),
+      "time-zone"         -> nonEmptyText,
+      "enable-voting"     -> default(boolean, false),
+      "staff-only"        -> default(boolean, false),
+      "show-vote-count"   -> default(boolean, false),
+      "source-required"   -> default(boolean, false),
+      "default-votes"     -> default(number(0), 1),
+      "staff-votes"       -> default(number(0), 1),
+      "default-entries"   -> default(number(1), 1),
+      "max-entries-total" -> default(number(-1), -1)
+    )(CompetitionSaveForm.apply)(CompetitionSaveForm.unapply)
+      .verifying("error.dates.competition", _.checkDates())
+  )
+
+  /**
+    * Submits a project to a competition.
+    */
+  lazy val CompetitionSubmitProject = Form(
+    single("project" -> longNumber(min = -1).transform[DbRef[Project]](i => i, i => i))
+  )
 
   /**
     * Submits a change to a Version's description.
