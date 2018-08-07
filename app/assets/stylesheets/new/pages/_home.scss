@@ -1,0 +1,46 @@
+.banner {
+  img {
+    height: 4rem;
+    width: 4rem;
+  }
+
+  .headline {
+    font-weight: bold;
+    font-size: 1.75rem;
+  }
+}
+
+.sponsor {
+  img {
+    height: 3rem;
+  }
+}
+
+.card.card-filters {
+  > .card-header {
+    font-weight: bold;
+    justify-content: space-between;
+    display: flex;
+  }
+
+  > .list-group > .list-group-item {
+    svg {
+      margin-right: 0.5rem;
+    }
+
+    &:hover {
+      color: $gray-hover;
+    }
+  }
+
+}
+
+.queryRemoval a {
+  font-weight: bold;
+  color: $sponge_grey;
+
+  &:hover {
+    text-decoration: none;
+    color: $gray-hover;
+  }
+}

@@ -49,7 +49,7 @@ class ProjectBase(implicit val service: ModelService, env: OreEnv, config: OreCo
   }
 
   /**
-    * Returns projects that have not beein updated in a while.
+    * Returns projects that have not been updated in a while.
     *
     * @return Stale projects
     */

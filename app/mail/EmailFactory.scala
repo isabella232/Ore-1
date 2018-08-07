@@ -18,6 +18,8 @@ final class EmailFactory @Inject()(
 
   def create(user: User, id: String)(implicit request: OreRequest[_]): Email = {
     import user.langOrDefault
+    implicit val flash: Flash = request.flash
+
     Email(
       recipient = user.email.get,
       subject = this.messagesApi(s"$id.subject"),

@@ -1,9 +1,14 @@
+@import "new/main";
+
+
+
+
+
 @import 'admin';
 @import 'creator';
 @import 'discuss';
 @import 'editor';
 @import 'footer';
-@import 'nav';
 @import 'project';
 @import 'user';
 @import "panel";
@@ -88,86 +93,6 @@ form {
   background-color: #f5f5f5;
 }
 
-/* project content */
-
-.project-list {
-  .row {
-    display: flex;
-    flex-wrap: nowrap;
-  }
-
-  @media (max-width: 767px) {
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-    }
-  }
-
-  .project {
-    padding: 10px 0;
-    margin-bottom: 0.25rem;
-
-    &:first-child {
-      margin-top: 0.25rem;
-    }
-  }
-
-  .title {
-    font-size: 2rem;
-    color: $sponge_grey;
-    font-weight: bold;
-  }
-
-  .description-column {
-    overflow: hidden;
-
-    .description {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-  }
-
-  .tags-line {
-    display: flex;
-    justify-content: flex-end;
-
-    @media (max-width: 480px) {
-      justify-content: flex-start;
-      margin-top: 0.5rem;
-    }
-
-    .tags {
-      margin-right: 0.5rem;
-    }
-
-    :last-child {
-      margin-right: 0;
-    }
-
-    .tag {
-      margin: 0;
-    }
-  }
-
-  .info {
-    display: flex;
-    justify-content: flex-end;
-
-    span {
-      margin-right: 1.5rem;
-
-      &:last-child {
-        margin-right: 0;
-      }
-
-      &.recommended-version a {
-        font-weight: bold;
-        color: #636363;
-      }
-    }
-  }
-}
 
 // category table
 
@@ -175,6 +100,7 @@ form {
   margin-bottom: 10px;
 }
 
+/*
 .setting {
   @extend .minor;
   @extend .form-group;
@@ -217,15 +143,11 @@ form {
   }
 
 }
+*/
 
 .setting-no-border {
   border: none;
   margin-bottom: 0;
-}
-
-.category-reset {
-  margin-top: -15px;
-  margin-right: -4px;
 }
 
 .category-table {
@@ -398,7 +320,6 @@ select.form-control, input.form-control {
     padding-left: 0.75em;
     padding-right: 0.75em;
     white-space: nowrap;
-    margin: 5px;
   }
 
   &.has-addons .tag {
@@ -435,11 +356,6 @@ select.form-control, input.form-control {
 .table.centered {
   text-align: center;
 }
-
-.project-search {
-  margin-bottom: 1rem;
-}
-
 .text-sponge-yellow {
   color: $sponge_yellow !important;
 }
@@ -493,31 +409,6 @@ select.form-control, input.form-control {
     display: flex;
     flex-flow: nowrap;
     align-items: center;
-  }
-}
-
-.ore-banner {
-  .ore-logo {
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
-
-    img {
-      height: 6rem;
-      width: 6rem;
-    }
-  }
-
-  .text {
-    font-family: $sponge_headline_font;
-    display: inline-block;
-    padding-left: 0;
-    width: auto;
-
-    .headline {
-      font-weight: bold;
-      font-size: 2.75rem;
-    }
   }
 }
 

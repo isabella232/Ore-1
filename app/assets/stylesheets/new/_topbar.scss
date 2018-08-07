@@ -1,3 +1,5 @@
+@import "../sponge_variables";
+
 /*
  * This file is part of SpongeHome, licensed under the MIT License (MIT).
  *
@@ -23,30 +25,22 @@
  * THE SOFTWARE.
  */
 
-@import 'sponge_variables';
-
 $sp_logo_offset_x: 0;
-$sp_logo_offset_y: -20px;
+$sp_logo_offset_y: 0;
 $sp_topbar_height: 63px;
 $sp_logo_width: 200px;
 
-// Fix anchor links
-// TODO: Doesn't work properly for sections
-/*:target:before {
-  content: '';
-  display: block;
-  height: $sp_topbar_height;
-  margin: -$sp_topbar_height 0 0;
-}*/
+body {
+  padding-top: $sp_topbar_height;
+}
 
 #topbar {
   position: fixed;
   top: $sp_logo_offset_x;
-  z-index: 1000;
+  z-index: 9999;
 
   width: 100%;
-  //max-width: 1920px;
-  height: $sp_topbar_height;
+  padding: 0;
 
   background-color: $sponge_grey;
   box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.25);
@@ -59,7 +53,6 @@ $sp_logo_width: 200px;
 
   .container {
     position: relative;
-    padding: 0;
   }
 }
 
@@ -75,10 +68,12 @@ $sp_logo_width: 200px;
     width: $sp_logo_width;
     height: $sp_topbar_height;
 
-    padding-left: 20px;
+    padding-left: 15px;
     padding-top: 11px;
 
-    @extend .sponge-headline;
+    @include montserrat;
+    font-weight: 700;
+    color: $sponge_yellow;
 
     * {
       display: inline-block;
@@ -90,11 +85,11 @@ $sp_logo_width: 200px;
     }
 
     span {
-      margin-left: 3px;
+      margin-left: 0.250rem;
       font-size: 23px;
     }
 
-    i {
+    i, svg {
       color: gray;
     }
   }
@@ -114,14 +109,15 @@ $sp_logo_width: 200px;
 
   position: absolute;
   top: $sp_topbar_height;
-  left: $sp_logo_offset_y;
 
   width: $sp_logo_width;
+
+  z-index: 1001;
 }
 
 #sp-logo-dropdown {
   margin: 0;
-  padding: 10px 0 4px;
+  padding: 5px 0 5px;
 
   background-color: white;
 
@@ -158,28 +154,52 @@ $sp_logo_width: 200px;
     }
   }
 
-  i {
+  svg, img {
     padding: 0 10px 0 5px;
   }
 
 }
 
-@media (max-width: 767px){
-  #sp-logo-container {
-    margin-left: 0;
-  }
 
-  #sp-logo-menu {
-    left: 0;
+
+// Right nav bar
+
+.navbar-header, #main-navbar-collapse {
+  float: right;
+}
+
+.navbar-toggle {
+  margin: 6px 24px 0 0;
+  padding: 10px;
+
+  font-size: 32px;
+  color: $sponge_yellow;
+}
+
+#main-navbar-collapse ul {
+  li .active {
+    font-weight: bold;
   }
 }
 
-.ore-nav {
-  display: inline-block;
-  width: 15px !important;
-  height: auto;
-  margin: 0;
-  padding: 0 12px 4px 7px;
-  background-color: transparent;
-  border-radius: 0;
+@media (min-width: 768px) {
+  #main-navbar-collapse ul {
+    li {
+      margin: 0 5px;
+      background-color: $sponge_yellow;
+
+      a {
+        color: $sponge_dark_grey;
+        padding: 6px 12px;
+
+        &:hover {
+          background-color: #f9ed9e;
+        }
+
+        &:focus {
+          background-color: transparent;
+        }
+      }
+    }
+  }
 }

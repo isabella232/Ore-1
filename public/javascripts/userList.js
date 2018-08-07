@@ -30,13 +30,13 @@ var CURRENT_PAGE = 0;
  */
 
 $(function() {
-    $('.table-users').find('thead').find('td:not(:first-child)').click(function() {
+    $('.table-users').find('thead').find('th:not(:first-child)').click(function() {
         var sort = $(this).text().toLowerCase().trim();
         var direction = '';
         var thisObj = $(this);
         if (thisObj.hasClass('user-sort')) {
             // Change direction
-            direction = $(this).find('i').hasClass('o-chevron-up') ? '-' : '';
+            direction = $(this).find('svg[data-icon="chevron-up"]').length == 1 ? '-' : '';
         }
         var start = thisObj.data("list");
         var url = '/' + start + '?sort=' + direction + sort;

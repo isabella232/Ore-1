@@ -314,4 +314,32 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
       "api_key" -> nonEmptyText
     )
   )
+
+
+  /**
+    * Used to process the first step of the upload process
+    */
+  def ProjectCreateStep1(ownersUserCanUploadTo: Seq[Int]) = Form(single(
+    "owner" -> optional(number).verifying(ownerIdInList(ownersUserCanUploadTo))
+  ))
+
+  /**
+    * Submits settings changes for a Project.
+    */
+  def ProjectCreateStep2() = Form(mapping(
+    "category" -> text,
+    "issues" -> url,
+    "source" -> url,
+    "license-name" -> text,
+    "license-url" -> url,
+    "description" -> text,
+    "users" -> list(number),
+    "roles" -> list(text),
+    "userUps" -> list(text),
+    "roleUps" -> list(text),
+    "update-icon" -> boolean,
+    "owner" -> optional(number),
+    "forum-sync" -> boolean
+  )(ProjectSettingsForm.apply)(ProjectSettingsForm.unapply))
+
 }

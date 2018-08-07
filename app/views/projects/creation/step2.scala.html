@@ -1,0 +1,88 @@
+@*
+Page used for uploading and creating new projects.
+*@
+@import controllers.sugar.Requests.OreRequest
+@import ore.OreConfig
+@import views.html.helper.{CSRF, form}
+@import views.html.projects.creation.template
+
+@import ore.project.factory.creation.PendingProjectCreation
+@(pendingProject: PendingProjectCreation, pluginIdAvailable: Boolean, namespaceAvailable: Boolean)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@template(messages("project.create"), 2) {
+
+    @form(action = controllers.project.routes.ProjectCreation.processStep2(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileFormStep2") {
+        @CSRF.formField
+
+        <div class="plugin-meta mt-0 mb-5">
+            <i class="minor">mcmod.info</i>
+
+            <table class="plugin-meta-table">
+                <tbody>
+                    <tr>
+                        <td colspan="2"><strong>@messages("project.create.uid")</strong></td>
+                        <td>
+                            @pendingProject.underlying.pluginId
+                            @if(pluginIdAvailable) {
+                                <i class="fas fa-check-circle fa-fw"></i>
+                            } else {
+                                <i class="fas fa-times-circle fa-fw"></i>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"><strong>@messages("general.name")</strong></td>
+                        <td>
+                            @pendingProject.underlying.name
+                            @if(pluginIdAvailable) {
+                                <i class="fas fa-check-circle fa-fw"></i>
+                            } else {
+                                <i class="fas fa-times-circle fa-fw"></i>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"><strong>@messages("project.owner")</strong></td>
+                        <td>@pendingProject.underlying.ownerName</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"><strong>Platform</strong></td>
+                        <td>
+                            <div class="pull-right" id="upload-platform-tags">
+                            @for(t <- pendingProject.pendingVersion.dependenciesAsGhostTags) {
+                                @projects.tag(t)
+                            }
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">
+                            <label for="description">Description</label>
+                            @defining(pendingProject.pendingVersion.underlying.description) { description =>
+                                <input form="uploadFileFormStep2" class="form-control" type="text" id="description"
+                                name="description"
+                                maxlength="@config.projects.get[Int]("max-desc-len")"
+                                    @description.map { v =>
+                                    value="@v"
+                                    }.getOrElse {
+                                        placeholder="@messages("version.create.noDescription")"
+                                    }
+                                />
+                            }
+                        </td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        @if(pluginIdAvailable && namespaceAvailable) {
+
+            @projects.helper.inputSettings("uploadFileFormStep2")
+
+            <div class="row mt-3">
+                <div class="col-auto ml-auto">
+                    <button class="btn btn-success">@messages("general.continue")</button>
+                </div>
+            </div>
+        }
+    }
+}

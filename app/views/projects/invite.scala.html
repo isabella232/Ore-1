@@ -9,8 +9,7 @@
 @import views.html.helper.{CSRF, form}
 @(owner: User, pending: PendingProject, userList: List[User], registeredUsers: Int)(implicit messages: Messages, request: OreRequest[_],
         config: OreConfig)
-
-@projects.helper.panelCreate(messages("project.create"), 3) {
+@bootstrap.layout(messages("project.create")) {
     <!-- Start panel -->
     <div class="panel-body">
         <!-- Info -->

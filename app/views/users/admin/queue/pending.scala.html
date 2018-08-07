@@ -1,0 +1,26 @@
+@import db.ModelService
+@import models.project.{Project, Version}
+@import ore.OreConfig
+@import security.NonceFilter._
+
+@import play.api.Configuration
+@import views.html.utils.userAvatar
+@import models.admin.Review
+@import models.project.Channel
+@import models.user.User
+@import controllers.sugar.Requests.OreRequest
+@import java.sql.Timestamp
+@import java.time.Instant
+
+@import views.html.users.admin.queue.template
+
+@(reviews: Seq[(Version, Project, Channel, Option[String], User, Option[Review])])(implicit messages: Messages, request: OreRequest[_], config: OreConfig, flash: Flash)
+
+@users.admin.queue.template(1) {
+
+    @reviews.map { review =>
+        <kbd>@review._2.name</kbd> <samp>@review._1.versionString</samp>
+        @review._6.isDefined
+        <br>
+    }
+}

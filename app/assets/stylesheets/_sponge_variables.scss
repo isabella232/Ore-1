@@ -38,3 +38,8 @@ $sponge_headline_font: Montserrat, "Helvetica Neue", Helvetica, Arial, sans-seri
   text-transform: uppercase;
   text-decoration: none;
 }
+
+@mixin montserrat {
+  font-family: Montserrat, sans-serif;
+  text-transform: uppercase;
+}

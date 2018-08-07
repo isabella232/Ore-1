@@ -1,0 +1,51 @@
+.btn-mark-read {
+  padding: 5px;
+
+}
+
+.btn-mark-read:hover {
+  background-color: #5cb85c;
+  color: white;
+  transition: all .2s ease-out;
+}
+
+.invite {
+  padding-left: 0;
+  padding-right: 5px;
+  padding-bottom: 5px;
+  overflow: hidden;
+
+  .invite-content {
+    background-color: white;
+    border: 1px solid gray;
+    text-align: center;
+    padding: 5px;
+
+    .invite-message {
+      position: absolute;
+      width: 90%;
+      top: 30%;
+    }
+
+    .invite-accepted {
+      top: 20%;
+    }
+
+    .invite-loading {
+      position: absolute;
+      top: 30%;
+      right: 35%;
+    }
+  }
+}
+
+.dismiss {
+  padding: 5px;
+  text-align: center;
+}
+
+.dismiss:hover {
+  color: white;
+  background-color: gray;
+  transition: all .2s ease-out;
+}

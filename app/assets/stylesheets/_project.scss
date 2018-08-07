@@ -92,32 +92,6 @@
   padding-right: 5px;
 }
 
-.project-header-container {
-  @include margin-vert(60px, 15px);
-  border-bottom: 1px solid $lighter;
-}
-
-.project-header {
-  @include padding-vert(20px, 10px);
-  white-space: nowrap;
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.project-header > h1 {
-  @include margin-vert(0, 0);
-  font-size: 20px;
-  font-weight: normal;
-  float: left;
-  padding-right: 5px;
-}
-
-.project-header > i {
-  font-size: 16px;
-  text-overflow: ellipsis;
-}
-
 .row-nav .col-md-12 {
   padding-left: 0;
 }

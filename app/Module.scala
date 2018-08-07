@@ -3,6 +3,7 @@ import db.impl.service.OreModelService
 import discourse.{OreDiscourseApi, SpongeForums}
 import mail.{Mailer, SpongeMailer}
 import ore._
+import ore.project.factory.creation.{OreProjectCreationFactory, ProjectCreationFactory}
 import ore.project.factory.{OreProjectFactory, ProjectFactory}
 import ore.rest.{OreRestfulApi, OreRestfulServer}
 import security.spauth.{SingleSignOnConsumer, SpongeAuth, SpongeAuthApi, SpongeSingleSignOnConsumer}
@@ -16,6 +17,7 @@ class Module extends AbstractModule {
     bind(classOf[OreRestfulApi]).to(classOf[OreRestfulServer])
     bind(classOf[StatTracker]).to(classOf[OreStatTracker])
     bind(classOf[ProjectFactory]).to(classOf[OreProjectFactory])
+    bind(classOf[ProjectCreationFactory]).to(classOf[OreProjectCreationFactory])
     bind(classOf[OreDiscourseApi]).to(classOf[SpongeForums])
     bind(classOf[SpongeAuthApi]).to(classOf[SpongeAuth])
     bind(classOf[ModelService]).to(classOf[OreModelService])

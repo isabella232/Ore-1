@@ -9,9 +9,7 @@ Discussion page within Project overview.
 
 @import org.spongepowered.play.discourse.DiscourseApi
 @(p: ProjectData, sp: ScopedProjectData)(implicit messages: Messages, request: OreRequest[_], flash: Flash, forums: DiscourseApi, config: OreConfig)
-
 @projectRoutes = @{controllers.project.routes.Projects}
-
 @projects.view(p, sp, "#discussion") {
 
     <script nonce="@nonce">

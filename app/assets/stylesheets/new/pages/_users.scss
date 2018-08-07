@@ -1,0 +1,32 @@
+.user-header {
+  border-bottom: 1px solid lightgrey;
+
+  .user-badge {
+    width: 80%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: left;
+    .user-avatar { margin-right: 20px; }
+  }
+
+  .user-badge > h1 { float: left; }
+  .user-roles li { display: inline; }
+
+  .user-badge > img {
+    float: left;
+    margin-right: 20px;
+  }
+
+  .user-info {
+    text-align: right;
+  }
+
+  .user-roles {
+    list-style-type: none;
+  }
+
+  .organization-role img {
+    margin-bottom: 4px;
+  }
+}

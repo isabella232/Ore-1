@@ -26,7 +26,8 @@ var MIN_NAME_LENGTH = 3;
 function resetStatus(status) {
     return status.removeClass('fa-spinner fa-spin')
         .removeClass('fa-check-circle')
-        .removeClass('fa-times-circle');
+        .removeClass('fa-times-circle')
+        .removeClass('fa-search');
 }
 
 /*
@@ -40,26 +41,26 @@ $(function() {
 
     $('.input-name').on('input', function() {
         var val = $(this).val();
-        var status = $('.status-org-name');
+        var statusIcon = $('.status-org-name-container').find('[data-fa-i2svg]');
         var continueBtn = $('.continue-btn').prop('disabled', true);
         if (val.length < MIN_NAME_LENGTH)
-            status.hide();
+            resetStatus(statusIcon).addClass('fas fa-fw fa-search');
         else {
-            resetStatus(status).addClass('fa-spinner fa-spin');
-            status.show();
+            resetStatus(statusIcon).addClass('fas fa-fw fa-spinner fa-spin');
+            statusIcon.show();
             var event = ++events;
             $.ajax({
                 url: '/' + val,
                 statusCode: {
                     404: function() {
                         if (event === events) {
-                            resetStatus(status).addClass('fa-check-circle');
+                            resetStatus(statusIcon).addClass('fas fa-fw fa-check-circle');
                             continueBtn.prop('disabled', false);
                         }
                     },
                     200: function() {
                         if (event === events)
-                            resetStatus(status).addClass('fa-times-circle');
+                            resetStatus(statusIcon).addClass('fas fa-fw fa-times-circle');
                     }
                 }
             });

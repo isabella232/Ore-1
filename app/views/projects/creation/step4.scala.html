@@ -1,0 +1,25 @@
+@*
+Page used for uploading and creating new projects.
+*@
+@import controllers.sugar.Requests.OreRequest
+@import models.user.User
+@import models.viewhelper.OrganizationData
+@import ore.OreConfig
+@import ore.project.factory.creation.PendingProjectCreation
+@import views.html.helper.{CSRF, form}
+@import views.html.projects.creation.template
+@import views.html.utils.userAvatar
+@(pendingProject: PendingProjectCreation, owner: User, authors: Seq[String], orgaData: OrganizationData)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@template(messages("project.create"), 4) {
+
+    @form(action = controllers.project.routes.ProjectCreation.processStep4(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileFormStep3") {
+        @CSRF.formField
+
+
+        <div class="row mt-3">
+            <div class="col-auto ml-auto">
+                <button class="btn btn-success">@messages("general.continue")</button>
+            </div>
+        </div>
+    }
+}

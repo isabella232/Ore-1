@@ -1,0 +1,91 @@
+@*
+Page used for uploading and creating new projects.
+*@
+@import controllers.sugar.Requests.OreRequest
+@import models.user.User
+@import models.viewhelper.OrganizationData
+@import ore.OreConfig
+@import ore.project.factory.creation.PendingProjectCreation
+@import views.html.helper.{CSRF, form}
+@import views.html.projects.creation.template
+@import views.html.utils.userAvatar
+@(pendingProject: PendingProjectCreation, owner: User, authors: Seq[String], orgaData: OrganizationData)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@template(messages("project.create"), 3) {
+
+    @form(action = controllers.project.routes.ProjectCreation.processStep3(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileFormStep3") {
+        @CSRF.formField
+
+        @Html(messages("project.members.infoText.head"))
+
+        <table class="table table-hover table-sm mt-2">
+            <thead>
+                <tr class="thead-dark">
+                    <th width="45"></th>
+                    <th>User</th>
+                    <th>Role</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td width="45">
+                        @userAvatar(Some(owner.name), owner.avatarUrl, clazz = "user-avatar-xs")
+                    </td>
+                    <td>
+                        <input type="hidden" name="users[]" value="@pendingProject.underlying.ownerId"/>
+                        @pendingProject.underlying.ownerName
+                    </td>
+                    <td>
+                        <input type="hidden" name="roles[]" value=""/>
+                        Owner
+                    </td>
+                </tr>
+                @orgaData.filteredMembers.map { case (role, user) =>
+                    <tr class="bg-light">
+                        <td width="45">
+                            @userAvatar(Some(user.name), user.avatarUrl, clazz = "user-avatar-xs")
+                        </td>
+                        <td>
+                        @user.name
+                    </td>
+                        <td>
+                            @role.roleType.title (inherited from Organization)
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot class="bg-light">
+                <tr>
+                    <td colspan="3">
+                        <div class="input-group p-2 mt-2">
+                            <input type="text" class="form-control" placeholder="User">
+                            <div class="input-group-append">
+                                <button class="btn btn-secondary" type="button" id="button-addon2"><i class="fas fa-search fa-fw"></i></button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <br>
+
+        <div class="row">
+            <div class="col-12">
+            Ore has found some authors in your mcmod.info you might want to add them as a collaborators.
+            </div>
+            <div class="col-12">
+                <ul class="list-unstyled">
+                    @authors.map { author =>
+                        <li><button class="btn btn-link btn-sm">Add</button> @author</li>
+                    }
+                </ul>
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-auto ml-auto">
+                <button class="btn btn-success">@messages("general.continue")</button>
+            </div>
+        </div>
+    }
+}

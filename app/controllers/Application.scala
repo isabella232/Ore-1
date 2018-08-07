@@ -38,6 +38,8 @@ import ore.permission.scope.GlobalScope
 import ore.project.{Category, ProjectSortingStrategies}
 import ore.user.MembershipDossier
 import ore.{OreConfig, OreEnv, Platform, PlatformCategory}
+import play.api.routing.JavaScriptReverseRouter
+import slick.dbio.{DBIOAction, NoStream}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
 import views.{html => views}
 
@@ -68,6 +70,14 @@ final class Application @Inject()(forms: OreForms)(
     */
   def linkOut(remoteUrl: String) = OreAction { implicit request =>
     Ok(views.linkout(remoteUrl))
+  }
+
+  def javascriptRoutes = Action { implicit request =>
+    Ok(
+      JavaScriptReverseRouter("jsRoutes")(
+        routes.javascript.Application.showHome
+      )
+    ).as("text/javascript")
   }
 
   private val queryProjectRV = {
@@ -161,58 +171,84 @@ final class Application @Inject()(forms: OreForms)(
     *
     * @return View of unreviewed versions.
     */
-  def showQueue(): Action[AnyContent] =
-    Authenticated.andThen(PermissionAction(ReviewProjects)).async { implicit request =>
-      // TODO: Pages
-      val data = this.service
-        .doAction(queryQueue.result)
-        .flatMap { list =>
-          service
-            .doAction(queryReviews(list.map(_._1.id.value)).result)
-            .map(_.groupBy(_._1.versionId))
-            .tupleLeft(list)
-        }
-        .map {
-          case (list, reviewsByVersion) =>
-            val reviewData = reviewsByVersion.mapValues { reviews =>
-              val sortedReviews = reviews.sorted(Review.ordering)
-              sortedReviews
-                .find { case (review, _) => review.endedAt.isEmpty }
-                .map { case (r, a) => (r, true, a) } // Unfinished Review
-                .orElse(sortedReviews.headOption.map { case (r, a) => (r, false, a) }) // any review
-            }
+  def showVersionQueuePending(page: Option[Int]): Action[AnyContent] = (Authenticated andThen PermissionAction[AuthRequest](ReviewProjects)).async { implicit request =>
+    service.DB.db.run(queryVersionQueuePending(page.getOrElse(1)).result).map { list: Seq[(Version, Project, Channel, Option[String], User, Option[Review])] =>
+      Ok(views.users.admin.queue.pending(list))
+    }
+  }
 
-            list.map {
-              case (v, p, c, a, u) => (v, p, c, a, u, reviewData.getOrElse(v.id.value, None))
-            }
-        }
-      data.map { list =>
-        val lists = list.partition(_._6.isEmpty)
-        val reviewList = lists._2.map {
-          case (v, p, c, a, _, r) => (p, v, c, a, r.get)
-        }
-        val unReviewList = lists._1.map {
-          case (v, p, c, a, u, _) => (p, v, c, a, u)
-        }
+  def showVersionQueueWIP(page: Option[Int]): Action[AnyContent] = (Authenticated andThen PermissionAction[AuthRequest](ReviewProjects)).async { implicit request =>
+    service.DB.db.run(queryVersionQueueWIP(page.getOrElse(1)).result).map { list: Seq[(Version, Project, Channel, Option[String], User, Review)] =>
+      Ok(views.users.admin.queue.wip(list))
+    }
+  }
 
-        Ok(views.users.admin.queue(reviewList, unReviewList))
-      }
-
+    def showVersionQueueDone(page: Option[Int]): Action[AnyContent] = (Authenticated andThen PermissionAction[AuthRequest](ReviewProjects)).async { implicit request =>
+    service.DB.db.run(queryVersionQueueDone(page.getOrElse(1)).result).map { list: Seq[(Version, Project, Channel, Option[String], User)] =>
+      Ok(views.users.admin.queue.done(list))
+    }
     }
 
-  private def queryReviews(versions: Seq[ObjectReference]) =
-    for {
-      r <- TableQuery[ReviewTable] if r.versionId.inSetBind(versions)
-      u <- TableQuery[UserTable] if r.userId === u.id
-    } yield (r, u.name)
+  private def queuePageSize = this.config.ore.get[ObjectReference]("queue.page-size")
 
-  private def queryQueue =
-    for {
-      (v, u) <- TableQuery[VersionTable].joinLeft(TableQuery[UserTable]).on(_.authorId === _.id)
-      c      <- TableQuery[ChannelTable] if v.channelId === c.id && v.isReviewed =!= true && v.isNonReviewed =!= true
-      p      <- TableQuery[ProjectTableMain] if v.projectId === p.id && p.visibility =!= (Visibility.SoftDelete: Visibility)
-      ou     <- TableQuery[UserTable] if p.userId === ou.id
-    } yield (v, p, c, u.map(_.name), ou)
+  private def queryVersionQueuePending(page: Int = 1) = {
+    val versionTable = TableQuery[VersionTable]
+    val channelTable = TableQuery[ChannelTable]
+    val projectTable = TableQuery[ProjectTableMain]
+    val userTable = TableQuery[UserTable]
+    val reviewsTable = TableQuery[ReviewTable]
+
+    (for {
+      ((v, u), r) <- (versionTable joinLeft userTable on (_.authorId === _.id)) joinLeft reviewsTable on (_._1.id === _.versionId)
+      c <- channelTable if v.channelId === c.id && v.isReviewed =!= true && v.isNonReviewed =!= true && v.isReviewed === false && v.visibility =!= VisibilityTypes.SoftDelete
+      p <- projectTable if v.projectId === p.id && p.visibility =!= VisibilityTypes.SoftDelete
+      ou <- userTable if p.userId === ou.id
+    } yield {
+      (v, p, c, u.map(_.name), ou, r)
+    }).filter { case (_, _, _, _, _, r) =>
+        r.isEmpty
+    }.sortBy { case (v, _, _, _, _, _) =>
+      v.createdAt.asc.nullsFirst
+    }.drop((page - 1) * queuePageSize).take(queuePageSize)
+  }
+
+  private def queryVersionQueueWIP(page: Int = 1) = {
+    val versionTable = TableQuery[VersionTable]
+    val channelTable = TableQuery[ChannelTable]
+    val projectTable = TableQuery[ProjectTableMain]
+    val userTable = TableQuery[UserTable]
+    val reviewsTable = TableQuery[ReviewTable]
+
+    (for {
+      (v, u) <- versionTable joinLeft userTable on (_.authorId === _.id)
+      c <- channelTable if v.channelId === c.id && v.isReviewed =!= true && v.isNonReviewed =!= true && v.isReviewed === false && v.visibility =!= VisibilityTypes.SoftDelete
+      p <- projectTable if v.projectId === p.id && p.visibility =!= VisibilityTypes.SoftDelete
+      ou <- userTable if p.userId === ou.id
+      r <- reviewsTable if r.versionId === v.id
+    } yield {
+      (v, p, c, u.map(_.name), ou, r)
+    }).sortBy { case (_, _, _, _, _, r) =>
+      r.createdAt.desc.nullsLast
+    }.drop((page - 1) * queuePageSize).take(queuePageSize)
+  }
+
+  private def queryVersionQueueDone(page: Int = 1) = {
+    val versionTable = TableQuery[VersionTable]
+    val channelTable = TableQuery[ChannelTable]
+    val projectTable = TableQuery[ProjectTableMain]
+    val userTable = TableQuery[UserTable]
+
+    (for {
+      (v, u) <- versionTable joinLeft userTable on (_.authorId === _.id)
+      c <- channelTable if v.channelId === c.id && v.isNonReviewed =!= true && c.isNonReviewed =!= true && v.isReviewed === true && v.visibility =!= VisibilityTypes.SoftDelete
+      p <- projectTable if v.projectId === p.id && p.visibility =!= VisibilityTypes.SoftDelete
+      ou <- userTable if p.userId === ou.id
+    } yield {
+      (v, p, c, u.map(_.name), ou)
+    }).sortBy { case (v, _, _, _, _) =>
+      v.approvedAt.desc.nullsLast
+    }.drop((page - 1) * queuePageSize).take(queuePageSize)
+  }
 
   /**
     * Shows the overview page for flags.

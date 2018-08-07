@@ -7,9 +7,7 @@
 @import views.html.helper.{CSRF, form}
 @import views.html.utils
 @(p: ProjectData, sp: ScopedProjectData, deploymentKey: Option[ProjectApiKey])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
-
 @projectRoutes = @{controllers.project.routes.Projects}
-
 @projects.view(p, sp, "#settings") {
 
     <script type="text/javascript" src="@routes.Assets.at("javascripts/hideProject.js")"></script>
@@ -24,57 +22,57 @@
         keyRevokeText = "@messages("project.settings.revokeKey")";
     </script>
 
-    <div class="container">
-        <div class="row">
-            <div class="col-md-8">
-
-                <!-- Main settings -->
-                <div class="panel panel-default panel-settings">
-                    <div class="panel-heading">
-                        <h3 class="panel-title pull-left">@messages("project.settings")</h3>
-                        @if(request.headerData.globalPerm(HideProjects)) {
+    <div class="row">
+        <div class="col-12 col-md-8">
+            <!-- Main settings -->
+            <div class="card panel-settings">
+                <div class="card-header">
+                    @messages("project.settings")
+                    @if(request.headerData.globalPerm(HideProjects)) {
+                        <div class="float-right">
                             @projects.helper.btnHide(p.project, sp.permissions)
-
-                            <div class="modal fade" id="modal-visibility-comment" tabindex="-1" role="dialog" aria-labelledby="modal-visibility-comment">
-                                <div class="modal-dialog" role="document">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <button type="button" class="close" data-dismiss="modal" aria-label="@messages("general.close")">
-                                                <span aria-hidden="true">&times;</span>
-                                            </button>
-                                            <h4 class="modal-title" style="color:black;">Comment</h4>
-                                        </div>
-                                        <div class="modal-body">
-                                            <textarea class="textarea-visibility-comment form-control" rows="3"></textarea>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button class="btn btn-default" data-dismiss="modal">@messages("general.close")</button>
-                                            <button class="btn btn-visibility-comment-submit btn-primary"><i class="fa fa-pencil"></i> Submit</button>
-                                        </div>
+                        </div>
+                        <div class="modal fade" id="modal-visibility-comment" tabindex="-1" role="dialog" aria-labelledby="modal-visibility-comment">
+                            <div class="modal-dialog" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h4 class="modal-title" style="color:black;">Comment</h4>
+                                        <button type="button" class="close" data-dismiss="modal" aria-label="@messages("general.close")">
+                                            <span aria-hidden="true">&times;</span>
+                                        </button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <textarea class="textarea-visibility-comment form-control" rows="3"></textarea>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button class="btn btn-default" data-dismiss="modal">@messages("general.close")</button>
+                                        <button class="btn btn-visibility-comment-submit btn-primary"><i class="fa fa-pencil"></i> Submit</button>
                                     </div>
                                 </div>
                             </div>
-                        }
-                    </div>
+                        </div>
+                    }
+                </div>
 
-                    <div class="panel-body">
-                        @projects.helper.inputSettings(
-                            form = "save",
-                            issues = p.settings.issues,
-                            source = p.settings.source,
-                            licenseName = p.settings.licenseName,
-                            licenseUrl = p.settings.licenseUrl,
-                            selected = Some(p.project.category),
-                            forumSync = p.settings.forumSync
-                        )
+                <div class="card-body">
+                    @projects.helper.inputSettings(
+                        form = "save",
+                        issues = p.settings.issues,
+                        source = p.settings.source,
+                        licenseName = p.settings.licenseName,
+                        licenseUrl = p.settings.licenseUrl,
+                        selected = Some(p.project.category),
+                        forumSync = p.settings.forumSync
+                    )
 
-                        <!-- Description -->
-                        @defining(config.projects.get[Int]("max-desc-len")) { maxLength =>
-                            <div class="setting">
-                                <div class="setting-description">
-                                    <h4>Description</h4>
-                                    <p>A short description of your project (max @maxLength).</p>
-                                </div>
+                    <!-- Description -->
+                    @defining(config.projects.get[Int]("max-desc-len")) { maxLength =>
+                        <div class="row border-bottom mb-3 pb-3">
+                            <div class="col-8 text-dark">
+                                <h4>Description</h4>
+                                <p>A short description of your project (max @maxLength).</p>
+                            </div>
+                            <div class="col-12">
                                 <input form="save" class="form-control" type="text" id="description"
                                        name="description" maxlength="@maxLength"
                                     @p.project.description.map { description =>
@@ -82,157 +80,154 @@
                                     }.getOrElse {
                                         placeholder="@messages("version.create.noDescription")"
                                     }
-                                />
-                                <div class="clearfix"></div>
+                                >
                             </div>
-                        }
+                        </div>
+                    }
 
-                        <!-- Project icon -->
-                        <div class="setting setting-icon">
-                            <form id="form-icon" enctype="multipart/form-data">
-                                @CSRF.formField
-                                <div class="setting-description">
-                                    <h4>Icon</h4>
-
-                                    @utils.userAvatar(
-                                        Some(p.projectOwner.name),
-                                        p.projectOwner.avatarUrl,
-                                        call = projectRoutes.showIcon(p.project.ownerName, p.project.slug),
-                                        clazz = "user-avatar-md")
-
-                                    <input class="form-control-static" type="file" id="icon" name="icon" />
-                                </div>
-                                <div class="setting-content">
-                                    <div class="icon-description">
-                                        <p>Upload an image representative of your project.</p>
-                                        <div class="btn-group pull-right">
-                                            <button class="btn btn-default btn-reset">Reset</button>
-                                            <button class="btn btn-info btn-upload pull-right" disabled>
-                                                <i class="fa fa-upload"></i> Upload
-                                            </button>
-                                        </div>
+                    <!-- Project icon -->
+                    <form id="form-icon" enctype="multipart/form-data">
+                        <div class="row border-bottom mb-3 pb-3 setting-icon">
+                            @CSRF.formField
+                            <div class="col-12 text-dark">
+                                <h4>Icon</h4>
+                                <p>Upload an image representative of your project.</p>
+                            </div>
+                            <div class="col-8">
+                                @utils.userAvatar(
+                                    Some(p.projectOwner.name),
+                                    p.projectOwner.avatarUrl,
+                                    call = projectRoutes.showIcon(p.project.ownerName, p.project.slug),
+                                    clazz = "user-avatar-md")
+                            </div>
+                            <div class="col-4">
+                                <div class="icon-description">
+                                    <div class="btn-group pull-right">
+                                        <button class="btn btn-default btn-reset">Reset</button>
+                                        <button class="btn btn-info btn-upload pull-right" disabled>
+                                            <i class="fa fa-upload"></i> Upload
+                                        </button>
                                     </div>
                                 </div>
-                                <div class="clearfix"></div>
-                            </form>
+                            </div>
+                            <div class="col-12 pt-2">
+                                <input class="form-control-static" type="file" id="icon" name="icon" />
+                            </div>
                         </div>
+                    </form>
 
-                        <div class="setting">
-                            <div class="setting-description">
-                                <h4>@messages("project.settings.deployKey")</h4>
-                                <p>
-                                    @messages("project.settings.deployKey.info")
-                                    <a href="#"><i class="fa fa-question-circle"></i></a>
-                                </p>
-                                @deploymentKey.map { key =>
-                                    <input class="form-control input-key" type="text" value="@key.value" readonly />
-                                }.getOrElse {
-                                    <input class="form-control input-key" type="text" value="" readonly />
-                                }
-                            </div>
-                            <div class="setting-content">
-                                @deploymentKey.map { key =>
-                                  <button class="btn btn-danger btn-block btn-key-revoke" data-key-id="@key.id.value">
-                                      <i class="fa fa-spinner fa-spin" style="display: none;"></i>
-                                      @messages("project.settings.revokeKey")
-                                  </button>
-                                }.getOrElse {
-                                    <button class="btn btn-info btn-block btn-key-gen">
-                                        <i class="fa fa-spinner fa-spin" style="display: none;"></i>
-                                        @messages("project.settings.genKey")
-                                    </button>
-                                }
-                            </div>
-                            <div class="clearfix"></div>
+                    <div class="row border-bottom mb-3 pb-3">
+                        <div class="col-8 text-dark">
+                            <h4>@messages("project.settings.deployKey")</h4>
+                            <p>@messages("project.settings.deployKey.info")</p>
                         </div>
-
-                        <!-- Rename -->
-                        <div class="setting">
-                            <div class="setting-description">
-                                <h4 class="danger">@messages("project.rename")</h4>
-                                <p>@messages("project.rename.info")</p>
-                            </div>
-                            <div class="setting-content">
-                                <input form="rename" id="name" name="name" class="form-control" type="text"
-                                       value="@p.project.name"
-                                       maxlength="@config.projects.get[Int]("max-name-len")">
-                                <button id="btn-rename" data-toggle="modal" data-target="#modal-rename"
-                                        class="btn btn-warning" disabled>
-                                    @messages("project.rename")
+                        <div class="col-4">
+                            @deploymentKey.map { key =>
+                              <button class="btn btn-danger btn-block btn-key-revoke" data-key-id="@key.id.value">
+                                  <i class="fa fa-spinner fa-spin" style="display: none;"></i>
+                                  @messages("project.settings.revokeKey")
+                              </button>
+                            }.getOrElse {
+                                <button class="btn btn-info btn-block btn-key-gen">
+                                    <i class="fa fa-spinner fa-spin" style="display: none;"></i>
+                                    @messages("project.settings.genKey")
                                 </button>
-                            </div>
-                            <div class="clearfix"></div>
+                            }
                         </div>
+                        <div class="col-12">
+                            @deploymentKey.map { key =>
+                            <input class="form-control input-key" type="text" value="@key.value" readonly />
+                            }.getOrElse {
+                                <input class="form-control input-key" type="text" value="" readonly />
+                            }
+                        </div>
+                    </div>
 
-                        <!-- Delete -->
-                        <div class="setting">
-                            <div class="setting-description">
-                                <h4 class="danger">Delete</h4>
+                    <!-- Rename -->
+                    <div class="row border-bottom mb-3 pb-3">
+                        <div class="col-8 text-dark">
+                            <h4 class="danger">@messages("project.rename")</h4>
+                            <p>@messages("project.rename.info")</p>
+                        </div>
+                        <div class="col-4">
+                            <input form="rename" id="name" name="name" class="form-control" type="text"
+                                   value="@p.project.name"
+                                   maxlength="@config.projects.get[Int]("max-name-len")">
+                            <button id="btn-rename" data-toggle="modal" data-target="#modal-rename"
+                                    class="btn btn-warning" disabled>
+                                @messages("project.rename")
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Delete -->
+                    <div class="row border-bottom">
+                        <div class="col-8 text-dark">
+                            <h4 class="text-danger">Delete</h4>
+                            <p>Once you delete a project, it cannot be recovered.</p>
+                        </div>
+                        <div class="col-4">
+                            <button class="btn btn-delete btn-danger" data-toggle="modal" data-target="#modal-delete">
+                                @messages("general.delete")
+                            </button>
+                        </div>
+                    </div>
+
+                    @if(request.headerData.globalPerm(HardRemoveProject)) {
+                        <div class="row border-bottom py-3 mb-3 striped">
+                            <div class="col-8 text-dark">
+                                <h4 class="text-danger">Hard Delete</h4>
                                 <p>Once you delete a project, it cannot be recovered.</p>
                             </div>
-                            <div class="setting-content">
-                                <button class="btn btn-delete btn-danger" data-toggle="modal"
-                                        data-target="#modal-delete">
-                                    Delete
+                            <div class="col-4">
+                                <button class="btn btn-delete btn-danger btn-visibility-change" data-project="@p.project.ownerName/@p.project.slug" data-level="-99" data-modal="true">
+                                    <strong>Hard Delete</strong>
                                 </button>
                             </div>
-                            <div class="clearfix"></div>
                         </div>
+                    }
 
-                        @if(request.headerData.globalPerm(HardRemoveProject)) {
-                            <div class="setting striped">
-                                <div class="setting-description">
-                                    <h4 class="danger">Hard Delete</h4>
-                                    <p>Once you delete a project, it cannot be recovered.</p>
-                                </div>
-                                <div class="setting-content">
-                                    <button class="btn btn-delete btn-danger btn-visibility-change" data-project="@p.project.ownerName/@p.project.slug" data-level="-99" data-modal="true">
-                                        <strong>Hard Delete</strong>
-                                    </button>
-                                </div>
-                                <div class="clearfix"></div>
-                            </div>
-                        }
-
-                        @form(action = projectRoutes.save(p.project.ownerName, p.project.slug), 'id -> "save",
-                            'class -> "pull-right") {
-                            @CSRF.formField
-                            <input type="hidden" id="update-icon" name="update-icon" value="false" />
-                            <button type="submit" name="save" class="btn btn-success btn-spinner" data-icon="fa-check">
-                                <i class="fa fa-check"></i> Save changes
-                            </button>
-                        }
+                    <div class="row">
+                        <div class="col">
+                            @form(action = projectRoutes.save(p.project.ownerName, p.project.slug), 'id -> "save",
+                                'class -> "float-right") {
+                                @CSRF.formField
+                                <input type="hidden" id="update-icon" name="update-icon" value="false" />
+                                <button type="submit" name="save" class="btn btn-success btn-spinner" data-icon="fa-check">
+                                    <i class="fa fa-check"></i> Save changes
+                                </button>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Side panel -->
-            <div class="col-md-4">
-                <div class="alert alert-danger" role="alert" @if(flash.get("error").isEmpty) { style="display: none;" }>
-                    <strong>Whoops!</strong> <span>@flash.get("error").getOrElse("")</span>
-                </div>
-                @users.memberList(p,
-                    editable = true,
-                    perms = sp.permissions,
-                    removeCall = projectRoutes.removeMember(p.project.ownerName, p.project.slug),
-                    settingsCall = projectRoutes.showSettings(p.project.ownerName, p.project.slug)
-                )
+        <!-- Side panel -->
+        <div class="col-12 col-md-4">
+            <div class="alert alert-danger" role="alert" @if(flash.get("error").isEmpty) { style="display: none;" }>
+                <strong>Whoops!</strong> <span>@flash.get("error").getOrElse("")</span>
             </div>
+            @users.memberList(p,
+                editable = true,
+                perms = sp.permissions,
+                removeCall = projectRoutes.removeMember(p.project.ownerName, p.project.slug),
+                settingsCall = projectRoutes.showSettings(p.project.ownerName, p.project.slug)
+            )
         </div>
     </div>
 
-    <div class="modal fade" id="modal-rename" tabindex="-1" role="dialog" aria-labelledby="label-rename">
+    <div class="modal" id="modal-rename" tabindex="-1" role="dialog" aria-labelledby="label-rename">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal"
-                    aria-label="@messages("general.cancel")">
+                    <h4 class="modal-title" id="label-rename">@messages("project.rename.title")</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="@messages("general.cancel")">
                         <span aria-hidden="true">&times;</span>
                     </button>
-                    <h4 class="modal-title" id="label-rename">@messages("project.rename.title")</h4>
                 </div>
                 <div class="modal-body">
-                @messages("project.rename.info")
+                    @messages("project.rename.info")
                 </div>
                 <div class="modal-footer">
                     <div class="form-inline">
@@ -249,14 +244,14 @@
         </div>
     </div>
 
-    <div class="modal fade" id="modal-delete" tabindex="-1" role="dialog" aria-labelledby="label-delete">
+    <div class="modal" id="modal-delete" tabindex="-1" role="dialog" aria-labelledby="label-delete">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <div class="modal-header">
+                    <h4 class="modal-title" id="label-delete">@messages("project.delete.title")</h4>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Cancel">
                         <span aria-hidden="true">&times;</span>
                     </button>
-                    <h4 class="modal-title" id="label-delete">@messages("project.delete.title")</h4>
                 </div>
                 @form(action = projectRoutes.softDelete(p.project.ownerName, p.project.slug)) {
                 <div class="modal-body">

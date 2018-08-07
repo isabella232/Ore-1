@@ -255,8 +255,8 @@ final class Reviews @Inject()(forms: OreForms)(
             request,
             LoggedAction.VersionNonReviewChanged,
             version.id.value,
-            s"In review queue: ${version.isNonReviewed}",
-            s"In review queue: ${!version.isNonReviewed}"
+            s"In review pending: ${version.isNonReviewed}",
+            s"In review pending: ${!version.isNonReviewed}"
           )
         )
         _ <- EitherT.liftF(service.update(version.copy(isNonReviewed = !version.isNonReviewed)))

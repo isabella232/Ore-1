@@ -1,0 +1,95 @@
+@import "variables";
+@import "buttons";
+@import "forms";
+@import "cards";
+@import "alerts";
+@import "modals";
+@import "fa_extensions";
+@import "nav";
+@import "pages/home";
+@import "pages/project";
+@import "pages/notifications";
+@import "pages/users";
+@import "pages/layout";
+
+.minor {
+  color: gray;
+}
+
+.list-group-item {
+  &:first-child, &:last-child {
+    border-radius: 0;
+  }
+}
+
+.pagination {
+  > .page-item, .page-item:last-child, .page-item:first-child {
+    > .page-link {
+      border-radius: 0;
+      @extend .btn-gray;
+    }
+
+    &.active > .page-link {
+      @extend .btn-yellow;
+    }
+
+    &.disabled {
+      cursor: not-allowed;
+
+      > .page-link {
+        @extend .btn-disabled;
+      }
+    }
+  }
+}
+
+.icon {
+  border-radius: 4px;
+
+  &.xxs {
+    width: 26px;
+    height: 26px;
+  }
+
+  &.xs {
+    width: 32px;
+    height: 32px;
+  }
+
+  &.s {
+    width: 40px;
+    height: 40px;
+  }
+
+  &.sm {
+    width: 50px;
+    height: 50px;
+  }
+
+  &.md {
+    width: 100px;
+    height: 100px;
+  }
+}
+
+.table {
+  .thead-dark {
+    th {
+      color: $sponge_yellow;
+      svg {
+        float: right;
+        margin-top: 0.2em;
+      }
+    }
+    th:hover:not(:first-child) {
+      background-color: $gray-hover;
+    }
+  }
+  tfoot td:last-child {
+    padding: 0;
+    .btn {
+      float: right;
+      border: none;
+    }
+  }
+}

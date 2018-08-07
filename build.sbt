@@ -68,15 +68,16 @@ libraryDependencies ++= Seq(
   "org.postgresql"       % "postgresql"                     % "42.2.5",
   "com.github.tminglei"  %% "slick-pg"                      % "0.16.3",
   "io.sentry"            % "sentry-logback"                 % "1.7.12",
-  "org.bouncycastle"     % "bcprov-jdk15on"                 % bouncycastleVersion,
-  "org.bouncycastle"     % "bcpkix-jdk15on"                 % bouncycastleVersion,
-  "org.bouncycastle"     % "bcpg-jdk15on"                   % bouncycastleVersion,
-  "javax.mail"           % "mail"                           % "1.4.7",
-  "com.beachape"         %% "enumeratum"                    % "1.5.13",
-  "com.beachape"         %% "enumeratum-slick"              % "1.5.15",
-  "com.chuusai"          %% "shapeless"                     % "2.3.3",
-  "org.typelevel"        %% "cats-core"                     % "1.4.0",
-  "com.vladsch.flexmark" % "flexmark"                       % flexmarkVersion,
+  "org.bouncycastle"      %   "bcprov-jdk15on"          %   bouncycastleVersion,
+  "org.bouncycastle"      %   "bcpkix-jdk15on"          %   bouncycastleVersion,
+  "org.bouncycastle"      %   "bcpg-jdk15on"            %   bouncycastleVersion,
+  "javax.mail"            %   "mail"                    %   "1.4.7",
+  "com.beachape"          %%  "enumeratum"              %   "1.5.13",
+  "com.beachape"          %%  "enumeratum-slick"        %   "1.5.15",
+  "com.chuusai"           %%  "shapeless"               %   "2.3.3",
+  "org.typelevel"         %%  "cats-core"                %   "1.4.0",
+
+  "com.vladsch.flexmark"  % "flexmark"                       %  flexmarkVersion,
   "com.vladsch.flexmark" % "flexmark-ext-autolink"          % flexmarkVersion,
   "com.vladsch.flexmark" % "flexmark-ext-anchorlink"        % flexmarkVersion,
   "com.vladsch.flexmark" % "flexmark-ext-gfm-strikethrough" % flexmarkVersion,
@@ -84,12 +85,16 @@ libraryDependencies ++= Seq(
   "com.vladsch.flexmark" % "flexmark-ext-tables"            % flexmarkVersion,
   "com.vladsch.flexmark" % "flexmark-ext-typographic"       % flexmarkVersion,
   "com.vladsch.flexmark" % "flexmark-ext-wikilink"          % flexmarkVersion,
-  "org.webjars.npm"      % "jquery"                         % "2.2.4",
-  "org.webjars.npm"      % "font-awesome"                   % "4.7.0",
-  "org.webjars.npm"      % "filesize"                       % "3.6.1",
-  "org.webjars.npm"      % "moment"                         % "2.22.2",
-  "org.webjars.npm"      % "clipboard"                      % "2.0.1",
-  "org.webjars.npm"      % "chart.js"                       % "2.7.2"
+
+  "org.webjars.npm" % "jquery"       % "3.3.1",
+  "org.webjars.npm" % "filesize"     % "3.6.1",
+  "org.webjars.npm" % "moment"       % "2.22.2",
+  "org.webjars.npm" % "clipboard"    % "2.0.1",
+  "org.webjars.npm" % "chart.js"     % "2.7.2",
+  "org.webjars.npm" % "bootstrap" % "4.1.3",
+  "org.webjars.npm" % "popper.js" % "1.14.4",
+
+  "org.webjars" % "font-awesome" % "5.3.1"
 )
 
 lazy val doobieVersion = "0.5.3"

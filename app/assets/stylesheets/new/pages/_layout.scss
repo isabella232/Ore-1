@@ -1,0 +1,31 @@
+.sponge-navbar-ore-right .nav-item {
+  cursor: pointer;
+  text-align: center;
+
+  .icon {
+    cursor: pointer;
+    font-size: 25px;
+    color: #F6CF17;
+  }
+  a {
+    color: white;
+  }
+  .dropdown-item {
+    color: black;
+  }
+
+  :hover, :hover a {
+    .icon {
+      color: white;
+    }
+    .user-avatar {
+      background: white;
+    }
+  }
+}
+.sponge-navbar-ore-right {
+  .dropdown-menu {
+    width: 220px;
+    border-radius: 0;
+  }
+}

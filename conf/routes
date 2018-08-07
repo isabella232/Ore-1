@@ -8,7 +8,10 @@ GET     /*path/                                                     @controllers
 
 GET     /admin/user/:user                                           @controllers.Application.userAdmin(user)
 POST    /admin/user/:user/update                                    @controllers.Application.updateUser(user)
-GET     /admin/approval/versions                                    @controllers.Application.showQueue()
+GET     /admin/approval/versions                                    @controllers.Default.redirect(to = "/admin/approval/versions/pending")
+GET     /admin/approval/versions/pending                            @controllers.Application.showVersionQueuePending(page: Option[Int])
+GET     /admin/approval/versions/wip                                @controllers.Application.showVersionQueueWIP(page: Option[Int])
+GET     /admin/approval/versions/done                               @controllers.Application.showVersionQueueDone(page: Option[Int])
 GET     /admin/approval/projects                                    @controllers.Application.showProjectVisibility()
 GET     /admin/flags                                                @controllers.Application.showFlags()
 GET     /admin/flags/:id/resolve/:resolved                          @controllers.Application.setFlagResolved(id: ObjectReference, resolved: Boolean)
@@ -67,12 +70,22 @@ GET     /signup                                                     @controllers
 GET     /login                                                      @controllers.Users.logIn(sso: Option[String], sig: Option[String], returnUrl: Option[String])
 GET     /logout                                                     @controllers.Users.logOut()
 POST    /verify                                                     @controllers.Users.verify(returnPath: Option[String])
+GET     /javascriptRoutes                                           @controllers.Application.javascriptRoutes
 
 # ---------- Projects ----------
 
 GET     /p/:pluginId                                                @controllers.project.Projects.showProjectById(pluginId)
 
-GET     /new                                                        @controllers.project.Projects.showCreator()
+GET     /new                                                        @controllers.project.ProjectCreation.showStep1()
+POST    /new                                                        @controllers.project.ProjectCreation.processStep1()
+GET     /new/configure                                              @controllers.project.ProjectCreation.showStep2()
+POST    /new/configure                                              @controllers.project.ProjectCreation.processStep2()
+GET     /new/members                                                @controllers.project.ProjectCreation.showStep3()
+POST    /new/members                                                @controllers.project.ProjectCreation.processStep3()
+GET     /new/confirm                                                @controllers.project.ProjectCreation.showStep4()
+POST    /new/confirm                                                @controllers.project.ProjectCreation.processStep4()
+
+GET     /newOld                                                     @controllers.project.Projects.showCreator()
 
 POST    /new/upload                                                 @controllers.project.Projects.upload()
 GET     /new/:author/:slug                                          @controllers.project.Projects.showCreatorWithMeta(author, slug)

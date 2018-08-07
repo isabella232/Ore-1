@@ -15,147 +15,82 @@
  * ==================================================
  */
 
+/*
+ * STEP ONE
+ */
 var MAX_FILE_SIZE = 20971520;
 
-/*
- * ==================================================
- * =                Helper functions                =
- * ==================================================
- */
-
-function getAlert() {
-    return $('.alert-file');
-}
-
-function clearIcon(e) {
-    return e.removeClass('fa-spinner')
-        .removeClass('fa-spin')
-        .removeClass('fa-pencil')
-        .removeClass('fa-upload');
-}
-
-function failure(message) {
-    var alert = getAlert();
-    var control = alert.find('.file-upload');
-
-    var bs = alert.find('.alert');
-    bs.removeClass('alert-info').addClass('alert-danger');
-    var noticeIcon = bs.find('i');
-    noticeIcon.removeClass('fa-file-archive-o').addClass('fa-exclamation-circle').tooltip({
-        placement: 'left',
-        title: message
-    });
-
-    // flash
-    function flash(amount) {
-        if (amount > 0) {
-            noticeIcon.fadeOut('fast', function () {
-                noticeIcon.fadeIn('fast', flash(amount - 1));
-            });
-        }
-    }
-
-    flash(7);
-}
-
-function failurePlugin(message) {
-    failure(message);
-    var alert = getAlert();
-    var control = alert.find('.file-upload');
-    control.find('button').removeClass('btn-success').addClass('btn-danger').prop('disabled', true);
-    clearIcon(control.find('i')).addClass('fa-times');
-}
-
-function failureSig(message) {
-    failure(message);
-    var alert = getAlert();
-    var control = alert.find('.file-upload');
-    clearIcon(control.find('i')).addClass('fa-pencil');
-}
-
-function reset() {
-    var alert = getAlert();
-    alert.hide();
-
-    var control = alert.find('.file-upload');
-    control.find('button').removeClass('btn-danger').addClass('btn-success').prop('disabled', false);
-    clearIcon(control.find('i')).addClass('fa-pencil');
-
-    var bs = alert.find('.alert');
-    bs.removeClass('alert-danger').addClass('alert-info');
-    bs.find('i').removeClass('fa-exclamation-circle').addClass('fa-file-archive-o').tooltip('destroy');
-
-    return alert;
-}
-
-function addSig(e) {
-    e.preventDefault();
-    $('#pluginSig').click();
-}
-
-/*
- * ==================================================
- * =                   Doc ready                    =
- * ==================================================
- */
-
 $(function() {
-    var platformTags = $('#upload-platform-tags');
-    if (platformTags.size() >= 1 && platformTags.children().length == 0) {
-        platformTags.html('<div class="tags"><span style="color: #FFF; background-color: #8b0000; border-color: #8b0000" class="tag">No Platform Detected</span></div>');
-    }
-
-    $('#pluginFile').on('change', function() {
-        var alert = reset();
+    $('#uploadFileInput').on('change', function() {
+        // If we don't have any files cancel
         if (this.files.length == 0) {
-            $('#form-upload')[0].reset();
             return;
         }
+        // Get path of file
         var fileName = $(this).val().trim();
         var fileSize = this.files[0].size;
+
+        // Check if file was uploaded, if not cancel
         if (!fileName) {
-            alert.fadeOut(1000);
+            $('.upload-step1-error-message').text('An unknown error occerd when uploading. Did you select a file?');
+            $('.upload-step1-error').show();
             return;
         }
 
+        // Check size of file against max size
         if (fileSize > MAX_FILE_SIZE) {
-            failurePlugin('That file is too big. Plugins may be no larger than ' + filesize(MAX_FILE_SIZE) + '.');
+            $('.upload-step1-error-message').text('That file is too big. Plugins may be no larger than ' + filesize(MAX_FILE_SIZE) + '.');
+            $('.upload-step1-error').show();
+            return;
         } else if (!fileName.endsWith('.zip') && !fileName.endsWith('.jar')) {
-            failurePlugin('Only JAR and ZIP files are accepted.');
+            $('.upload-step1-error-message').text('Only JAR and ZIP files are accepted.');
+            $('.upload-step1-error').show();
+            return;
         }
 
+        // Remove fake path in filename
         fileName = fileName.substr(fileName.lastIndexOf('\\') + 1, fileName.length);
-        alert.find('.file-name').text(fileName);
-        alert.find('.file-size').text(filesize(this.files[0].size));
-        alert.fadeIn('slow');
 
-        $('.btn-sign').removeClass('btn-success').addClass('btn-info').on('click', addSig);
+        // Show filename and size to user
+        $('.upload-step1-file-message').text(fileName + '  –  ' + filesize(this.files[0].size));
+        $('.upload-step1-file').show();
+
+        // Show next button
+        $('#uploadFileBtn').toggleClass('btn-primary').toggleClass('btn-success');
+        $('#uploadSignaterBtn').toggleClass('btn-secondary').toggleClass('btn-primary');
     });
 
-    $('#pluginSig').on('change', function() {
-        console.log('sig changed');
+    $('#uploadSignatureInput').on('change', function() {
+        // Get path of file
         var fileName = $(this).val().trim();
-        var alert = getAlert();
-        var alertInner = alert.find('.alert');
-        var button = alert.find('button');
-        var icon = button.find('i');
-        icon.removeClass('fa-pencil').addClass('fa-spinner fa-spin');
-        setTimeout(function() {
-            if (!fileName)
-                return;
-            if (!fileName.endsWith('.sig') && !fileName.endsWith('.asc')) {
-                failureSig('Only SIG and ASC files are accepted for signatures.');
-                return;
-            }
-            alertInner.removeClass('alert-info alert-danger').addClass('alert-success');
-            button.removeClass('btn-info').addClass('btn-success').off('click', addSig);
 
-            icon.removeClass('fa-spinner fa-spin').addClass('fa-upload');
+        // Check if file was uploaded, if not cancel
+        if (!fileName) {
+            return;
+        }
 
-            var newTitle = 'Upload plugin';
-            button.tooltip('hide')
-                .attr('data-original-title', newTitle)
-                .tooltip('fixTitle');
-        }, 3000);
+        // Check if file is allowed
+        if (!fileName.endsWith('.sig') && !fileName.endsWith('.asc')) {
+            $('.upload-step1-error-message').text('Only SIG and ASC files are accepted for signatures.');
+            $('.upload-step1-error').show();
+            return;
+        }
+
+        $('.upload-step1-file').toggleClass('alert-info').toggleClass('alert-success');
+
+        $('#uploadSignaterBtn').toggleClass('btn-primary').toggleClass('btn-success');
+        $('#uploadFinishBtn').toggleClass('btn-secondary').toggleClass('btn-primary');
+
+        // Show upload messages
+        fileName = fileName.substr(fileName.lastIndexOf('\\') + 1, fileName.length);
+        $('.upload-step1-sig-icon').html('<i class="fas fa-fw fa-file-contract"></i>');
+        $('.upload-step1-sig-message').text(fileName);
     });
+
+    $("#uploadFinishBtn").on('click', function () {
+        // TODO: Fix icon spinning icon
+        $('#uploadFinishBtn i').toggleClass('fa-file-upload').toggleClass('fa-spinner fa-spin');
+        $("#uploadFileForm").submit();
+    });
+
 });

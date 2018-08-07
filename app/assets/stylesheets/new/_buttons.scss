@@ -1,0 +1,39 @@
+.btn-yellow {
+  background: $sponge_yellow;
+  border-color: darken($sponge_yellow, 5);
+  color: black;
+
+  &:hover, &:focus {
+    background: darken($sponge_yellow, 3);
+    border-color: darken($sponge_yellow, 9);
+    box-shadow: none;
+  }
+}
+
+.btn-gray {
+  background: $sponge_light_gray;
+  border-color: $sponge_grey;
+  color: #ffffff;
+
+  &:hover, &:focus {
+    background: $sponge_grey;
+    border-color: darken($sponge_grey, 9);
+    box-shadow: none;
+  }
+}
+
+.btn-disabled {
+  background: white;
+  border-color: lighten($gray-focus, 10);
+  color: $gray-focus;
+
+  &:hover, &:focus {
+    background: white;
+    border-color: $gray-focus;
+    box-shadow: none;
+  }
+}
+
+.btn {
+  border-radius: 0;
+}
