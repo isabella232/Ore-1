@@ -83,12 +83,39 @@ case class User(
     *
     * @return True if key is ready for use
     */
+  // TODO: Replace method for {isPgpKeyPubKeyReadyForUpload}
   def isPgpPubKeyReady(implicit config: OreConfig, service: ModelService): Boolean =
     this.pgpPubKey.isDefined && this.lastPgpPubKeyUpdate.forall { lastUpdate =>
-      val cooldown = config.security.keyChangeCooldown
-      val minTime  = new Timestamp(lastUpdate.getTime + cooldown)
+      val minTime = new Timestamp(lastUpdate.getTime + config.security.keyChangeCooldown)
       minTime.before(service.theTime)
     }
+
+  def isPgpPubKeyReadyForUpload()(
+      implicit ec: ExecutionContext,
+      service: ModelService,
+      config: OreConfig
+  ): Future[(Boolean, String)] = {
+    for {
+      projectCount <- this.projects.size
+    } yield {
+      if (this.pgpPubKey.isEmpty) {
+        (false, "error.pgp.noPubKey")
+      } else if (projectCount == 0) {
+        (true, "")
+      } else if (this.lastPgpPubKeyUpdate.isEmpty) {
+        (true, "")
+      } else {
+        this.lastPgpPubKeyUpdate.map { lastUpdate =>
+          val minTime = new Timestamp(lastUpdate.getTime + config.security.keyChangeCooldown)
+          if (minTime.before(service.theTime)) {
+            (true, "")
+          } else {
+            (false, "error.pgp.keyChangeCooldown")
+          }
+        }.get
+      }
+    }
+  }
 
   /**
     * Returns this user's current language, or the default language if none

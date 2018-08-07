@@ -1,0 +1,10 @@
+@import controllers.sugar.Requests.OreRequest
+@import ore.OreConfig
+@import models.viewhelper.ProjectData
+@import models.viewhelper.ScopedProjectData
+
+@(p: ProjectData, sp: ScopedProjectData)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+
+@projects.settings.settingsTemplate("Deploy Keys", p, sp) {
+
+}

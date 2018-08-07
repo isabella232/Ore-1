@@ -1,0 +1,76 @@
+@import "variables";
+@import "mixins";
+
+@import "global/bootstrap";
+@import "global/nav";
+@import "global/footer";
+@import "global/colors";
+@import "global/buttons";
+@import "global/tags";
+
+@each $name, $size in $icon-sizes {
+  .icon-#{$name} {
+    @include icon($size);
+  }
+}
+
+.site {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+}
+
+.site-content {
+  flex: 1;
+}
+
+.card {
+  > .card-header {
+    color: $white;
+    font-weight: bold;
+
+    &.icon-right {
+      justify-content: space-between;
+      display: flex;
+
+      i {
+        vertical-align: middle;
+      }
+    }
+  }
+
+  > .list-group {
+    > .list-group-item {
+      padding-top: 0.5rem;
+      padding-bottom: 0.5rem;
+
+      &:hover {
+        color: $gray-hover;
+      }
+    }
+
+    &.icon-items .list-group-item i {
+      margin-right: 0.5rem;
+    }
+  }
+}
+
+table > thead > tr > th[data-ordering] {
+  cursor: pointer;
+}
+
+.setting {
+  padding-bottom: 1rem;
+  margin-top: 1rem;
+  border-bottom: 1px solid $gray-300;
+
+  > label {
+    color: $gray-700;
+    font-weight: bold;
+    font-size: 1rem;
+  }
+}
+
+textarea.no-resize {
+  resize: none;
+}

@@ -1,0 +1,40 @@
+.footer {
+  background: $sponge_light_gray;
+  color: $white;
+  padding: 1rem 0;
+  border-top: 3px solid $sponge_dark_grey;
+
+  @include media-breakpoint-down(sm) {
+    [class*="col-"] {
+      margin: 0.5rem 0;
+      text-align: center;
+
+      a.copyright {
+        justify-content: center;
+      }
+    }
+  }
+
+  a {
+    color: $white;
+    display: block;
+
+    &:hover {
+      color: $gray-500;
+      text-decoration: none;
+    }
+
+    &.copyright {
+      img {
+        filter: grayscale(30%);
+      }
+
+      &:hover {
+        color: $white;
+        img {
+          filter: grayscale(0);
+        }
+      }
+    }
+  }
+}

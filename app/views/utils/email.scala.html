@@ -1,13 +1,10 @@
 @import controllers.sugar.Requests.OreRequest
 @import ore.OreConfig
-@(title: String, recipient: String, body: String)(implicit messages: Messages, request: OreRequest[_], config: OreConfig)
-
-@bootstrap.layout(messages(title), scripts = false, header = false, footer = false) {
-
+@(title: String, recipient: String, body: String)(implicit messages: Messages, request: OreRequest[_], config: OreConfig, flash: Flash)
+@bootstrap.layout(messages(title), scriptsEnabled = false, header = false, footer = false) {
     <div class="container">
         <p>@recipient,</p>
         <p>@messages(body)</p>
         <p>@Html(messages("email.signature"))</p>
     </div>
-
 }

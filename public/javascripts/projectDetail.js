@@ -16,8 +16,8 @@
  * ==================================================
  */
 
-var KEY_PLUS = 61;
-var KEY_MINUS = 173;
+var KEY_J = 74;
+var KEY_K = 75;
 
 /*
  * ==================================================
@@ -28,6 +28,7 @@ var KEY_MINUS = 173;
 var projectOwner = null;
 var projectSlug = null;
 var alreadyStarred = false;
+var watching = false;
 
 /*
  * ==================================================
@@ -51,27 +52,10 @@ function switchTabTo(tab, def) {
 function initFlagList() {
     var flagList = $('.list-flags');
     if (!flagList.length) return;
-    flagList.find('li').click(function() {
+    flagList.find('li').click(function () {
         flagList.find(':checked').removeAttr('checked');
         $(this).find('input').prop('checked', true);
     });
-}
-
-function animateEditBtn(e, marginLeft, andThen) {
-    e.animate({ marginLeft: marginLeft }, 100, function() {
-        if (andThen) andThen();
-    });
-}
-
-function showEditBtn(e, andThen) {
-    animateEditBtn(e, '-34px', function() {
-        e.css('z-index', '1000');
-        if (andThen) andThen();
-    });
-}
-
-function hideEditBtn(e, andThen) {
-    animateEditBtn(e, '0', andThen);
 }
 
 var editing = false;
@@ -84,108 +68,83 @@ function initBtnEdit() {
     var pageBtns = $('.btn-page');
     var otherBtns = $('.btn-edit-container');
 
-    // highlight with textarea
-    var editText = $('.page-edit').find('textarea');
-    editText.focus(function() {
-        btnEdit
-            .css('border-color', '#66afe9')
-            .css('border-right', '1px solid white')
-            .css('box-shadow', 'inset 0 1px 1px rgba(0,0,0,.075), -3px 0 8px rgba(102, 175, 233, 0.6)');
-        otherBtns.find('.btn').css('border-right-color', '#66afe9')
-    }).blur(function() {
-        $('.btn-page').css('border', '1px solid #ccc').css('box-shadow', 'none');
-        $('button.open').css('border-right', 'white');
-    });
+    // if page contains
+    otherBtns.hide();
 
-    // handle button clicks
-    pageBtns.click(function() {
-        if ($(this).hasClass('open')) return;
-
-        // toggle button
-        $('button.open').removeClass('open').css('border', '1px solid #ccc');
-        $(this).addClass('open').css('border-right-color', 'white');
-
+    // edit button click
+    $('.btn-edit').click(function () {
         var editor = $('.page-edit');
-        if ($(this).hasClass('btn-edit')) {
-            editing = true;
-            previewing = false;
-            $(this).css('position', 'absolute').css('top', '');
-            $(otherBtns).css('position', 'absolute').css('top', '');
 
-            // open editor
-            var content = $('.page-rendered');
-            editor.find('textarea').css('height', content.css('height'));
-            content.hide();
-            editor.show();
+        editing = true;
+        previewing = false;
 
-            // show buttons
-            showEditBtn($('.btn-preview-container'), function() {
-                showEditBtn($('.btn-save-container'), function() {
-                    showEditBtn($('.btn-cancel-container'), function() {
-                        showEditBtn($('.btn-delete-container'));
-                    });
-                });
-            });
-        }
+        // open editor
+        var content = $('.page-rendered');
+        editor.find('textarea').css('height', content.css('height'));
+        content.hide();
+        editor.show();
 
-        else if ($(this).hasClass('btn-preview')) {
-            // render markdown
-            var preview = $('.page-preview');
-            var raw = editor.find('textarea').val();
-            editor.hide();
-            preview.show();
-            var icon = $(this).find('i').removeClass('fa-eye').addClass('fa-spinner fa-spin');
-
-            $.ajax({
-                type: 'post',
-                url: '/pages/preview?csrfToken=' + csrf,
-                data: JSON.stringify({ raw: raw }),
-                contentType: 'application/json',
-                dataType: 'html',
-                complete: function() { icon.removeClass('fa-spinner fa-spin').addClass('fa-eye'); },
-                success: function(cooked) { preview.html(cooked); }
-            });
-
-            editing = false;
-            previewing = true;
-        }
-
-        else if ($(this).hasClass('btn-save')) {
-            // add spinner
-            $(this).find('i').removeClass('icon-save').addClass('fa-spinner fa-spin');
-        }
+        // show buttons
+        $(otherBtns).show();
+        $('.btn-edit').removeClass('text-dark');
+        $('.btn-preview').addClass('text-dark');
     });
 
-    $('.btn-cancel').click(function() {
+    // preview button click
+    $('.btn-preview').click(function () {
+        var editor = $('.page-edit');
+        var preview = $('.page-preview');
+        var raw = editor.find('textarea').val();
+
+        editor.hide();
+        preview.show();
+
+        $('.btn-preview i svg').toggleClass('fa-circle-notch fa-spin').toggleClass('fa-eye');
+
+        $.ajax({
+            type: 'post',
+            url: '/pages/preview?csrfToken=' + csrf,
+            data: JSON.stringify({raw: raw}),
+            contentType: 'application/json',
+            dataType: 'html',
+            success: function (cooked) {
+                preview.html(cooked);
+                $('.btn-preview i svg').toggleClass('fa-circle-notch fa-spin').toggleClass('fa-eye');
+            }
+        });
+
+        editing = false;
+        previewing = true;
+        $('.btn-edit').addClass('text-dark').css('color', null);
+        $('.btn-preview').removeClass('text-dark');
+    });
+
+    // Save button click
+    $('.btn-save').click(function () {
+        $(this).find('i').removeClass('icon-save');
+        $('#form-editor-save').submit();
+    });
+
+    // Cancel button click
+    $('.btn-cancel').click(function () {
+        // Reset defaults
         editing = false;
         previewing = false;
+        $('.btnEdit').removeClass('open');
 
         // hide editor; show content
         $('.page-edit').hide();
         $('.page-preview').hide();
         $('.page-content').show();
 
-        // move buttons behind
-        $('.btn-edit-container').css('z-index', '-1000');
-
         // hide buttons
-        var fromSave = function() {
-            hideEditBtn($('.btn-save-container'), function() {
-                hideEditBtn($('.btn-preview-container'));
-            });
-        };
-
-        var btnDelete = $('.btn-delete-container');
-        var btnCancel = $('.btn-cancel-container');
-        if (btnDelete.length) {
-            hideEditBtn(btnDelete, function() { hideEditBtn(btnCancel, fromSave) });
-        } else {
-            hideEditBtn(btnCancel, fromSave);
-        }
+        otherBtns.hide();
+        $('.btn-edit').addClass('text-dark');
+        $('.btn-preview').addClass('text-dark');
     });
 
     // move with scroll
-    $(window).scroll(function() {
+    $(window).scroll(function () {
         var scrollTop = $(this).scrollTop();
         var editHeight = btnEdit.height();
         var page = previewing ? $('.page-preview') : $('.page-content');
@@ -197,7 +156,7 @@ function initBtnEdit() {
         if (scrollTop > bound && pos === 'absolute' && !editing) {
             var newTop = pageTop + editHeight + 20;
             btnEdit.css('position', 'fixed').css('top', newTop);
-            otherBtns.each(function() {
+            otherBtns.each(function () {
                 newTop += 0.5;
                 $(this).css('position', 'fixed').css('top', newTop);
             });
@@ -214,7 +173,7 @@ function initBtnEdit() {
  * ==================================================
  */
 
-$(function() {
+$(function () {
     initFlagList();
     initBtnEdit();
 
@@ -225,57 +184,59 @@ $(function() {
     }
 
     // watch button
-    $('.btn-watch').click(function() {
+    $('.btn-watch').click(function () {
         var status = $(this).find('.watch-status');
-        var watching = $(this).hasClass('watching');
-        if (watching) {
-            status.text('Watch');
-            $(this).removeClass('watching');
-        } else {
-            status.text('Unwatch');
-            $(this).addClass('watching');
-        }
 
         $.ajax({
             type: 'post',
             url: decodeHtml('/' + projectOwner + '/' + projectSlug) + '/watch/' + !watching,
-            data: { csrfToken: csrf }
+            data: {csrfToken: csrf},
+            success: function () {
+                if (watching) {
+                    status.text('Watch');
+                } else {
+                    status.text('Unwatch');
+                }
+
+                $(".btn-watch svg")
+                    .toggleClass('fa-eye')
+                    .toggleClass('fa-eye-slash');
+
+                watching = !watching;
+            }
         });
     });
 
     // setup star button
     var increment = alreadyStarred ? -1 : 1;
-    $('.btn-star').click(function() {
-        var starred = $(this).find('.starred');
-        starred.html(' ' + (parseInt(starred.text()) + increment).toString());
+    $('.btn-star').click(function () {
         $.ajax({
             type: 'post',
             url: decodeHtml('/' + projectOwner + '/' + projectSlug) + '/star/' + (increment > 0),
-            data: { csrfToken: csrf }
+            data: {csrfToken: csrf},
+            success: function () {
+                var starred = $(".btn-star").find('.starred');
+                starred.html(' ' + (parseInt(starred.text()) + increment).toString());
+
+                $('#icon-star svg').attr("data-prefix", increment > 0 ? "fas" : "far");
+
+                increment *= -1;
+            }
         });
-
-        var icon = $('#icon-star');
-        if (increment > 0) {
-            icon.removeClass('fa-star-o').addClass('fa-star');
-        } else {
-            icon.removeClass('fa-star').addClass('fa-star-o');
-        }
-
-        increment *= -1;
     });
 
     // hotkeys
     var body = $('body');
-    body.keydown(function(event) {
+    body.keydown(function (event) {
         var target = $(event.target);
         if (target.is('body') && shouldExecuteHotkey(event)) {
             var navBar = $('.project-navbar');
             switch (event.keyCode) {
-                case KEY_PLUS:
+                case KEY_J:
                     event.preventDefault();
                     switchTabTo(getActiveTab().next(), navBar.find('li:first'));
                     break;
-                case KEY_MINUS:
+                case KEY_K:
                     event.preventDefault();
                     switchTabTo(getActiveTab().prev(), navBar.find('#discussion'));
                     break;

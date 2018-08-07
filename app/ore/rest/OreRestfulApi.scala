@@ -180,7 +180,7 @@ trait OreRestfulApi extends OreWrites {
     )
 
     lazy val jsonVisibility = obj(
-      "type" -> v.visibility.nameKey,
+      "type" -> v.visibility.title,
       "css"  -> v.visibility.cssClass
     )
 

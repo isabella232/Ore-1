@@ -1,0 +1,43 @@
+.tags {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+
+  .tag {
+    border: 1px solid darken(whitesmoke, 10);
+    align-items: center;
+    display: flex;
+    background-color: whitesmoke;
+    border-radius: 3px;
+    font-size: 0.75em;
+    height: 2em;
+    padding-left: 0.75em;
+    padding-right: 0.75em;
+    white-space: nowrap;
+    margin: 5px;
+
+    &:first-child {
+      margin-left: 0;
+    }
+
+    &:last-child {
+      margin-right: 0;
+    }
+  }
+
+  &.has-addons .tag {
+    &:first-child {
+      border-bottom-right-radius: 0;
+      border-top-right-radius: 0;
+      margin-right: 0;
+    }
+
+    &:nth-child(2) {
+      border-bottom-left-radius: 0;
+      border-top-left-radius: 0;
+      border-left: none;
+      margin-left: 0;
+    }
+  }
+}

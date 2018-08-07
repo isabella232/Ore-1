@@ -151,8 +151,6 @@ function setupInvites() {
  */
 
 $(function() {
-    var invites = $('.invite-content');
-    invites.css('height', invites.width());
     setupNotificationButtons();
     setupFilters();
     setupInvites();

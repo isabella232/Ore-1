@@ -33,15 +33,20 @@ var PROJECT_SLUG = null;
 $(function() {
     var form = $('#form-icon');
     var btn = form.find('.btn-upload');
-    var url = sanitize('/' + PROJECT_OWNER + '/' + PROJECT_SLUG + '/icon');
-    var preview = form.find('.user-avatar');
+    var preview = form.find('.preview');
     var input = form.find('input[type="file"]');
 
     function updateButton() {
-        btn.prop('disabled', input[0].files.length == 0);
+        btn.popover('hide');
+        btn.prop('disabled', input[0].files.length === 0);
     }
 
-    input.on('change', function() { updateButton(); });
+    input.on('change', function(e) {
+        updateButton();
+
+        var fileName = e.target.files[0].name;
+        $(this).next('.custom-file-label').text(fileName);
+    });
 
     var formData = new FormData(form[0]);
     formData.append('csrfToken', csrf);
@@ -49,23 +54,33 @@ $(function() {
     // Upload button
     btn.click(function(e) {
         e.preventDefault();
-        var icon = btn.find('i').removeClass('fa-upload').addClass('fa-spinner fa-spin');
+        btn.find('svg').removeClass('fa-upload').addClass('fa-spinner fa-spin');
+
+        var r = jsRoutes.controllers.project.Projects.uploadIcon(PROJECT_OWNER, PROJECT_SLUG);
+
         $.ajax({
-            url: url,
-            type: 'post',
+            url: r.url,
+            type: r.type,
             data: new FormData(form[0]),
             cache: false,
             contentType: false,
             processData: false,
             complete: function() {
-                preview.css('background-image', 'url(' + url + '/pending' + ')');
-                icon.removeClass('fa-spinner fa-spin').addClass('fa-upload');
+                preview.attr('src', jsRoutes.controllers.project.Projects.showPendingIcon(PROJECT_OWNER, PROJECT_SLUG).absoluteURL() + "?" + new Date().getTime());
+                btn.find('svg').removeClass('fa-spinner fa-spin').addClass('fa-upload');
+                btn.find('span').text('Uploaded');
+                btn.removeClass('btn-info').addClass('btn-success');
             },
             success: function() {
                 $('#update-icon').val('true');
                 input.val('');
                 updateButton();
-                $('.setting-icon').prepend('<div class="alert alert-info">Don\'t forget to save changes!</div>');
+                btn.popover({
+                    content: "Don't forget to save changes!",
+                    trigger: "manual",
+                    boundary: "window"
+                });
+                btn.popover('show');
             }
         });
     });
@@ -74,21 +89,35 @@ $(function() {
     var reset = form.find('.btn-reset');
     reset.click(function(e) {
         e.preventDefault();
-        $(this).text('').append('<i class="fa fa-spinner fa-spin"></i>');
-        $.ajax({
-            url: url + '/reset',
-            type: 'post',
-            cache: false,
-            contentType: 'application/json',
-            complete: function() {
-                reset.empty().text('Reset');
-            },
-            success: function() {
-                preview.css('background-image', 'url(' + url + ')');
-                input.val('');
-                updateButton();
-                $('.setting-icon .alert').detach();
-            }
+        reset.find('svg').removeClass('fa-undo').addClass('fa-spinner fa-spin');
+
+        $.ajax(jsRoutes.controllers.project.Projects.resetIcon(PROJECT_OWNER, PROJECT_SLUG)).done(function () {
+            preview.attr('src', jsRoutes.controllers.project.Projects.showIcon(PROJECT_OWNER, PROJECT_SLUG).absoluteURL() + "?" + new Date().getTime());
+            input.val('');
+            updateButton();
+            reset.find('svg').removeClass('fa-spinner fa-spin').addClass('fa-undo');
+            reset.popover({
+                content: "The project icon has been reset!",
+                trigger: "manual",
+                boundary: "window",
+                placement: "top"
+            });
+            reset.popover('show');
+            setTimeout(function () {
+                reset.popover('hide');
+            }, 3000);
+        }).fail(function () {
+            reset.find('svg').removeClass('fa-spinner fa-spin').addClass('fa-undo');
+            reset.popover({
+                content: "An error occured while resetting the icon! Try again.",
+                trigger: "manual",
+                boundary: "window",
+                placement: "top"
+            });
+            reset.popover('show');
+            setTimeout(function () {
+                reset.popover('hide');
+            }, 3000);
         });
     });
 });

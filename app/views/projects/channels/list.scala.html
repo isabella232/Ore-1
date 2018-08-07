@@ -6,10 +6,8 @@
 @import views.html.helper.{CSRF, form}
 @import views.html.utils
 @(p: ProjectData, channels: Seq[(Channel, Int)])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
-
 @channelRoutes = @{controllers.project.routes.Channels}
 @versionRoutes = @{controllers.project.routes.Versions}
-
 @bootstrap.layout(messages("channel.list.title", p.project.ownerName, p.project.slug)) {
 
     <script type="text/javascript" src="@routes.Assets.versioned("javascripts/channelManage.js")"></script>
@@ -25,95 +23,91 @@
         });
     </script>
 
-    <div class="container" style="margin-top: 90px">
-        <div class="row">
-            <div class="col-md-6 col-md-offset-3">
-                <div class="panel panel-default">
-                    <div class="panel-heading">
-                        <h3 class="panel-title">@messages("channel.list.title")</h3>
-                    </div>
-                    <div class="panel-body">
-                        <p class="minor create-blurb">
-                            @messages("channel.list.description")
-                        </p>
+    <div class="row justify-content-center">
+        <div class="col col-lg-6">
+            <div class="card">
+                <div class="card-header">@messages("channel.list.title")</div>
+                <div class="card-body">
+                    <p class="minor create-blurb">@messages("channel.list.description")</p>
 
-                        @utils.alert("error")
+                    @utils.alert("error")
 
-                        <table class="table no-border centered">
-                            <tbody>
-                                @channels.map { case (channel, versions) =>
-                                    <tr>
+                    <table class="table no-border centered">
+                        <tbody>
+                            @channels.map { case (channel, versions) =>
+                                <tr>
+                                    <td>
+                                        <div class="channel" style="background-color: @channel.color.hex">@channel.name</div>
+                                    </td>
+                                    <td>
+                                        <div class="btn btn-sm yellow" data-toggle="modal" data-target="#channel-settings" id="channel-edit-@channel.id">Edit</div>
+                                    </td>
+                                    @if(channels.size > 1) {
                                         <td>
-                                            <div class="channel" style="background-color: @channel.color.hex">@channel.name</div>
-                                        </td>
-                                        <td>
-                                            <div class="btn btn-sm yellow" data-toggle="modal" data-target="#channel-settings" id="channel-edit-@channel.id">Edit</div>
-                                        </td>
-                                        @if(channels.size > 1) {
-                                            <td>
-                                                <div class="btn btn-sm yellow"
-                                                    @if(versions > 0) {
-                                                        id="channel-delete-@channel.id" data-toggle="modal"
-                                                        data-target="#modal-delete">
-                                                    } else {
-                                                        id="channel-delete-@channel.id.value" data-channel-delete="safe-delete"
-                                                        data-channel-id="@channel.id.value">
+                                            <div class="btn btn-sm yellow"
+                                                @if(versions > 0) {
+                                                    id="channel-delete-@channel.id" data-toggle="modal"
+                                                    data-target="#modal-delete">
+                                                } else {
+                                                    id="channel-delete-@channel.id.value" data-channel-delete="safe-delete"
+                                                    data-channel-id="@channel.id.value">
 
-                                                        @form(action = channelRoutes.delete(
-                                                            p.project.ownerName, p.project.slug, channel.name),
-                                                            'id -> s"form-delete-${channel.id.value}",
-                                                            'class -> "form-channel-delete") {
-                                                            @CSRF.formField
-                                                        }
+                                                    @form(action = channelRoutes.delete(
+                                                        p.project.ownerName, p.project.slug, channel.name),
+                                                        'id -> s"form-delete-${channel.id.value}",
+                                                        'class -> "form-channel-delete") {
+                                                        @CSRF.formField
                                                     }
-                                                Delete
-                                                </div>
-                                            </td>
-                                        }
-                                        <script nonce="@nonce">
-                                          $(function() {
-                                              initChannelDelete('#channel-delete-@channel.id', '@channel.name', @versions);
-                                              initChannelManager(
-                                                      "#channel-edit-@channel.id", "@channel.name", "@channel.color.hex",
-                                                      "Edit channel", "@channelRoutes.save(
-                                                        p.project.ownerName, p.project.slug, channel.name)",
-                                                      "post", "Save changes", @channel.isNonReviewed
-                                              );
-                                          });
-                                      </script>
-                                  </tr>
-                                }
-                            </tbody>
-                        </table>
-                        <a href="@versionRoutes.showList(p.project.ownerName, p.project.slug, None)"
-                           class="pull-left btn btn-default">
-                            <i class="fa fa-arrow-left"></i>
-                        </a>
-                        <a href="#" id="channel-new" class="pull-right btn btn-primary"
-                           @if(channels.size >= config.ore.projects.maxChannels) {
-                               disabled data-toggle="tooltip" data-placement="left"
-                               title="@messages("channel.edit.maxReached")"
-                           } else {
-                               data-toggle="modal" data-target="#channel-settings"
-                           }
-                        >
-                            <i class="fa fa-plus"></i>
-                        </a>
-                        @projects.channels.helper.modalManage()
-                    </div>
+                                                }
+                                            Delete
+                                            </div>
+                                        </td>
+                                    }
+                                    <script nonce="@nonce">
+                                      $(function() {
+                                          initChannelDelete('#channel-delete-@channel.id', '@channel.name', @versions);
+                                          initChannelManager(
+                                                  "#channel-edit-@channel.id", "@channel.name", "@channel.color.hex",
+                                                  "Edit channel", "@channelRoutes.save(
+                                                    p.project.ownerName, p.project.slug, channel.name)",
+                                                  "post", "Save changes", @channel.isNonReviewed
+                                          );
+                                      });
+                                  </script>
+                              </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    <a href="@versionRoutes.showList(p.project.ownerName, p.project.slug, None)"
+                       class="btn btn-light">
+                        <i class="fas fa-arrow-left"></i>
+                    </a>
+
+                    <a href="#" id="channel-new" class="float-right btn btn-yellow"
+                       @if(channels.size >= config.ore.projects.maxChannels) {
+                           disabled data-toggle="tooltip" data-placement="left"
+                           title="@messages("channel.edit.maxReached")"
+                       } else {
+                           data-toggle="modal" data-target="#channel-settings"
+                       }
+                    >
+                        <i class="fas fa-plus"></i>
+                    </a>
+                    @projects.channels.helper.modalManage()
                 </div>
             </div>
         </div>
     </div>
 
     <div class="modal fade" id="modal-delete" tabindex="-1" role="dialog" aria-labelledby="label-delete">
-        <div class="modal-dialog" role="document">
+        <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
+                    <h4 class="modal-title" id="label-delete">@messages("channel.delete")</h4>
                     <button type="button" class="close" data-dismiss="modal" aria-label="@messages("general.close")">
                         <span aria-hidden="true">&times;</span>
                     </button>
-                    <h4 class="modal-title" id="label-delete">@messages("channel.delete")</h4>
                 </div>
                 <div class="modal-body">
                     <p>@messages("channel.delete.info")</p>

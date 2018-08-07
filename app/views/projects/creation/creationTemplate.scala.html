@@ -1,0 +1,75 @@
+@*
+Page used for uploading and creating new projects.
+*@
+@import controllers.sugar.Requests.OreRequest
+@import db.ModelService
+@import models.project.Project
+@import models.user.Organization
+@import ore.OreConfig
+@import ore.project.factory.PendingProject
+@import play.twirl.api.Html
+@import security.NonceFilter._
+@import views.html.helper.{CSRF, form}
+@import views.html.utils
+@(title: String, currentStep: Int)(content: Html)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@stateIcon(step: Int) = {
+    @if(currentStep > step) {
+        fas fa-check
+    } else if (currentStep == step) {
+        fas fa-eye
+    }
+}
+@stateClass(step: Int) = {
+    @if(currentStep < step) {
+        disabled
+    }
+}
+@scripts = {
+}
+@stylesheets = {
+    <link rel="stylesheet" type="text/css" href="@routes.Assets.versioned("stylesheets/project-creation.css")" />
+}
+@bootstrap.layout(title, scripts, stylesheets) {
+
+    <div class="row project-creation">
+        <div class="col-md-9">
+            <div class="card">
+                <div class="card-header">
+                @messages("project.create.title")
+                </div>
+                <div class="card-body">
+                @content
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">Steps</div>
+                <ul class="list-group sidebar">
+                    <li class="list-group-item @stateClass(1)">
+                        <i class="fas fa-upload fa-fw"></i>
+                        Upload files
+                        <i class="@stateIcon(1)"></i>
+                    </li>
+                    <li class="list-group-item @stateClass(2)">
+                        <i class="fas fa-cogs fa-fw"></i>
+                        Configure project
+                        <i class="@stateIcon(2)"></i>
+                    </li>
+                    <li class="list-group-item @stateClass(3)">
+                        <i class="fas fa-users fa-fw"></i>
+                        Invite members
+                        <i class="@stateIcon(3)"></i>
+                    </li>
+                    <li class="list-group-item @stateClass(4)">
+                        <i class="fas fa-share-square fa-fw"></i>
+                        Publish project
+                        <i class="@stateIcon(4)"></i>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+}

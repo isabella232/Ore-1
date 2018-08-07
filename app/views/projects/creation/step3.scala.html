@@ -1,0 +1,94 @@
+@*
+Page used for uploading and creating new projects.
+*@
+@import controllers.sugar.Requests.OreRequest
+@import models.user.User
+@import models.viewhelper.OrganizationData
+@import ore.OreConfig
+@import ore.project.factory.creation.PendingProjectCreation
+@import views.html.helper.{CSRF, form}
+@import views.html.utils.userAvatar
+@import ore.permission.role.Role
+@import ore.permission.role.RoleCategory
+@(pendingProject: PendingProjectCreation, owner: User, authors: Seq[String], orgaData: Option[OrganizationData])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@roles = @{
+    Role.values.filter(role => role.category.equals(RoleCategory.Project) && role.isAssignable).toList.sortBy(_.trust).reverse
+}
+@projects.creation.creationTemplate(messages("project.create"), 3) {
+    <script type="text/javascript" src="@routes.Assets.versioned("javascripts/pluginCreationInvite.js")"></script>
+
+    @form(action = controllers.project.routes.ProjectCreation.processStep3(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileFormStep3") {
+        @CSRF.formField
+
+        @Html(messages("project.members.infoText.head"))
+
+        <table class="table table-hover table-sm mt-2 table-project-creation-invite">
+            <thead>
+                <tr class="thead-dark">
+                    <th width="45"></th>
+                    <th>User</th>
+                    <th>Role</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td width="45">
+                        @userAvatar(Some(owner.name), owner.avatarUrl, clazz = "icon-xs")
+                    </td>
+                    <td>
+                        @pendingProject.underlying.ownerName
+                    </td>
+                    <td>
+                        @Role.ProjectOwner.title
+                    </td>
+                </tr>
+                @if(orgaData.isDefined && request.currentUser.isDefined) {
+                    <tr>
+                        <td width="45">
+                            @userAvatar(Some(request.currentUser.get.name), request.currentUser.get.avatarUrl, clazz = "icon-xs")
+                        </td>
+                        <td>
+                            @request.currentUser.get.name
+                        </td>
+                        <td>
+                            @Role.ProjectDeveloper.title
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot class="bg-light">
+                <tr>
+                    <td colspan="3">
+                        <div class="input-group p-2 mt-2">
+                            <input type="text" class="form-control user-search-input" placeholder="User">
+                            <div class="input-group-append">
+                                <a class="btn btn-secondary user-search-btn" type="button" id="button-addon2"><i class="fas fa-search fa-fw"></i></a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <br>
+
+        <div class="row">
+            <div class="col-12">
+            Ore has found some authors in your mcmod.info you might want to add them as a collaborators.
+            </div>
+            <div class="col-12">
+                <ul class="list-unstyled">
+                    @authors.map { author =>
+                        <li><a class="btn btn-link btn-sm" data-author="@author">Add</a> @author</li>
+                    }
+                </ul>
+            </div>
+        </div>
+
+        <div class="row mt-3">
+            <div class="col-auto ml-auto">
+                <button class="btn btn-success" type="submit">@messages("general.continue")</button>
+            </div>
+        </div>
+    }
+}

@@ -1,0 +1,18 @@
+.project-creation {
+  .card > ul.sidebar {
+    li i {
+      &:first-child {
+        margin-right: 0.25rem;
+      }
+      &:last-child {
+        float: right;
+      }
+    }
+  }
+
+  .plugin-meta table {
+    tr > td:first-child {
+      padding-right: 5rem;
+    }
+  }
+}

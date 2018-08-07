@@ -102,6 +102,7 @@ final class OreConfig @Inject()(config: Configuration) {
     object queue extends ConfigCategory {
       val raw: Configuration            = ore.raw.get[Configuration]("queue")
       val maxReviewTime: FiniteDuration = raw.getOptional[FiniteDuration]("max-review-time").getOrElse(1.day)
+      val pageSize: Int                 = raw.get[Int]("page-size")
     }
   }
 

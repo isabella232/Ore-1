@@ -10,15 +10,13 @@
 @import views.html.utils.{alert, editor}
 @(project: ProjectData, forumSync: Boolean, pending: Option[PendingVersion],
   channels: Option[Seq[Channel]], showFileControls: Boolean)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
-
 @mainWidth = {
-    @pending.map(_ => "col-md-10").getOrElse("col-md-12")
+    @pending.map(_ => "col-lg-10").getOrElse("col-lg-12")
 }
-
 @bootstrap.layout(messages("version.create.pageTitle")) {
 
     <script type="text/javascript" src="@routes.Assets.versioned("javascripts/channelManage.js")"></script>
-    <script type="text/javascript" src="@routes.Assets.versioned("javascripts/pluginUpload.js")"></script>
+    <script type="text/javascript" src="@routes.Assets.versioned("javascripts/pluginCreationUpload.js")"></script>
     <script type="text/javascript" src="@routes.Assets.versioned("javascripts/projectDetail.js")"></script>
 
     <div class="container" style="margin-top: 90px">

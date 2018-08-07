@@ -8,24 +8,18 @@ import play.api.libs.functional.syntax._
 import play.api.libs.json._
 import play.twirl.api.Html
 
+import controllers.sugar.Requests.AuthedProjectRequest
 import db.access.{ModelAccess, ModelAssociationAccess, ModelAssociationAccessImpl}
 import db.impl.OrePostgresDriver.api._
 import db.impl.model.common.{Describable, Downloadable, Hideable, Named}
-import db.impl.schema.{
-  ProjectMembersTable,
-  ProjectRoleTable,
-  ProjectStarsTable,
-  ProjectTable,
-  ProjectTableMain,
-  ProjectWatchersTable
-}
-import db.{AssociationQuery, DbRef, Model, ModelQuery, ModelService, ObjId, ObjectTimestamp}
+import db.impl.schema._
+import db._
 import models.admin.{ProjectLog, ProjectVisibilityChange}
 import models.api.ProjectApiKey
 import models.project.Visibility.Public
 import models.statistic.ProjectView
-import models.user.User
 import models.user.role.ProjectUserRole
+import models.user.{LoggedAction, User, UserActionLogger}
 import ore.permission.role.Role
 import ore.permission.scope.HasScope
 import ore.project.{Category, FlagReason, ProjectMember}
@@ -242,6 +236,28 @@ case class Project(
     updateOldChange *> (updateProject, createNewChange).parTupled
   }
 
+  def setVisibilityByUser(
+      visibility: Visibility,
+      comment: String,
+      creator: DbRef[User],
+      request: AuthedProjectRequest[_]
+  )(
+      implicit ec: ExecutionContext,
+      service: ModelService
+  ): Future[(Project, ProjectVisibilityChange)] = {
+    setVisibility(visibility, comment, creator).map { result =>
+      UserActionLogger.log(
+        request.request,
+        LoggedAction.ProjectVisibilityChange,
+        request.project.id.value,
+        request.project.visibility.title,
+        visibility.title
+      )
+
+      result
+    }
+  }
+
   /**
     * Get VisibilityChanges
     */
@@ -440,6 +456,7 @@ case class Project(
 
   /**
     * Get all messages
+    *
     * @return
     */
   def decodeNotes: Seq[Note] = (notes \ "messages").asOpt[Seq[Note]].getOrElse(Nil)

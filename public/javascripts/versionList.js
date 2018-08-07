@@ -41,9 +41,9 @@ var page = 0;
  */
 
 function createPage(page) {
-    var pageTemplate = $("<li>");
+    var pageTemplate = $("<li class='page-item'>");
     pageTemplate.addClass("page");
-    var link = $("<a>");
+    var link = $("<a class='page-link'>");
     link.text(page);
     pageTemplate.append(link);
 
@@ -235,20 +235,20 @@ function loadVersions(increment, scrollTop) {
                 var pagination = $(".version-panel .pagination");
                 pagination.empty();
 
-                var prev = $("<li>");
+                var prev = $("<li class='page-item'>")
                 prev.addClass("prev");
                 if(page === 1) {
                     prev.addClass("disabled");
                 }
-                prev.append("<a>&laquo;</a>");
+                prev.append("<a class='page-link'>&laquo;</a>");
                 pagination.append(prev);
 
                 var left = totalPages - page;
 
                 // Dot Template
-                var dotTemplate = $("<li>");
+                var dotTemplate = $("<li class='page-item'>")
                 dotTemplate.addClass("disabled");
-                var dotLink = $("<a>");
+                var dotLink = $("<a class='page-link'>");
                 dotLink.text("...");
                 dotTemplate.append(dotLink);
 
@@ -272,9 +272,9 @@ function loadVersions(increment, scrollTop) {
                     pagination.append(createPage((page -1)))
                 }
 
-                var activePage = $("<li>");
+                var activePage = $("<li class='page-item'>");
                 activePage.addClass("page active");
-                var link = $("<a>");
+                var link = $("<a class='page-link'>");
                 link.text(page);
                 activePage.append(link);
                 pagination.append(activePage);
@@ -301,12 +301,12 @@ function loadVersions(increment, scrollTop) {
 
                 // Builds the pagination
 
-                var next = $("<li>");
+                var next = $("<li class='page-item'>")
                 next.addClass("next");
                 if(TOTAL_VERSIONS / VERSIONS_PER_PAGE <= page) {
                     next.addClass("disabled");
                 }
-                next.append("<a>&raquo;</a>");
+                next.append("<a class='page-link'>&raquo;</a>");
 
                 pagination.append(next);
 

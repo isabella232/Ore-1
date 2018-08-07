@@ -3,7 +3,7 @@ package form
 import db.DbRef
 import models.user.User
 import models.user.role.UserRoleModel
-import ore.permission.role.Role
+import ore.permission.role.{Role, RoleCategory}
 
 /**
   * Builds a set of [[UserRoleModel]]s based on input data.
@@ -31,7 +31,9 @@ trait RoleSetBuilder[M <: UserRoleModel] {
     *
     * @return Result set
     */
-  def build(): Set[M] = users.zip(roles).map { case (userId, role) => newRole(userId, Role.withValue(role)) }.toSet
+  def build(): Set[M] = users.zip(roles).map { case (userId, role) => newRole(userId, Role.withValue(role)) }.toSet.filter(userRole => {
+      userRole.role.category.equals(RoleCategory.Project)
+    })
 
   /**
     * Creates a new role for the specified user ID and role type.

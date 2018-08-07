@@ -1,0 +1,35 @@
+.project-list {
+  > .project {
+    background: #FFFFFF;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid $gray-lines;
+    h5 {
+      margin-bottom: 0;
+      a {
+        font-weight: bold;
+        color: $sponge_light_gray;
+        &:hover {
+          color: $sponge_grey;
+          text-decoration: none;
+        }
+      }
+    }
+    .stats {
+      margin: 0;
+      color: $gray-hover;
+      font-size: 0.95rem;
+      span:not(:last-child) {
+        margin-right: 0.5rem;
+        i {
+          margin-right: 0.3rem;
+        }
+      }
+    }
+    .tags {
+      justify-content: flex-end;
+      > .tags:not(:last-child) {
+        margin-right: 0.5rem;
+      }
+    }
+  }
+}

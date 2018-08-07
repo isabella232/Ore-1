@@ -1,0 +1,69 @@
+@import db.ModelService
+@import models.project.{Project, Version}
+@import ore.OreConfig
+@import security.NonceFilter._
+
+@import util.StringUtils.prettifyDate
+@import play.api.Configuration
+@import views.html.utils.userAvatar
+@import models.admin.Review
+@import models.project.Channel
+@import models.user.User
+@import controllers.sugar.Requests.OreRequest
+@import java.sql.Timestamp
+@import java.time.Instant
+
+@(reviews: Seq[(Version, Project, Channel, Option[String], User, Option[Review])], currentPage: Int, totalPages: Int)(implicit messages: Messages, request: OreRequest[_], config: OreConfig, flash: Flash)
+
+@users.admin.queue.template(1, currentPage, totalPages) {
+    <div class="table-responsive">
+        <table class="table pending-queue-table">
+            <thead class="thead-dark">
+                <tr>
+                    <th scope="col">Project Owner</th>
+                    <th scope="col">Project</th>
+                    <th scope="col">Version</th>
+                    <th scope="col">Channel</th>
+                    <th scope="col">Queued by</th>
+                    <th scope="col">Queued since</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @reviews.map { case (version: Version, project: Project, channel: Channel, author: Option[String], user: User, _) =>
+                    <tr>
+                        <td>
+                            @userAvatar(Some(project.ownerName), user.avatarUrl, clazz = "icon-xs")
+                            <a href="@routes.Users.showProjects(project.ownerName, None)">
+                                @project.ownerName
+                            </a>
+                        </td>
+                        <td>
+                            <a href="@controllers.project.routes.Projects.show(project.ownerName, project.slug)">@project.name</a>
+                        </td>
+                        <td>
+                            <a href="@controllers.project.routes.Versions.show(project.ownerName, project.slug, version.name)">
+                                @version.name
+                            </a>
+                        </td>
+                        <td>
+                            <div style="display: inline-block; height: 10px; width: 10px; margin-right: 0.2rem; background: @channel.color.hex; border-radius: 50%"></div>
+                            @channel.name
+                        </td>
+                        <td>
+                            @if(author.isDefined) {
+                                <a href="@routes.Users.showProjects(author.get, None)">@author.get</a>
+                            } else {
+                                Unknown
+                            }
+                        </td>
+                        <td class="date">@prettifyDate(version.createdAt.value)</td>
+                        <td class="text-center">
+                            <a href="@routes.Reviews.showReviews(project.ownerName, project.slug, version.name)"><i class="fas fa-play fa-lg"></i></a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

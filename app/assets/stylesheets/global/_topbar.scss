@@ -1,0 +1,180 @@
+@import "../variables";
+
+$sp_logo_offset_x: 0;
+$sp_logo_offset_y: 0;
+$sp_topbar_height: 63px;
+$sp_logo_width: 200px;
+
+body {
+  padding-top: $sp_topbar_height;
+}
+
+#topbar {
+  position: fixed;
+  top: $sp_logo_offset_x;
+  z-index: 9999;
+
+  width: 100%;
+  padding: 0;
+
+  background-color: $sponge_grey;
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.25);
+
+  line-height: 19px;
+
+  a {
+    text-decoration: none;
+  }
+
+  .container {
+    position: relative;
+  }
+}
+
+#sp-logo-container {
+  display: inline-block;
+  margin-left: $sp_logo_offset_y;
+
+  cursor: pointer;
+
+  .logo {
+    display: block;
+
+    width: $sp_logo_width;
+    height: $sp_topbar_height;
+
+    padding-left: 15px;
+    padding-top: 11px;
+
+    font-weight: 700;
+    color: $sponge_yellow;
+
+    font-family: Montserrat, $font-family-base;
+    text-transform: uppercase;
+
+    * {
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    img {
+      height: 40px;
+    }
+
+    span {
+      margin-left: 0.250rem;
+      font-size: 23px;
+    }
+
+    i, svg {
+      color: gray;
+    }
+  }
+
+  &:hover {
+    background-color: #2a2a2a;
+
+    #sp-logo-menu {
+      display: block;
+    }
+  }
+}
+
+// Left dropdown menu
+#sp-logo-menu {
+  display: none;
+
+  position: absolute;
+  top: $sp_topbar_height;
+
+  width: $sp_logo_width;
+
+  z-index: 1001;
+}
+
+#sp-logo-dropdown {
+  margin: 0;
+  padding: 5px 0 5px;
+
+  background-color: white;
+
+  border: 1px solid #e4e4e4;
+  border-radius: 0 0 4px 4px;
+
+  * {
+    box-sizing: content-box; // This is magic
+  }
+
+  li, a {
+    display: block;
+  }
+
+  li {
+    padding: 0;
+
+    &.active {
+      // Fix weird 1px border next to active item
+      position: relative;
+      left: -1px;
+      width: $sp_logo_width;
+
+      background-color: $sponge_yellow;
+    }
+  }
+
+  a {
+    padding: 10px 20px 10px 10px;
+    color: #474a54;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.1)
+    }
+  }
+
+  svg, img {
+    padding: 0 10px 0 5px;
+  }
+
+}
+
+// Right nav bar
+
+.navbar-header, #main-navbar-collapse {
+  float: right;
+}
+
+.navbar-toggle {
+  margin: 6px 24px 0 0;
+  padding: 10px;
+
+  font-size: 32px;
+  color: $sponge_yellow;
+}
+
+#main-navbar-collapse ul {
+  li .active {
+    font-weight: bold;
+  }
+}
+
+@media (min-width: 768px) {
+  #main-navbar-collapse ul {
+    li {
+      margin: 0 5px;
+      background-color: $sponge_yellow;
+
+      a {
+        color: $sponge_dark_grey;
+        padding: 6px 12px;
+
+        &:hover {
+          background-color: #f9ed9e;
+        }
+
+        &:focus {
+          background-color: transparent;
+        }
+      }
+    }
+  }
+}

@@ -10,19 +10,19 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 import play.api.cache.AsyncCacheApi
-import play.api.i18n.MessagesApi
+import play.api.i18n.{Lang, MessagesApi}
 import play.api.libs.Files.TemporaryFile
 import play.api.mvc.{Action, AnyContent, MultipartFormData, Result}
 
 import controllers.OreBaseController
 import controllers.sugar.Bakery
 import controllers.sugar.Requests.AuthRequest
-import db.impl.OrePostgresDriver.api._
 import db.{DbRef, ModelService}
 import discourse.OreDiscourseApi
 import form.OreForms
+import form.project.settings.ProjectActionSettingsForm
 import form.project.{DiscussionReplyForm, FlagForm, ProjectRoleSetBuilder}
-import models.project.{Note, Visibility}
+import models.project.{Note, Project, Visibility}
 import models.user._
 import models.user.role.ProjectUserRole
 import models.viewhelper.ScopedOrganizationData
@@ -30,7 +30,6 @@ import ore.permission._
 import ore.permission.scope.GlobalScope
 import ore.project.factory.ProjectFactory
 import ore.project.io.{InvalidPluginFileException, PluginUpload, ProjectFiles}
-import ore.rest.ProjectApiKeyType
 import ore.user.MembershipDossier
 import ore.user.MembershipDossier._
 import ore.{OreConfig, OreEnv, StatTracker}
@@ -77,10 +76,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
       orgas      <- request.user.organizations.allFromParent(request.user)
       createOrga <- orgas.toVector.parTraverse(request.user.can(CreateProject).in(_))
     } yield {
-      val createdOrgas = orgas.zip(createOrga).collect {
-        case (orga, true) => orga
-      }
-      Ok(views.create(createdOrgas, None))
+      Ok(views.creation.step1((true, ""), Seq.empty))
     }
   }
 
@@ -471,12 +467,24 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     * @param slug   Project slug
     * @return Project manager
     */
-  def showSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
+  def showGeneralSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
     implicit request =>
-      request.project.apiKeys
-        .find(_.keyType === (ProjectApiKeyType.Deployment: ProjectApiKeyType))
-        .value
-        .map(deployKey => Ok(views.settings(request.data, request.scoped, deployKey)))
+      Future.successful(Ok(views.settings.generalSettings(request.data, request.scoped)))
+  }
+
+  def showMemberSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).async {
+    implicit request =>
+      Future.successful(Ok(views.settings.memberSettings(request.data, request.scoped)))
+  }
+
+  def showKeySettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).async {
+    implicit request =>
+      Future.successful(Ok(views.settings.keySettings(request.data, request.scoped)))
+  }
+
+  def showActionSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).async {
+    implicit request =>
+      Future.successful(Ok(views.settings.actionSettings(request.data, request.scoped)))
   }
 
   /**
@@ -489,7 +497,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
   def uploadIcon(author: String, slug: String): Action[MultipartFormData[TemporaryFile]] =
     SettingsEditAction(author, slug)(parse.multipartFormData).asyncF { implicit request =>
       request.body.file("icon") match {
-        case None => IO.pure(Redirect(self.showSettings(author, slug)).withError("error.noFile"))
+        case None => IO.pure(Redirect(self.showGeneralSettings(author, slug)).withError("error.noFile"))
         case Some(tmpFile) =>
           val data       = request.data
           val pendingDir = projects.fileManager.getPendingIconDir(data.project.ownerName, data.project.name)
@@ -516,7 +524,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
       fileManager.getIconPath(project).foreach(Files.delete)
       fileManager.getPendingIconPath(project).foreach(Files.delete)
       //todo data
-      Files.delete(fileManager.getPendingIconDir(project.ownerName, project.name))
+      Files.deleteIfExists(fileManager.getPendingIconDir(project.ownerName, project.name))
       UserActionLogger.log(request.request, LoggedAction.ProjectIconChanged, project.id.value, "", "").as(Ok)
   }
 
@@ -559,7 +567,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
                 s"'${user.name}' is a member of ${project.ownerName}/${project.name}"
               )
             )
-            .as(Redirect(self.showSettings(author, slug)))
+            .as(Redirect(self.showMemberSettings(author, slug)))
         }
         .getOrElse(BadRequest)
     }
@@ -579,7 +587,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
           .ProjectSave(organisationUserCanUploadTo.toSeq)
           .bindFromRequest()
           .fold(
-            FormErrorLocalized(self.showSettings(author, slug)).andThen(IO.pure),
+            FormErrorLocalized(self.showGeneralSettings(author, slug)).andThen(IO.pure),
             formData => {
               data.settings
                 .save(data.project, formData)
@@ -598,6 +606,30 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
       }
   }
 
+  def saveGeneralSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).async {
+    implicit request =>
+      val data = request.data
+      this.forms.ProjectSaveGeneral
+        .bindFromRequest()
+        .fold(
+          FormErrorLocalized(self.showGeneralSettings(author, slug)).andThen(Future.successful),
+          formData => {
+            data.settings
+              .saveGeneral(data.project, formData)
+              .productR {
+                UserActionLogger.log(
+                  request.request,
+                  LoggedAction.ProjectSettingsChanged,
+                  request.data.project.id.value,
+                  "",
+                  ""
+                ) //todo add old new data
+              }
+              .as(Redirect(self.showGeneralSettings(author, slug)))
+          }
+        )
+  }
+
   /**
     * Renames the specified project.
     *
@@ -614,7 +646,11 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
       for {
         available <- EitherT.right[Result](projects.isNamespaceAvailable(author, slugify(newName)))
         _ <- EitherT
-          .cond[IO](available, (), Redirect(self.showSettings(author, slug)).withError("error.nameUnavailable"))
+          .cond[IO](
+            available,
+            (),
+            Redirect(self.showActionSettings(author, slug)).withError("error.nameUnavailable")
+          )
         _ <- EitherT.right[Result](projects.rename(project, newName))
         _ <- EitherT.right[Result] {
           UserActionLogger.log(
@@ -625,7 +661,8 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
             s"$author/$oldName"
           )
         }
-      } yield Redirect(self.show(author, project.slug))
+        p <- EitherT.right[Result](this.service.get[Project](project.id.value).getOrElse(project))
+      } yield Redirect(self.showActionSettings(author, p.slug))
     }
 
   /**
@@ -636,40 +673,39 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     * @param visibility Project visibility
     * @return         Ok
     */
-  def setVisible(author: String, slug: String, visibility: Int): Action[AnyContent] = {
+  def setVisibility(author: String, slug: String): Action[ProjectActionSettingsForm] = {
     AuthedProjectAction(author, slug, requireUnlock = true)
       .andThen(ProjectPermissionAction(HideProjects))
-      .asyncF { implicit request =>
-        val newVisibility = Visibility.withValue(visibility)
-        request.user.can(newVisibility.permission).in(GlobalScope).flatMap { perm =>
-          if (perm) {
-            val forumVisbility =
+      .async(parse.form(forms.ProjectVisibility)) { implicit request =>
+        implicit val lang: Lang = request.lang
+
+        Visibility.withValueOpt(request.body.visibility).map { newVisibility =>
+          request.user.can(newVisibility.permission).in(GlobalScope).flatMap { perm =>
+            if (perm) {
               if (!Visibility.isPublic(newVisibility) && Visibility.isPublic(request.project.visibility)) {
-                this.forums.changeTopicVisibility(request.project, isVisible = false).void
+                this.forums.changeTopicVisibility(request.project, isVisible = false)
               } else if (Visibility.isPublic(newVisibility) && !Visibility.isPublic(request.project.visibility)) {
-                this.forums.changeTopicVisibility(request.project, isVisible = true).void
-              } else IO.unit
+                this.forums.changeTopicVisibility(request.project, isVisible = true)
+              }
 
-            val projectVisibility = if (newVisibility.showModal) {
-              val comment = this.forms.NeedsChanges.bindFromRequest.get.trim
-              request.project.setVisibility(newVisibility, comment, request.user.id.value)
+              if (newVisibility.needsReason) {
+                if(request.body.comment.isDefined) {
+                  request.project.setVisibilityByUser(newVisibility, request.body.comment.get, request.user.id.value, request).map { _ =>
+                    Redirect(self.showActionSettings(author, slug)).withSuccess(messagesApi.apply("visibility.changed", newVisibility.title))
+                  }
+                } else {
+                  Future.successful(Redirect(self.showActionSettings(author, slug)).withError(messagesApi.apply("visibility.needsReason", newVisibility.title)))
+                }
+              } else {
+                request.project.setVisibilityByUser(newVisibility, "", request.user.id.value, request).map { _ =>
+                  Redirect(self.showActionSettings(author, slug)).withSuccess(messagesApi.apply("visibility.changed", newVisibility.title))
+                }
+              }
             } else {
-              request.project.setVisibility(newVisibility, "", request.user.id.value)
+              Future.successful(Unauthorized)
             }
-
-            val log = UserActionLogger.log(
-              request.request,
-              LoggedAction.ProjectVisibilityChange,
-              request.project.id.value,
-              newVisibility.nameKey,
-              Visibility.NeedsChanges.nameKey
-            )
-
-            (forumVisbility, projectVisibility).parTupled.productR(log).as(Ok)
-          } else {
-            IO.pure(Unauthorized)
           }
-        }
+        }.getOrElse(Future.successful(BadRequest))
       }
   }
 
@@ -688,8 +724,8 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
             request.request,
             LoggedAction.ProjectVisibilityChange,
             request.project.id.value,
-            Visibility.Public.nameKey,
-            Visibility.New.nameKey
+            Visibility.Public.title,
+            Visibility.New.title
           )
 
           visibility *> log.void
@@ -712,8 +748,8 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
           request.request,
           LoggedAction.ProjectVisibilityChange,
           request.project.id.value,
-          Visibility.NeedsApproval.nameKey,
-          Visibility.NeedsChanges.nameKey
+          Visibility.NeedsApproval.title,
+          Visibility.NeedsChanges.title
         )
 
         visibility *> log.void
@@ -745,7 +781,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
         val effects = deletePost *>
           projects.delete(project) *>
           UserActionLogger
-            .log(request, LoggedAction.ProjectVisibilityChange, project.id.value, "deleted", project.visibility.nameKey)
+            .log(request, LoggedAction.ProjectVisibilityChange, project.id.value, "deleted", project.visibility.title)
         effects.as(Redirect(ShowHome).withSuccess(request.messages.apply("project.deleted", project.name)))
       }.merge
     }
@@ -769,8 +805,8 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
         request.request,
         LoggedAction.ProjectVisibilityChange,
         oldProject.id.value,
-        Visibility.SoftDelete.nameKey,
-        oldProject.visibility.nameKey
+        Visibility.SoftDelete.title,
+        oldProject.visibility.title
       )
 
       (oreVisibility, forumVisibility).parTupled

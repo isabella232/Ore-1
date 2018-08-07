@@ -10,6 +10,7 @@ import db.impl.OrePostgresDriver.api._
 import db.impl.schema.{ProjectRoleTable, ProjectSettingsTable, UserTable}
 import db.{DbRef, Model, ModelQuery, ModelService, ObjId, ObjectTimestamp}
 import form.project.ProjectSettingsForm
+import form.project.settings.ProjectGeneralSettingsForm
 import models.user.{Notification, User}
 import ore.permission.role.Role
 import ore.project.io.ProjectFiles
@@ -48,6 +49,45 @@ case class ProjectSettings(
 
   override type M = ProjectSettings
   override type T = ProjectSettingsTable
+
+  def saveGeneral(project: Project, formData: ProjectGeneralSettingsForm)(
+      implicit fileManager: ProjectFiles,
+      ec: ExecutionContext,
+      service: ModelService
+  ): Future[(Project, ProjectSettings)] = {
+    val updateProject = service.updateIfDefined(
+      project.copy(
+        category = Category.values.find(_.title == formData.categoryName).get,
+        description = noneIfEmpty(formData.description),
+      )
+    )
+
+    val updateSettings = service.updateIfDefined(
+      copy(
+        issues = noneIfEmpty(formData.issues),
+        source = noneIfEmpty(formData.source),
+        licenseUrl = noneIfEmpty(formData.licenseUrl),
+        licenseName = if (formData.licenseUrl.nonEmpty) Some(formData.licenseName) else licenseName,
+        forumSync = formData.forumSync
+      )
+    )
+
+    val modelUpdates = updateProject.zip(updateSettings)
+
+    modelUpdates.map { t =>
+      if (formData.updateIcon) {
+        fileManager.getPendingIconPath(project).foreach { pendingPath =>
+          val iconDir = fileManager.getIconDir(project.ownerName, project.name)
+          if (notExists(iconDir))
+            createDirectories(iconDir)
+          list(iconDir).forEach(delete(_))
+          move(pendingPath, iconDir.resolve(pendingPath.getFileName))
+        }
+      }
+
+      t
+    }
+  }
 
   /**
     * Saves a submitted [[ProjectSettingsForm]] to the [[Project]].

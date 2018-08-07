@@ -1,0 +1,69 @@
+@*
+Page used for uploading and creating new projects.
+*@
+@import controllers.sugar.Requests.OreRequest
+@import ore.OreConfig
+@import views.html.helper.{CSRF, form}
+
+@import ore.project.factory.creation.PendingProjectCreation
+@(pendingProject: PendingProjectCreation, pluginIdAvailable: Boolean, namespaceAvailable: Boolean)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@projects.creation.creationTemplate(messages("project.create"), 2) {
+
+    @form(action = controllers.project.routes.ProjectCreation.processStep2(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileFormStep2") {
+        @CSRF.formField
+
+        <div class="plugin-meta mb-3 border-bottom pb-3">
+            <table>
+                <tbody>
+                    <tr>
+                        <td>@messages("project.create.uid")</td>
+                        <td>
+                            @pendingProject.underlying.pluginId
+                            @if(pluginIdAvailable) {
+                                <i class="fas fa-check-circle fa-fw"></i>
+                            } else {
+                                <i class="fas fa-times-circle fa-fw"></i>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>@messages("general.name")</td>
+                        <td>
+                            @pendingProject.underlying.name
+                            @if(pluginIdAvailable) {
+                                <i class="fas fa-check-circle fa-fw"></i>
+                            } else {
+                                <i class="fas fa-times-circle fa-fw"></i>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>@messages("project.owner")</td>
+                        <td>@pendingProject.underlying.ownerName</td>
+                    </tr>
+                    <tr>
+                        <td>Platform</td>
+                        <td>
+                            <div class="pull-right" id="upload-platform-tags">
+                            @for(t <- pendingProject.pendingVersion.dependenciesAsGhostTags) {
+                                @projects.tag(t)
+                            }
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        @if(pluginIdAvailable && namespaceAvailable) {
+
+            @projects.helper.basicSettings("uploadFileFormStep2", pendingProject.pendingVersion.underlying.description)
+
+            <div class="row mt-3">
+                <div class="col-auto ml-auto">
+                    <button class="btn btn-success">@messages("general.continue")</button>
+                </div>
+            </div>
+        }
+    }
+}

@@ -1,0 +1,62 @@
+@import controllers.sugar.Requests.OreRequest
+@import ore.OreConfig
+@import views.html.helper.{form, CSRF}
+@import models.viewhelper.ProjectData
+@import models.viewhelper.ScopedProjectData
+@import security.NonceFilter._
+
+@(p: ProjectData, sp: ScopedProjectData)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+
+@scripts = {
+    <script type="text/javascript" src="@routes.Assets.versioned("javascripts/iconUpload.js")"></script>
+}
+
+@projects.settings.settingsTemplate("General", p, sp, scripts) {
+    @projects.helper.basicSettings(
+        form = "save",
+        description = p.project.description,
+        issues = p.settings.issues,
+        source = p.settings.source,
+        licenseName = p.settings.licenseName,
+        licenseUrl = p.settings.licenseUrl,
+        category = Some(p.project.category),
+        forumSync = p.settings.forumSync
+    )
+
+    <div class="setting icon-setting">
+        <form id="form-icon" enctype="multipart/form-data">
+            @CSRF.formField
+            <label for="icon">Icon</label>
+            <br />
+            @utils.userAvatar(
+                Some(p.projectOwner.name),
+                p.projectOwner.avatarUrl,
+                call = controllers.project.routes.Projects.showIcon(p.project.ownerName, p.project.slug),
+                clazz = "icon-lg preview mb-2")
+            <br />
+            <div class="custom-file">
+                <input type="file" class="custom-file-input mb-2" id="icon" name="icon" aria-describedby="iconInput">
+                <label class="custom-file-label" for="iconInput">Choose file</label>
+            </div>
+
+            <button class="btn btn-default btn-reset mt-2">
+                <i class="fas fa-undo"></i> <span>Reset</span>
+            </button>
+            <button class="btn btn-info btn-upload mt-2" disabled>
+                <i class="fas fa-upload"></i> <span>Upload</span>
+            </button>
+
+            <small class="form-text text-muted">Upload an image representative of your project.</small>
+        </form>
+    </div>
+
+
+    @form(action = controllers.project.routes.Projects.saveGeneralSettings(p.project.ownerName, p.project.slug), 'id -> "save",
+        'class -> "pull-right") {
+        @CSRF.formField
+        <input type="hidden" id="update-icon" name="update-icon" value="false" />
+        <button type="submit" name="save" class="btn btn-success btn-spinner mt-3" data-icon="fa-check">
+            <i class="fa fa-check"></i> Save changes
+        </button>
+    }
+}

@@ -7,24 +7,24 @@ this.
 @import controllers.sugar.Requests.OreRequest
 @import ore.OreConfig
 @import security.NonceFilter._
-@(title: String, scripts: Boolean = true, header: Boolean = true, user: Boolean = true,
-        footer: Boolean = true)(content: Html)(implicit request: OreRequest[_], messages: Messages, config: OreConfig)
-
+@import views.html.utils.alert
+@(title: String, scripts: Html = Html(""), stylesheets: Html = Html(""), scriptsEnabled: Boolean = true, header: Boolean = true, user: Boolean = true,
+        footer: Boolean = true)(content: Html)(implicit request: OreRequest[_], messages: Messages, config: OreConfig, flash: Flash)
 <!DOCTYPE html>
 <html>
     <head>
-        <title>@title</title>
-
         <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+        <title>@title</title>
 
         <link href="https://fonts.googleapis.com/css?family=Montserrat:400,700" rel="stylesheet">
 
         <link rel="icon" href="@config.sponge.icon">
         <link rel="stylesheet" type="text/css" href="@routes.Assets.versioned("highlight/styles/default.css")" />
-        <link rel="stylesheet" type="text/css" href="@routes.Assets.versioned("bootstrap/css/bootstrap.min.css")" />
-        <link rel="stylesheet" type="text/css" href="@routes.Assets.versioned("stylesheets/main.css")" />
+        <link rel="stylesheet" type="text/css" href="@routes.Assets.versioned("stylesheets/global.css")" />
+        <link rel="stylesheet" type="text/css" href="@routes.Assets.versioned("lib/font-awesome/css/svg-with-js.css")"/>
+        @stylesheets
 
         <!-- See https://goo.gl/OOhYW5 -->
         <link rel="manifest" href="@routes.Assets.versioned("manifest/manifest.json")">
@@ -32,7 +32,8 @@ this.
         <!-- See https://goo.gl/qRE0vM -->
         <meta name="theme-color" content="#333">
 
-        @if(scripts) {
+        @if(scriptsEnabled) {
+            <script defer type="text/javascript" src="@routes.Assets.versioned("lib/font-awesome/js/all.min.js")" data-auto-add-css="false" data-auto-replace-svg="nest"></script>
             <script type="text/javascript" src="@routes.Assets.versioned("lib/jquery/dist/jquery.min.js")"></script>
         }
     </head>
@@ -41,17 +42,28 @@ this.
             @bootstrap.header(user)
         }
 
-        <div class="site-content">
-            @content
+        <div class="site-content mt-3 mb-3">
+            <div class="container">
+                <div class="row">
+                     <div class="col">
+                         @alert("success")
+                         @alert("error")
+                     </div>
+                </div>
+
+                @content
+            </div>
         </div>
 
         @if(footer) {
             @bootstrap.footer()
         }
 
-        @if(scripts) {
+        @if(scriptsEnabled) {
+            <script type="text/javascript" src="@routes.Application.javascriptRoutes"></script>
             <script type="text/javascript" src="@routes.Assets.versioned("lib/moment/min/moment.min.js")"></script>
-            <script type="text/javascript" src="@routes.Assets.versioned("bootstrap/js/bootstrap.min.js")"></script>
+            <script type="text/javascript" src="@routes.Assets.versioned("lib/popper.js/dist/umd/popper.min.js")"></script>
+            <script type="text/javascript" src="@routes.Assets.versioned("lib/bootstrap/dist/js/bootstrap.min.js")"></script>
             <script type="text/javascript" src="@routes.Assets.versioned("lib/filesize/lib/filesize.js")"></script>
             <script type="text/javascript" src="@routes.Assets.versioned("lib/clipboard/dist/clipboard.min.js")"></script>
             <script type="text/javascript" src="@routes.Assets.versioned("highlight/highlight.pack.js")"></script>
@@ -61,6 +73,7 @@ this.
             @if(request != null) {
                 <script nonce="@nonce">csrf = '@play.filters.csrf.CSRF.getToken.get.value'</script>
             }
+            @scripts
         }
 
     </body>

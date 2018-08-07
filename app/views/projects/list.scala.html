@@ -6,78 +6,59 @@ Collection of all projects.
 @import ore.OreConfig
 @import ore.project.Category
 @import views.html.utils
+@import scala.math._
 @(models: Seq[(Project, User, Version, Seq[VersionTag])], page: Int, pageSize: Int, call: Int => Call)(implicit config: OreConfig)
+@projectRoutes = @{ controllers.project.routes.Projects }
+<ul class="list-unstyled project-list">
+@models.map { case (project, owner, _, rvTags) =>
+    <li class="media project mb-2">
+        @utils.userAvatar(
+            userName = Some(owner.name),
+            avatarUrl = owner.avatarUrl,
+            call = projectRoutes.showIcon(project.ownerName, project.slug),
+            clazz = "mr-3 align-self-center icon-lg")
+        <div class="media-body">
+            <div class="mt-0 mb-1 d-flex justify-content-between">
+                <h5><a href="@projectRoutes.show(project.ownerName, project.slug)">@project.name</a></h5>
+                <div class="d-lg-inline d-none stats">
+                    <span title="Views"><i class="fas fa-eye"></i>@project.viewCount</span>
+                    <span title="Download"><i class="fas fa-download"></i>@project.downloadCount</span>
+                    <span title="Stars"><i class="fas fa-star"></i>@project.starCount</span>
 
-@projectRoutes = @{
-    controllers.project.routes.Projects
-}
-
-<ul class="list-group project-list">
-    @models.map { case (project, owner, rv, rvTags) =>
-        <li class="list-group-item project @project.visibility.cssClass">
-            <div class="container-fluid">
-                <div class="row">
-                    <div class="col-xs-12 col-sm-1">
-                    @utils.userAvatar(
-                        userName = Some(owner.name),
-                        avatarUrl = owner.avatarUrl,
-                        call = projectRoutes.showIcon(project.ownerName, project.slug),
-                        clazz = "user-avatar-sm")
-                    </div>
-                    <div class="col-xs-12 col-sm-11">
-                        <div class="row">
-                            <div class="col-sm-6">
-                                <a class="title" href="@projectRoutes.show(project.ownerName, project.slug)">@project.name</a>
-                            </div>
-                            <div class="col-sm-6 hidden-xs">
-                                <div class="info minor">
-                                    <span class="stat recommended-version" title="Recommended version">
-                                        <i class="fa fa-diamond"></i>
-                                        <a href="@controllers.project.routes.Versions.show(
-                                            project.ownerName, project.slug, rv.name)">
-                                        @rv.name
-                                        </a>
-                                    </span>
-
-                                    <span class="stat" title="Views"><i class="fa fa-eye"></i> @project.viewCount</span>
-                                    <span class="stat" title="Download"><i class="fa fa-download"></i> @project.downloadCount</span>
-                                    <span class="stat" title="Stars"><i class="fa fa-star"></i> @project.starCount</span>
-
-                                    @defining(project.category) { category: Category =>
-                                        <span class="stat" title="@category.title">
-                                            <i class="fa @category.icon"></i>
-                                        </span>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-sm-7 description-column">
-                                <div class="description">@project.description</div>
-                            </div>
-                            <div class="col-xs-12 col-sm-5 tags-line">
-                                @for(t <- rvTags) {
-                                    @projects.tag(t, rvTags.size)
-                                }
-                            </div>
-                        </div>
-                    </div>
+                    @defining(project.category) { category: Category =>
+                        <span title="@category.title">
+                            <i class="fas fa-@category.icon"></i>
+                        </span>
+                    }
                 </div>
             </div>
-        </li>
-    }
-
-    @if(models.size >= pageSize || page > 1) {
-        <li class="list-group-item project-list-footer">
-            <div class="pull-right">
-                @if(page > 1) {
-                    <a href="@call(page - 1)" class="btn btn-default"><i class="fa fa-arrow-left"></i></a>
+            <span>@project.description</span>
+            <div class="d-flex">
+                <div class="tags">
+                @for(t <- rvTags) {
+                    @projects.tag(t, rvTags.size)
                 }
-                @if(models.size >= pageSize) {
-                    <a href="@call(page + 1)" class="btn btn-default"><i class="fa fa-arrow-right"></i></a>
-                }
+                </div>
             </div>
-            <div class="clearfix"></div>
-        </li>
-    }
+        </div>
+    </li>
+}
 </ul>
+
+@if(models.size >= pageSize || page > 1) {
+    <nav class="project-list-nav" aria-label="...">
+        <ul class="pagination">
+            <li class="page-item @if(page <= 1) { disabled }">
+                <a class="page-link" href="@call(page - 1)"><span aria-hidden="true">&laquo;</span></a>
+            </li>
+
+            <li class="page-item active">
+                <span class="page-link">@page <span class="sr-only">(current)</span></span>
+            </li>
+
+            <li class="page-item">
+                <a class="page-link" href="@call(page + 1)"><span aria-hidden="true">&raquo;</span></a>
+            </li>
+        </ul>
+    </nav>
+}

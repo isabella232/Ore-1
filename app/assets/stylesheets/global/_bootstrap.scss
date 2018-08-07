@@ -1,0 +1,15 @@
+$border-radius: 0;
+$card-spacer-y: 0.5rem;
+$card-cap-bg: $sponge_grey;
+$input-btn-focus-box-shadow: none;
+$btn-active-box-shadow: none;
+$custom-select-focus-box-shadow: none;
+$btn-focus-box-shadow: none;
+$body-bg: #f8f9fa;
+$table-dark-bg: $sponge_grey;
+
+$theme-colors: (
+  "yellow": $sponge_yellow
+);
+
+@import "lib/bootstrap/scss/bootstrap";

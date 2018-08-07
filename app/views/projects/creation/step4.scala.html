@@ -1,0 +1,101 @@
+@*
+Page used for uploading and creating new projects.
+*@
+@import controllers.sugar.Requests.OreRequest
+@import models.user.User
+@import ore.OreConfig
+@import ore.project.factory.creation.PendingProjectCreation
+@import views.html.helper.{CSRF, form}
+@import security.NonceFilter._
+@(pendingProject: PendingProjectCreation)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@project = @{pendingProject.underlying}
+@version = @{pendingProject.pendingVersion.underlying}
+@projects.creation.creationTemplate(messages("project.create"), 4) {
+
+    @form(action = controllers.project.routes.ProjectCreation.processStep4(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileFormStep4") {
+        @CSRF.formField
+
+        @Html(messages("project.create.destination", "<strong>" + project.url + "</strong>"))
+
+        <div class="plugin-meta">
+            <table class="plugin-meta-table">
+                <tr>
+                    <td><strong>@messages("version")</strong></td>
+                    <td>@version.versionString</td>
+                </tr>
+                <tr>
+                    <td><strong>@messages("version.description")</strong></td>
+                    <td>
+                    @version.description.map { description =>
+                        @description
+                    }.getOrElse {
+                        @project.description.getOrElse(messages("version.create.noDescription"))
+                    }
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Channel</strong></td>
+                    <td class="form-inline">
+                        <input type="hidden" class="channel-input" name="channel-input" value="@pendingProject.pendingVersion.channelName" />
+                        <input type="hidden"  class="channel-color-input" name="channel-color-input" value="@pendingProject.pendingVersion.channelColor.hex" />
+
+                        <span id="channel-name" class="channel" style="background-color: @pendingProject.pendingVersion.channelColor;">
+                            @pendingProject.pendingVersion.channelName
+                        </span>
+                        <a href="#">
+                            <i id="channel-edit" class="fas fa-edit fa-fw" data-toggle="modal" data-target="#channel-settings"></i>
+                        </a>
+                        <script nonce="@nonce">
+                            $(function() {
+                                // Setup editor
+                                initChannelManager(
+                                        "#channel-edit",
+                                        "@pendingProject.pendingVersion.channelName",
+                                        "@pendingProject.pendingVersion.channelColor",
+                                        "Edit channel", null, null,
+                                        "Save changes", false
+                                );
+                            });
+                        </script>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Platform</strong></td>
+                    <td>
+                        <div class="pull-right" id="upload-platform-tags">
+                        @for(t <- pendingProject.pendingVersion.dependenciesAsGhostTags) {
+                            @projects.tag(t)
+                        }
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>@messages("version.create.unstable")</strong></td>
+                    <td>
+                        <div class="checkbox-inline">
+                            <input form="form-publish" name="unstable" type="checkbox" value="true"/>
+                        </div>
+                        <div class="clearfix"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Create forum post</strong></td>
+                    <td>
+                        <div class="checkbox-inline">
+                            <input form="form-publish" name="forum-post" type="checkbox" checked value="true"/>
+                        </div>
+                        <div class="clearfix"></div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <span class="pull-left tos"><i>@Html(messages("version.create.tos", "#"))</i></span>
+
+        <div class="row mt-3">
+            <div class="col-auto ml-auto">
+                <button class="btn btn-success">@messages("version.create.publish")</button>
+            </div>
+        </div>
+    }
+}

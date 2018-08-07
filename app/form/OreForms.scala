@@ -15,6 +15,7 @@ import db.impl.OrePostgresDriver.api._
 import db.{DbRef, ModelService}
 import form.organization.{OrganizationAvatarUpdate, OrganizationMembersUpdate, OrganizationRoleSetBuilder}
 import form.project._
+import form.project.settings.{ProjectActionSettingsForm, ProjectGeneralSettingsForm}
 import models.api.ProjectApiKey
 import models.project.Page._
 import models.project.{Channel, Page}
@@ -63,6 +64,13 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
     )(ProjectRoleSetBuilder.apply)(ProjectRoleSetBuilder.unapply)
   )
 
+  lazy val ProjectVisibility = Form(
+    mapping(
+      "visibility" -> number,
+      "comment" -> optional(text)
+    )(ProjectActionSettingsForm.apply)(ProjectActionSettingsForm.unapply)
+  )
+
   /**
     * Submits a flag on a project for further review.
     */
@@ -104,6 +112,20 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
         "owner"        -> optional(longNumber).verifying(ownerIdInList(organisationUserCanUploadTo)),
         "forum-sync"   -> boolean
       )(ProjectSettingsForm.apply)(ProjectSettingsForm.unapply)
+    )
+
+  lazy val ProjectSaveGeneral =
+    Form(
+      mapping(
+        "category"     -> text,
+        "issues"       -> url,
+        "source"       -> url,
+        "license-name" -> text,
+        "license-url"  -> url,
+        "description"  -> text,
+        "forum-sync"   -> boolean,
+        "update-icon"  -> boolean
+      )(ProjectGeneralSettingsForm.apply)(ProjectGeneralSettingsForm.unapply)
     )
 
   /**
@@ -311,4 +333,37 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
       "api_key" -> nonEmptyText
     )
   )
+
+  /**
+    * Used to process the first step of the upload process
+    */
+  def ProjectCreateStep1(ownersUserCanUploadTo: Seq[DbRef[_]]) =
+    Form(
+      single(
+        "owner" -> optional(longNumber).verifying(ownerIdInList(ownersUserCanUploadTo))
+      )
+    )
+
+  /**
+    * Submits settings changes for a Project.
+    */
+  def ProjectCreateStep2() =
+    Form(
+      mapping(
+        "category"     -> text,
+        "issues"       -> url,
+        "source"       -> url,
+        "license-name" -> text,
+        "license-url"  -> url,
+        "description"  -> text,
+        "users"        -> list(longNumber),
+        "roles"        -> list(text),
+        "userUps"      -> list(text),
+        "roleUps"      -> list(text),
+        "update-icon"  -> boolean,
+        "owner"        -> optional(longNumber),
+        "forum-sync"   -> boolean
+      )(ProjectSettingsForm.apply)(ProjectSettingsForm.unapply)
+    )
+
 }

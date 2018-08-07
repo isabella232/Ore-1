@@ -1,0 +1,39 @@
+@import controllers.sugar.Requests.OreRequest
+@import ore.OreConfig
+@import models.viewhelper.ProjectData
+@import models.viewhelper.ScopedProjectData
+
+@(title: String, p: ProjectData, sp: ScopedProjectData, additionalScripts: Html = Html(""))(content: Html)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+
+@projectRoutes = @{controllers.project.routes.Projects}
+@scripts = {
+    <script type="text/javascript" src="@routes.Assets.versioned("javascripts/projectSettings.js")"></script>
+  @additionalScripts
+}
+
+@projects.view(p, sp, "#settings", additionalScripts = scripts) {
+    <div class="row">
+        <div class="col-md-9">
+            @content
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">Settings</div>
+                <div class="list-group sidebar">
+                    <a class="list-group-item list-group-item-action" href="@projectRoutes.showGeneralSettings(p.project.ownerName, p.project.slug)">
+                        General
+                    </a>
+                    <a class="list-group-item list-group-item-action" href="@projectRoutes.showMemberSettings(p.project.ownerName, p.project.slug)">
+                        Members
+                    </a>
+                    <a class="list-group-item list-group-item-action" href="@projectRoutes.showKeySettings(p.project.ownerName, p.project.slug)">
+                        Deploy Keys
+                    </a>
+                    <a class="list-group-item list-group-item-action" href="@projectRoutes.showActionSettings(p.project.ownerName, p.project.slug)">
+                        Actions
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+}

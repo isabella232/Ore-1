@@ -1,0 +1,32 @@
+@import ore.OreConfig
+@import models.viewhelper.ScopedProjectData
+@import models.viewhelper.ProjectData
+
+@import controllers.sugar.Requests.OreRequest
+@(p: ProjectData, sp: ScopedProjectData)(implicit messages: Messages, config: OreConfig, request: OreRequest[_])
+
+<div class="member-setting">
+    <table class="table">
+        <thead class="table-dark">
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Role</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for(member <- p.members) {
+                <tr>
+                    <th scope="row">@member._2.name</th>
+                    <td>@member._1.role.title</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="input-group">
+        <input type="text" class="form-control" placeholder="Username" aria-label="Username" aria-describedby="add-addon" id="addMemberInput">
+        <div class="input-group-append">
+            <button class="btn btn-success" type="button" id="add-addon">Invite</button>
+        </div>
+    </div>
+</div>

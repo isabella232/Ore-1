@@ -121,6 +121,7 @@ ore {
 
     queue {
         max-review-time = 1d
+        page-size = 25
     }
 }
 
@@ -251,7 +252,8 @@ filters {
             ]
             img-src = [
                 "self",
-                "https:"
+                "https:",
+                "data:"
             ]
             font-src = [
                 "self"

@@ -1,0 +1,81 @@
+@import ore.project.Category
+
+@import ore.OreConfig
+@(form: String,
+  description: Option[String] = None,
+  issues: Option[String] = None,
+  source: Option[String] = None,
+  licenseName: Option[String] = None,
+  licenseUrl: Option[String] = None,
+  category: Option[Category] = None,
+  forumSync: Boolean = true)(implicit messages: Messages, config: OreConfig)
+
+<div class="setting mt-0">
+    <label for="description">Description</label>
+    <input @if(description.isDefined) { value="@description.get" } form="@form" type="text" class="form-control" id="description" name="description" placeholder="@messages("version.create.noDescription")" maxlength="@config.ore.projects.maxDescLen" />
+    <small class="form-text text-muted">A short description of your project (max @config.ore.projects.maxDescLen characters).</small>
+</div>
+
+<div class="setting">
+    <label for="category">Category</label>
+    @* Custom-select so it doesn't look shit *@
+    <select class="custom-select" id="category" name="category" form="@form" required>
+        @if(category.isEmpty) {
+            <option value="" disabled selected>Select a category...</option>
+        }
+        @for(availableCategory <- Category.visible) {
+            @if(availableCategory.isVisible) {
+                <option @if(category.isDefined && category.get.equals(availableCategory)) { selected } >
+                @availableCategory.title
+                </option>
+            }
+        }
+    </select>
+    <small class="form-text text-muted">Categorize your project into one of @Category.visible.size categories. Appropriately categorizing your project makes it easier for people to find.</small>
+</div>
+
+<div class="setting">
+    <label for="issues">Issue tracker <small>(optional)</small></label>
+    <input @if(issues.isDefined) { value="@issues.get" } form="@form" type="url" class="form-control" id="issues" name="issues" placeholder="https://github.com/SpongePowered/SpongeAPI/issues" />
+    <small class="form-text text-muted">Providing an issue tracker helps your users get support more easily and provides you with an easy way to track bugs.</small>
+</div>
+
+<div class="setting">
+    <label for="source">Source code <small>(optional)</small></label>
+    <input @if(source.isDefined) { value="@source.get" } form="@form" type="url" class="form-control" id="source" name="source" placeholder="https://github.com/SpongePowered/SpongeAPI" />
+    <small class="form-text text-muted">Support the community of developers by making your project open source!</small>
+</div>
+
+<div class="setting">
+    <label for="license-name">@messages("project.settings.license") <small>(@messages("general.optional"))</small></label>
+
+    <div class="input-group">
+        <div class="input-group-prepend">
+            <button class="btn dropdown-toggle btn-license" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                @licenseName.getOrElse(messages("licenses.mit"))
+            </button>
+            <input type="text" class="form-control" style="display: none;" name="license-name" form="@form" value="@licenseName.getOrElse(messages("licenses.mit"))" />
+            <div class="dropdown-menu dropdown-license">
+                <a class="dropdown-item">@messages("licenses.mit")</a>
+                <a class="dropdown-item">@messages("licenses.apache2.0")</a>
+                <a class="dropdown-item">@messages("licenses.gpl")</a>
+                <a class="dropdown-item">@messages("licenses.lgpl")</a>
+                <div role="separator" class="dropdown-divider"></div>
+                <a class="dropdown-item license-custom">@messages("licenses.custom")&hellip;</a>
+            </div>
+        </div>
+        <input type="text" name="license-url" class="form-control" form="@form" placeholder="https://github.com/SpongePowered/SpongeAPI/LICENSE.md" value="@licenseUrl">
+    </div>
+
+    <small class="form-text text-muted">@messages("project.settings.license.info")</small>
+</div>
+
+<div class="setting">
+    <label for="forum-sync">@messages("project.settings.forumSync")</label>
+    <br>
+    <div class="custom-control custom-checkbox">
+        <input @if(forumSync) { checked } value="true" type="checkbox" class="custom-control-input" id="forum-sync" name="forum-sync" form="@form">
+        <label class="custom-control-label" for="forum-sync">Make forum posts</label>
+    </div>
+    <small class="form-text text-muted">@messages("project.settings.forumSync.info")</small>
+</div>

@@ -37,6 +37,8 @@ import ore.permission.scope.GlobalScope
 import ore.project.{Category, ProjectSortingStrategies}
 import ore.user.MembershipDossier
 import ore.{OreConfig, OreEnv, Platform, PlatformCategory}
+import play.api.routing.JavaScriptReverseRouter
+import slick.dbio.{DBIOAction, NoStream}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
 import util.syntax._
 import views.{html => views}
@@ -72,6 +74,20 @@ final class Application @Inject()(forms: OreForms)(
     Ok(views.linkout(remoteUrl))
   }
 
+  def javascriptRoutes = Action { implicit request =>
+    Ok(
+      JavaScriptReverseRouter("jsRoutes")(
+        routes.javascript.Application.showHome,
+        routes.javascript.Users.showAuthors,
+        routes.javascript.Users.showStaff,
+        controllers.project.routes.javascript.Projects.showPendingIcon,
+        controllers.project.routes.javascript.Projects.showIcon,
+        controllers.project.routes.javascript.Projects.resetIcon,
+        controllers.project.routes.javascript.Projects.uploadIcon
+      )
+    ).as("text/javascript")
+  }
+
   private val queryProjectRV = {
     val tableProject = TableQuery[ProjectTableMain]
     val tableVersion = TableQuery[VersionTable]
@@ -94,8 +110,8 @@ final class Application @Inject()(forms: OreForms)(
       query: Option[String],
       sort: Option[Int],
       page: Option[Int],
-      platformCategory: Option[String],
-      platform: Option[String]
+      platformCategory: Option[Int],
+      platform: Option[Int]
   ): Action[AnyContent] = OreAction.asyncF { implicit request =>
     // Get categories and sorting strategy
 
@@ -103,8 +119,8 @@ final class Application @Inject()(forms: OreForms)(
     val currentUserId   = request.headerData.currentUser.map(_.id.value).getOrElse(-1L)
 
     val ordering = sort.flatMap(ProjectSortingStrategies.withId).getOrElse(ProjectSortingStrategies.Default)
-    val pcat     = platformCategory.flatMap(p => PlatformCategory.getPlatformCategories.find(_.name.equalsIgnoreCase(p)))
-    val pform    = platform.flatMap(p => Platform.values.find(_.name.equalsIgnoreCase(p)))
+    val pcat     = platformCategory.flatMap(p => PlatformCategory.getPlatformCategories.find(_.id == p))
+    val pform    = platform.flatMap(p => Platform.values.find(_.value == p))
 
     // get the categories being queried
     val categoryPlatformNames: List[String] = pcat.toList.flatMap(_.getPlatforms.map(_.name))
@@ -156,64 +172,6 @@ final class Application @Inject()(forms: OreForms)(
       Ok(views.home(data, catList, query.filter(_.nonEmpty), pageNum, ordering, pcat, pform))
     }
   }
-
-  /**
-    * Shows the moderation queue for unreviewed versions.
-    *
-    * @return View of unreviewed versions.
-    */
-  def showQueue(): Action[AnyContent] =
-    Authenticated.andThen(PermissionAction(ReviewProjects)).asyncF { implicit request =>
-      // TODO: Pages
-      val data = this.service
-        .runDBIO(queryQueue.result)
-        .flatMap { list =>
-          service
-            .runDBIO(queryReviews(list.map(_._1.id.value)).result)
-            .map(_.groupBy(_._1.versionId))
-            .tupleLeft(list)
-        }
-        .map {
-          case (list, reviewsByVersion) =>
-            val reviewData = reviewsByVersion.mapValues { reviews =>
-              val sortedReviews = reviews.sorted(Review.ordering)
-              sortedReviews
-                .find { case (review, _) => review.endedAt.isEmpty }
-                .map { case (r, a) => (r, true, a) } // Unfinished Review
-                .orElse(sortedReviews.headOption.map { case (r, a) => (r, false, a) }) // any review
-            }
-
-            list.map {
-              case (v, p, c, a, u) => (v, p, c, a, u, reviewData.getOrElse(v.id.value, None))
-            }
-        }
-      data.map { list =>
-        val lists = list.partition(_._6.isEmpty)
-        val reviewList = lists._2.map {
-          case (v, p, c, a, _, r) => (p, v, c, a, r.get)
-        }
-        val unReviewList = lists._1.map {
-          case (v, p, c, a, u, _) => (p, v, c, a, u)
-        }
-
-        Ok(views.users.admin.queue(reviewList, unReviewList))
-      }
-
-    }
-
-  private def queryReviews(versions: Seq[DbRef[Version]]) =
-    for {
-      r <- TableQuery[ReviewTable] if r.versionId.inSetBind(versions)
-      u <- TableQuery[UserTable] if r.userId === u.id
-    } yield (r, u.name)
-
-  private def queryQueue =
-    for {
-      (v, u) <- TableQuery[VersionTable].joinLeft(TableQuery[UserTable]).on(_.authorId === _.id)
-      c      <- TableQuery[ChannelTable] if v.channelId === c.id && v.reviewStatus === (ReviewState.Unreviewed: ReviewState)
-      p      <- TableQuery[ProjectTableMain] if p.id === v.projectId && p.visibility =!= (Visibility.SoftDelete: Visibility)
-      ou     <- TableQuery[UserTable] if p.userId === ou.id
-    } yield (v, p, c, u.map(_.name), ou)
 
   /**
     * Shows the overview page for flags.

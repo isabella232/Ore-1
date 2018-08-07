@@ -1,0 +1,89 @@
+@import controllers.sugar.Requests.OreRequest
+@import ore.OreConfig
+@import models.viewhelper.ProjectData
+@import models.viewhelper.ScopedProjectData
+@import views.html.helper.form
+@import views.html.helper.CSRF
+@import ore.permission.HardRemoveProject
+@import ore.permission.HideProjects
+
+@import models.project.Visibility
+@(p: ProjectData, sp: ScopedProjectData)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+
+@projects.settings.settingsTemplate("Actions", p, sp) {
+    @if(request.headerData.globalPerm(HideProjects)) {
+        <div class="setting visibility-setting">
+        @form(action = controllers.project.routes.Projects.setVisibility(p.project.ownerName, p.project.slug), 'id -> "visibility-form") {
+            @CSRF.formField
+
+            <label for="name">Change the visibility</label>
+
+            <p class="text-muted">@messages("project.rename.info")</p>
+
+            <select class="custom-select mb-2" id="visibility" name="visibility" form="visibility-form" required>
+                @for(visibility <- Visibility.values) {
+                    <option value="@visibility.value" @if(p.project.visibility.equals(visibility)) { selected } >
+                        @visibility.title
+                    </option>
+                }
+            </select>
+
+            <div class="form-group" id="reason-form" style="display: none;">
+                <label for="visibilityComment">Reason</label>
+                <textarea class="form-control no-resize" name="comment" id="visibilityComment" rows="3" form="visibility-form"></textarea>
+            </div>
+
+            <button class="btn btn-info" type="submit">Change Visibility</button>
+        }
+        </div>
+    }
+
+    <div class="setting rename-setting">
+        @form(action = controllers.project.routes.Projects.rename(p.project.ownerName, p.project.slug), 'id -> "rename-form") {
+            @CSRF.formField
+
+            <label for="name">@messages("project.rename")</label>
+
+            <p class="text-muted">@messages("project.rename.info")</p>
+
+            <div class="input-group">
+                <input type="text" class="form-control" placeholder="Project name" aria-label="Project name" aria-describedby="rename-button"
+                value="@p.project.name" maxlength="@config.ore.projects.maxNameLen" id="name" name="name">
+                <div class="input-group-append">
+                    <button class="btn btn-warning" type="button" id="rename-button">@messages("project.rename")</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="setting delete-setting">
+    @form(action = controllers.project.routes.Projects.setVisibility(p.project.ownerName, p.project.slug), 'id -> "delete-form") {
+        @CSRF.formField
+        <label>Delete</label>
+
+        <p class="text-muted mb-2">Once you delete a project, it cannot be recovered.</p>
+
+        <input type="hidden" name="visibility" value="@Visibility.SoftDelete.value"/>
+
+        <div class="input-group">
+            <input type="text" class="form-control" placeholder="Reason" id="comment" name="comment" required>
+            <div class="input-group-append">
+                <button class="btn btn-danger" type="button" id="delete-button">@messages("general.delete")</button>
+            </div>
+        </div>
+    }
+    </div>
+
+    @if(request.headerData.globalPerm(HardRemoveProject)) {
+        <div class="setting hardDelete-setting">
+        @form(action = controllers.project.routes.Projects.delete(p.project.ownerName, p.project.slug), 'id -> "hardDelete-form") {
+            @CSRF.formField
+
+            <label for="name">Hard Delete</label>
+            <p class="text-muted mb-2">Once you delete a project, it cannot be recovered.</p>
+            <button class="btn btn-danger" type="button" id="hardDelete-button">Hard Delete</button>
+        }
+        </div>
+    }
+
+}

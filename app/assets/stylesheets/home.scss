@@ -1,0 +1,45 @@
+@import "variables";
+
+@import "lib/bootstrap/scss/_functions.scss";
+@import "lib/bootstrap/scss/_variables.scss";
+
+@import "plugin-list";
+
+.banner {
+  img {
+    height: 4rem;
+    width: 4rem;
+  }
+
+  .headline {
+    font-weight: bold;
+    font-size: 1.75rem;
+  }
+}
+
+.sponsor {
+  img {
+    height: 3rem;
+  }
+}
+
+.card.card-filters {
+  .list-group > .list-group-item {
+    &.active {
+      box-shadow: inset -10px 0px 0px 0px $sponge_yellow;
+      background: $list-group-bg;
+      border-color: $list-group-border-color;
+      color: $sponge_grey;
+    }
+  }
+}
+
+.queryRemoval a {
+  font-weight: bold;
+  color: $sponge_grey;
+
+  &:hover {
+    text-decoration: none;
+    color: $gray-hover;
+  }
+}

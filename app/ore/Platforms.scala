@@ -116,16 +116,19 @@ object Platform extends IntEnum[Platform] {
   * @author phase
   */
 sealed trait PlatformCategory {
+  def id: Int
   def name: String
 
   def getPlatforms: Seq[Platform] = Platform.values.filter(_.platformCategory == this)
 }
 
 case object SpongeCategory extends PlatformCategory {
+  val id   = 0
   val name = "Sponge Plugins"
 }
 
 case object ForgeCategory extends PlatformCategory {
+  val id   = 1
   val name = "Forge Mods"
 }
 

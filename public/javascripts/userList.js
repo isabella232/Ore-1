@@ -22,6 +22,7 @@
  */
 
 var CURRENT_PAGE = 0;
+var ORDERING = "";
 
 /*
  * ==================================================
@@ -29,18 +30,31 @@ var CURRENT_PAGE = 0;
  * ==================================================
  */
 
-$(function() {
-    $('.table-users').find('thead').find('td:not(:first-child)').click(function() {
-        var sort = $(this).text().toLowerCase().trim();
-        var direction = '';
-        var thisObj = $(this);
-        if (thisObj.hasClass('user-sort')) {
-            // Change direction
-            direction = $(this).find('i').hasClass('o-chevron-up') ? '-' : '';
+var newOrdering = function (element) {
+    var ordering = element.data("ordering");
+    var newOrdering;
+
+    if (ORDERING.startsWith("-")) {
+        ORDERING = ORDERING.substr(1, ORDERING.length);
+
+        if (ORDERING === ordering) {
+            newOrdering = ORDERING;
         }
-        var start = thisObj.data("list");
-        var url = '/' + start + '?sort=' + direction + sort;
-        if (CURRENT_PAGE > 1) url += '&page=' + CURRENT_PAGE;
-        go(url);
+    } else if (ORDERING === ordering) {
+        newOrdering = "-" + ORDERING;
+    } else {
+        newOrdering = ordering;
+    }
+
+    return newOrdering;
+};
+
+$(function () {
+    $('table.staff-table > thead > tr > th[data-ordering]').click(function () {
+        go(jsRoutes.controllers.Users.showStaff(newOrdering($(this)), CURRENT_PAGE > 1 ? CURRENT_PAGE : null).absoluteURL);
+    });
+
+    $('table.authors-table > thead > tr > th[data-ordering]').click(function () {
+        go(jsRoutes.controllers.Users.showAuthors(newOrdering($(this)), CURRENT_PAGE > 1 ? CURRENT_PAGE : null).absoluteURL);
     });
 });
