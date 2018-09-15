@@ -1,7 +1,7 @@
 package form
 
 import db.ObjectReference
-import models.user.role.RoleModel
+import models.user.role.{ProjectRole, RoleModel}
 import ore.permission.role.RoleType
 
 /**
@@ -33,7 +33,9 @@ trait RoleSetBuilder[M <: RoleModel] {
   def build(): Set[M] =
     (for ((userId, i) <- this.users.zipWithIndex) yield {
       newRole(userId, RoleType.withValue(roles(i)))
-    }).toSet
+    }).toSet.filter(role => {
+    role.roleType.roleClass.equals(classOf[ProjectRole])
+  })
 
   /**
     * Creates a new role for the specified user ID and role type.

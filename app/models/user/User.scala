@@ -101,6 +101,8 @@ case class User(
         (false, "error.pgp.noPubKey")
       } else if (projectCount == 0) {
         (true, "")
+      } else if (this.lastPgpPubKeyUpdate.isEmpty) {
+        (true, "")
       } else {
         this.lastPgpPubKeyUpdate.map { lastUpdate =>
           val cooldown = config.security.get[Long]("keyChangeCooldown")

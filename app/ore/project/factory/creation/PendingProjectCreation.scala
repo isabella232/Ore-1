@@ -33,7 +33,6 @@ case class PendingProjectCreation(factory: ProjectCreationFactory,
     */
   val settings: ProjectSettings = ProjectSettings()
 
-  /*
   def complete()(implicit ec: ExecutionContext): Future[(Project, Version)] = {
     free()
     for {
@@ -42,10 +41,9 @@ case class PendingProjectCreation(factory: ProjectCreationFactory,
         this.pendingVersion.project = newProject
         this.factory.createVersion(this.pendingVersion)
       }
-      _ <- newProject.setRecommendedVersion(newVersion._1)
-    } yield (newProject, newVersion._1)
+      updatedProject <- service.update(newProject.copy(recommendedVersionId = Some(newVersion._1.id.value)))
+    } yield (updatedProject, newVersion._1)
   }
-  */
 
 
   override def key: String = this.underlying.ownerName + '/' + this.underlying.slug

@@ -14,7 +14,7 @@ Page used for uploading and creating new projects.
 
 @(pgpStatus: (Boolean, String), createProjectOrgas: Seq[Organization])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
 @template(messages("project.create"), 1) {
-    <script type="text/javascript" src="@routes.Assets.at("javascripts/pluginUpload.js")"></script>
+    <script type="text/javascript" src="@routes.Assets.at("javascripts/pluginCreationUpload.js")"></script>
 
     <ul>
         <li>@Html(messages("project.create.infoText.head"))</li>

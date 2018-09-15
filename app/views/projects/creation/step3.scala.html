@@ -9,15 +9,21 @@ Page used for uploading and creating new projects.
 @import views.html.helper.{CSRF, form}
 @import views.html.projects.creation.template
 @import views.html.utils.userAvatar
-@(pendingProject: PendingProjectCreation, owner: User, authors: Seq[String], orgaData: OrganizationData)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@import ore.permission.role.RoleType
+@import models.user.role.ProjectRole
+@(pendingProject: PendingProjectCreation, owner: User, authors: Seq[String], orgaData: Option[OrganizationData])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@roles = @{
+    RoleType.values.filter(role => role.roleClass.equals(classOf[ProjectRole]) && role.isAssignable).toList.sortBy(_.trust).reverse
+}
 @template(messages("project.create"), 3) {
+    <script type="text/javascript" src="@routes.Assets.at("javascripts/pluginCreationInvite.js")"></script>
 
     @form(action = controllers.project.routes.ProjectCreation.processStep3(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileFormStep3") {
         @CSRF.formField
 
         @Html(messages("project.members.infoText.head"))
 
-        <table class="table table-hover table-sm mt-2">
+        <table class="table table-hover table-sm mt-2 table-project-creation-invite">
             <thead>
                 <tr class="thead-dark">
                     <th width="45"></th>
@@ -28,29 +34,44 @@ Page used for uploading and creating new projects.
             <tbody>
                 <tr>
                     <td width="45">
+                        @userAvatar(Some("ghost"), "ghost", clazz = "user-avatar-xs")
+                    </td>
+                    <td>
+                        <input type="hidden" name="">
+                    </td>
+                    <td>
+                        <select name="">
+                        @roles.map { roleType =>
+                            <option value="@roleType.value">@roleType.title</option>
+                        }
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td width="45">
                         @userAvatar(Some(owner.name), owner.avatarUrl, clazz = "user-avatar-xs")
                     </td>
                     <td>
-                        <input type="hidden" name="users[]" value="@pendingProject.underlying.ownerId"/>
                         @pendingProject.underlying.ownerName
                     </td>
                     <td>
-                        <input type="hidden" name="roles[]" value=""/>
-                        Owner
+                        @RoleType.ProjectOwner.title
                     </td>
                 </tr>
-                @orgaData.filteredMembers.map { case (role, user) =>
+                @if(orgaData.isDefined) {
+                    @orgaData.get.filteredMembers.map { case (role, user) =>
                     <tr class="bg-light">
                         <td width="45">
                             @userAvatar(Some(user.name), user.avatarUrl, clazz = "user-avatar-xs")
                         </td>
                         <td>
                         @user.name
-                    </td>
-                        <td>
-                            @role.roleType.title (inherited from Organization)
                         </td>
+                        <td>
+                        @role.roleType.title (inherited from Organization)
+                    </td>
                     </tr>
+                    }
                 }
             </tbody>
             <tfoot class="bg-light">
@@ -59,7 +80,7 @@ Page used for uploading and creating new projects.
                         <div class="input-group p-2 mt-2">
                             <input type="text" class="form-control" placeholder="User">
                             <div class="input-group-append">
-                                <button class="btn btn-secondary" type="button" id="button-addon2"><i class="fas fa-search fa-fw"></i></button>
+                                <a class="btn btn-secondary" type="button" id="button-addon2"><i class="fas fa-search fa-fw"></i></a>
                             </div>
                         </div>
                     </td>
@@ -76,7 +97,7 @@ Page used for uploading and creating new projects.
             <div class="col-12">
                 <ul class="list-unstyled">
                     @authors.map { author =>
-                        <li><button class="btn btn-link btn-sm">Add</button> @author</li>
+                        <li><a class="btn btn-link btn-sm" data-author="@author">Add</a> @author</li>
                     }
                 </ul>
             </div>
@@ -84,8 +105,12 @@ Page used for uploading and creating new projects.
 
         <div class="row mt-3">
             <div class="col-auto ml-auto">
-                <button class="btn btn-success">@messages("general.continue")</button>
+                <button class="btn btn-success" type="submit">@messages("general.continue")</button>
             </div>
         </div>
+
+        <script>
+
+        </script>
     }
 }

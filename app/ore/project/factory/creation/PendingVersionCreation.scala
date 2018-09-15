@@ -16,15 +16,14 @@ import play.api.cache.SyncCacheApi
   * @param plugin         Uploaded plugin
   */
 case class PendingVersionCreation(factory: ProjectCreationFactory,
-                                  project: Project,
+                                  var project: Project,
                                   var channelName: String,
                                   var channelColor: Color,
                                   underlying: Version,
                                   plugin: PluginFile,
                                   var createForumPost: Boolean,
                                   override val cacheApi: SyncCacheApi)
-                                 ()
-                                  extends Cacheable {
+  extends Cacheable {
 
   /*
   def complete()(implicit ec: ExecutionContext): Future[(Version, Channel, Seq[ProjectTag])] = {

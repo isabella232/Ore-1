@@ -1,17 +1,22 @@
 package controllers.project
 
-import cats.data.OptionT
 import cats.instances.future._
+import cats.syntax.all._
 import controllers.OreBaseController
 import controllers.sugar.Bakery
 import controllers.sugar.Requests.AuthRequest
 import db.ModelService
+import db.impl.OrePostgresDriver.api._
 import discourse.OreDiscourseApi
 import form.OreForms
 import javax.inject.Inject
+import models.project.{Tag, TagColors, Version}
+import models.user.{LoggedAction, UserActionLogger}
 import models.viewhelper.OrganizationData
 import ore.permission._
+import ore.permission.role.RoleType
 import ore.project.factory.ProjectFactory
+import ore.project.factory.TagAlias.ProjectTag
 import ore.project.factory.creation.{PendingProjectCreation, ProjectCreationFactory}
 import ore.project.io.{PluginUpload, ProjectFiles}
 import ore.{OreConfig, OreEnv, StatTracker}
@@ -29,18 +34,19 @@ import scala.concurrent.{ExecutionContext, Future}
 class ProjectCreation @Inject()(stats: StatTracker,
                                 forms: OreForms,
                                 factory: ProjectFactory,
-                                creationFactory: ProjectCreationFactory,
-                                implicit val syncCache: SyncCacheApi,
-                                implicit override val cache: AsyncCacheApi,
-                                implicit override val bakery: Bakery,
-                                implicit override val sso: SingleSignOnConsumer,
-                                implicit val forums: OreDiscourseApi,
-                                implicit override val messagesApi: MessagesApi,
-                                implicit override val env: OreEnv,
-                                implicit override val config: OreConfig,
-                                implicit override val service: ModelService,
-                                implicit override val auth: SpongeAuthApi)(implicit val ec: ExecutionContext)
-                         extends OreBaseController {
+                                creationFactory: ProjectCreationFactory)(
+     implicit val ec: ExecutionContext,
+     syncCache: SyncCacheApi,
+     cache: AsyncCacheApi,
+     bakery: Bakery,
+     sso: SingleSignOnConsumer,
+     auth: SpongeAuthApi,
+     forums: OreDiscourseApi,
+     messagesApi: MessagesApi,
+     env: OreEnv,
+     config: OreConfig,
+     service: ModelService
+   ) extends OreBaseController {
 
   implicit val fileManager: ProjectFiles = creationFactory.fileManager
   private val self = controllers.project.routes.ProjectCreation
@@ -217,13 +223,12 @@ class ProjectCreation @Inject()(stats: StatTracker,
 
       }
       case Right(pendingProject) => {
-        val res = for {
-          owner <- OptionT.liftF(pendingProject.underlying.owner.user)
-          orgaData <- owner.toMaybeOrganization.semiflatMap(OrganizationData.of)
+        for {
+          owner <- pendingProject.underlying.owner.user
+          orgaData <- owner.toMaybeOrganization.semiflatMap(OrganizationData.of).value
         } yield {
-          Ok(views.creation.step3(pendingProject, owner, pendingProject.file.data.get.authors, orgaData))
+          Ok(views.creation.step3(pendingProject, owner, pendingProject.file.data.get.authors.distinct.filterNot(_.equals(owner.name)), orgaData))
         }
-        res.getOrElse(NotFound)
       }
     }
   }
@@ -242,8 +247,25 @@ class ProjectCreation @Inject()(stats: StatTracker,
 
       }
       case Right(pendingProject) => {
-        Future.successful(Redirect(self.showStep4()))
-
+        this.forms.ProjectMemberRoles.bindFromRequest().fold(
+          hasErrors =>
+            Future.successful(FormError(self.showStep3(), hasErrors)),
+          success = formData => {
+            if (formData.roles.count(RoleType.ProjectOwner.value.equalsIgnoreCase) != 0) {
+              Future.successful(Redirect(self.showStep3()).withError("error"))
+            } else {
+              val newPending = pendingProject.copy(
+                roles = formData.build()
+              )
+              newPending.cache()
+              for {
+                owner <- newPending.underlying.owner.user
+              } yield {
+                Redirect(self.showStep4())
+              }
+            }
+          }
+        )
       }
     }
   }
@@ -260,13 +282,11 @@ class ProjectCreation @Inject()(stats: StatTracker,
 
       }
       case Right(pendingProject) => {
-        val res = for {
-          owner <- OptionT.liftF(pendingProject.underlying.owner.user)
-          orgaData <- owner.toMaybeOrganization.semiflatMap(OrganizationData.of)
+        for {
+          owner <- pendingProject.underlying.owner.user
         } yield {
-          Ok(views.creation.step4(pendingProject, owner, pendingProject.file.data.get.authors, orgaData))
+          Ok(views.creation.step4(pendingProject, owner))
         }
-        res.getOrElse(NotFound)
       }
     }
   }
@@ -286,7 +306,47 @@ class ProjectCreation @Inject()(stats: StatTracker,
       }
       case Right(pendingProject) => {
         Future.successful(Redirect(controllers.project.routes.Projects.show(pendingProject.underlying.ownerName, pendingProject.underlying.slug)))
+        this.forms.VersionCreate.bindFromRequest.fold(
+          hasErrors =>
+            Future.successful(FormError(self.showStep3(), hasErrors)),
+          versionData => {
 
+            val pendingVersion = pendingProject.pendingVersion
+            pendingVersion.channelName = versionData.channelName.trim
+            pendingVersion.channelColor = versionData.color
+            pendingVersion.createForumPost = versionData.forumPost
+
+            pendingProject.complete.map { created =>
+              UserActionLogger.log(request, LoggedAction.ProjectCreated, created._1.id.value, "created", "null")
+              addUnstableTag(created._2, versionData.unstable)
+              Redirect(controllers.project.routes.Projects.show(pendingProject.underlying.ownerName, pendingProject.underlying.slug))
+            }
+          }
+        )
+      }
+    }
+  }
+
+  //TODO: Remove duplicated code
+  private def addUnstableTag(version: Version, unstable: Boolean) = {
+    if (unstable) {
+      service.access(classOf[ProjectTag]).filter(t => t.name === "Unstable" && t.data === "").flatMap { tagsWithVersion =>
+        if (tagsWithVersion.isEmpty) {
+          val tag = Tag(
+            versionIds = List(version.id.value),
+            name = "Unstable",
+            data = "",
+            color = TagColors.Unstable
+          )
+          service.access(classOf[ProjectTag]).add(tag).flatMap { tag =>
+            // requery the tag because it now includes the id
+            service.access(classOf[ProjectTag]).filter(t => t.name === tag.name && t.data === tag.data).map(_.toList.head)
+          } flatMap(newTag => service.update(version.copy(tagIds = newTag.id.value :: version.tagIds)))
+        } else {
+          val tag = tagsWithVersion.head
+          service.update(tag.copy(versionIds = version.id.value :: tag.versionIds)) *>
+            service.update(version.copy(tagIds = tag.id.value :: version.tagIds))
+        }
       }
     }
   }
@@ -319,35 +379,4 @@ class ProjectCreation @Inject()(stats: StatTracker,
       }
     }
   }
-
-  /*
-  def showInvitationForm(author: String, slug: String): Action[AnyContent] = UserLock().async { implicit request =>
-    implicit val currentUser: User = request.user
-
-    val authors = pendingProject.file.data.get.authors.toList
-    (
-      Future.sequence(authors.filterNot(_.equals(currentUser.username)).map(this.users.withName(_).value)),
-      this.forums.countUsers(authors),
-      pendingProject.underlying.owner.user
-    ).parMapN { (users, registered, owner) =>
-      Ok(views.invite(owner, pendingProject, users.flatten, registered))
-    }
-  }
-
-  def showFirstVersionCreator(author: String, slug: String): Action[AnyContent] = UserLock() { implicit request =>
-    val res = for {
-      pendingProject <- EitherT.fromOption[Id](this.factory.getPendingProject(author, slug), Redirect(self.showCreator()).withError(
-
-
-        "error.project.timeout"))
-      roles <- bindFormEitherT[Id](this.forms.ProjectMemberRoles)(_ => BadRequest: Result)
-    } yield {
-      pendingProject.roles = roles.build()
-      val pendingVersion = pendingProject.pendingVersion
-      Redirect(routes.Versions.showCreatorWithMeta(author, slug, pendingVersion.underlying.versionString))
-    }
-
-    res.merge
-  }
-  */
 }
