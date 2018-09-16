@@ -143,7 +143,7 @@
                             </a>
                         }
                         @if(request.headerData.globalPerm(ReviewProjects)) {
-                            <a class="dropdown-item" href="@routes.Application.showVersionQueuePending(None)">
+                            <a class="dropdown-item" href="@routes.Reviews.showVersionQueuePending(None)">
                                 <i class="far fa-thumbs-up fa-fw @if(request.headerData.hasReviewQueue) { unread }"></i>
                                 @messages("user.queue")
                             </a>

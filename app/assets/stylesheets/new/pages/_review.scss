@@ -1,0 +1,22 @@
+.pending-queue-table {
+  margin-bottom: 0;
+
+  tr > td, tr > th {
+    background: white;
+    white-space: nowrap;
+
+    svg {
+      margin-right: 0.5rem;
+    }
+  }
+
+  .fa-play {
+    color: $neon-green;
+  }
+  .fa-times, .fa-pause {
+    color: $neon-red;
+  }
+  .fa-info {
+    color: $neon-blue;
+  }
+}

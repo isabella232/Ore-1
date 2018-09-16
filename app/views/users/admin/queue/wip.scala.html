@@ -14,12 +14,63 @@
 
 @import views.html.users.admin.queue.template
 
-@(reviews: Seq[(Version, Project, Channel, Option[String], User, Review)])(implicit messages: Messages, request: OreRequest[_], config: OreConfig, flash: Flash)
+@(reviews: Seq[(Version, Project, Channel, Option[String], User, Review, User)], currentPage: Int, totalPages: Int)(implicit messages: Messages, request: OreRequest[_], config: OreConfig, flash: Flash)
 
-@users.admin.queue.template(2) {
-    @reviews.map { review =>
-        <kbd>@review._2.name</kbd> <samp>@review._1.versionString</samp>
-        @review._6.endedAt.getOrElse("wip")
-        <br>
-    }
+@users.admin.queue.template(2, currentPage, totalPages) {
+    <div class="table-responsive">
+        <table class="table table-bordered pending-queue-table">
+            <thead class="thead-dark">
+                <tr>
+                    <th class="text-nowrap" scope="col">Project Owner</th>
+                    <th scope="col">Project</th>
+                    <th scope="col">Version</th>
+                    <th scope="col">Channel</th>
+                    <th scope="col">Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @reviews.map { case (version: Version, project: Project, channel: Channel, author: Option[String], user: User, review: Review, reviewer: User) =>
+            <tr>
+                <td class="text-nowrap">
+                    @userAvatar(Some(project.ownerName), user.avatarUrl, clazz = "user-avatar-xs")
+                    <a href="@routes.Users.showProjects(project.ownerName, None)">
+                        @project.ownerName
+                    </a>
+                </td>
+                <td class="text-nowrap">
+                    <a href="@controllers.project.routes.Projects.show(project.ownerName, project.slug)">@project.name</a>
+                </td>
+                <td class="text-nowrap">
+                    <a href="@controllers.project.routes.Versions.show(project.ownerName, project.slug, version.name)">
+                    @version.name
+                    </a>
+                </td>
+                <td class="text-nowrap">
+                    <div style="display: inline-block; height: 10px; width: 10px; margin-right: 0.2rem; background: @channel.color.hex; border-radius: 50%"></div>
+                    @channel.name
+                </td>
+                <td>
+                    @if(review.endedAt.isDefined) {
+                        <i class="fas fa-pause fa-fw"></i>
+                        <a href="@routes.Users.showProjects(reviewer.name, None)">
+                            @reviewer.name
+                        </a>
+                        stopped this review
+                    } else {
+                        <i class="fas fa-play fa-fw"></i>
+                        Under review by
+                        <a href="@routes.Users.showProjects(reviewer.name, None)">
+                            @reviewer.name
+                        </a>
+                    }
+                </td>
+                <td class="text-center">
+                    <a href="@routes.Reviews.showReviews(project.ownerName, project.slug, version.name)"><i class="fas fa-lg fa-info"></i></a>
+                </td>
+            </tr>
+            }
+            </tbody>
+        </table>
+    </div>
 }

@@ -16,7 +16,7 @@ import db.impl.schema.{NotificationTable, OrganizationMembersTable, Organization
 import db.{ModelService, ObjectId, ObjectReference, ObjectTimestamp}
 import form.OreForms
 import models.admin.{Message, Review}
-import models.project.{Project, Version}
+import models.project.{Channel, Project, Version, VisibilityTypes}
 import models.user.{LoggedAction, Notification, User, UserActionLogger}
 import ore.permission.ReviewProjects
 import ore.permission.role.{Lifted, RoleType}
@@ -43,6 +43,115 @@ final class Reviews @Inject()(forms: OreForms)(
     config: OreConfig,
     service: ModelService
 ) extends OreBaseController {
+
+  private def queuePageSize = this.config.ore.get[Int]("queue.page-size")
+  private def totalPages(itemCount: Int) = math.ceil(itemCount.toFloat / queuePageSize).toInt
+
+  /**
+    * Shows the moderation queue for unreviewed versions.
+    *
+    * @return View of unreviewed versions.
+    */
+  def showVersionQueuePending(page: Option[Int]): Action[AnyContent] = (Authenticated andThen PermissionAction[AuthRequest](ReviewProjects)).async { implicit request =>
+    val currentPage = page.getOrElse(1)
+
+    service.DB.db.run(queryVersionQueuePending(currentPage)).map { result =>
+      Ok(views.users.admin.queue.pending(result._1, currentPage, totalPages(result._2)))
+    }
+  }
+
+  /**
+    * Shows the moderation queue for versions which are in review.
+    *
+    * @return View of versions which are in review.
+    */
+  def showVersionQueueWIP(page: Option[Int]): Action[AnyContent] = (Authenticated andThen PermissionAction[AuthRequest](ReviewProjects)).async { implicit request =>
+    val currentPage = page.getOrElse(1)
+
+    service.DB.db.run(queryVersionQueueWIP(currentPage)).map { result =>
+      Ok(views.users.admin.queue.wip(result._1, currentPage, totalPages(result._2)))
+    }
+  }
+
+  /**
+    * Shows the moderation queue for reviewed versions.
+    *
+    * @return View of reviewed versions.
+    */
+  def showVersionQueueDone(page: Option[Int]): Action[AnyContent] = (Authenticated andThen PermissionAction[AuthRequest](ReviewProjects)).async { implicit request =>
+    val currentPage = page.getOrElse(1)
+
+    service.DB.db.run(queryVersionQueueDone(currentPage)).map { result =>
+      Ok(views.users.admin.queue.done(result._1, currentPage, totalPages(result._2)))
+    }
+  }
+
+  private def queryVersionQueuePending(page: Int = 1) = {
+    val versionTable = TableQuery[VersionTable]
+    val channelTable = TableQuery[ChannelTable]
+    val projectTable = TableQuery[ProjectTableMain]
+    val userTable = TableQuery[UserTable]
+    val reviewsTable = TableQuery[ReviewTable]
+
+    val base = (for {
+      ((v, u), r) <- (versionTable joinLeft userTable on (_.authorId === _.id)) joinLeft reviewsTable on (_._1.id === _.versionId)
+      c <- channelTable if v.channelId === c.id && v.isReviewed =!= true && v.isNonReviewed =!= true && v.isReviewed === false && v.visibility =!= VisibilityTypes.SoftDelete
+      p <- projectTable if v.projectId === p.id && p.visibility =!= VisibilityTypes.SoftDelete
+      ou <- userTable if p.userId === ou.id
+    } yield {
+      (v, p, c, u.map(_.name), ou, r)
+    }).filter { case (_, _, _, _, _, r) =>
+      r.isEmpty
+    }.sortBy { case (v, _, _, _, _, _) =>
+      v.createdAt.asc.nullsFirst
+    }
+
+    base.drop((page - 1) * queuePageSize).take(queuePageSize).result zip base.length.result
+  }
+
+  private def queryVersionQueueWIP(page: Int = 1) = {
+    val versionTable = TableQuery[VersionTable]
+    val channelTable = TableQuery[ChannelTable]
+    val projectTable = TableQuery[ProjectTableMain]
+    val userTable = TableQuery[UserTable]
+    val reviewsTable = TableQuery[ReviewTable]
+
+    val base = (for {
+      (v, u) <- versionTable joinLeft userTable on (_.authorId === _.id)
+      c <- channelTable if v.channelId === c.id && v.isReviewed =!= true && v.isNonReviewed =!= true && v.isReviewed === false && v.visibility =!= VisibilityTypes.SoftDelete
+      p <- projectTable if v.projectId === p.id && p.visibility =!= VisibilityTypes.SoftDelete
+      ou <- userTable if p.userId === ou.id
+      r <- reviewsTable if r.versionId === v.id //todo: only get latest review for each project
+      ru <- userTable if r.userId === ru.id
+    } yield {
+      (v, p, c, u.map(_.name), ou, r, ru)
+    }).sortBy { case (_, _, _, _, _, r, _) =>
+      r.createdAt.desc.nullsLast
+    }
+
+    base.drop((page - 1) * queuePageSize).take(queuePageSize).result zip base.length.result
+  }
+
+  private def queryVersionQueueDone(page: Int = 1) = {
+    val versionTable = TableQuery[VersionTable]
+    val channelTable = TableQuery[ChannelTable]
+    val projectTable = TableQuery[ProjectTableMain]
+    val userTable = TableQuery[UserTable]
+
+    val base = (for {
+      (v, u) <- versionTable joinLeft userTable on (_.authorId === _.id)
+      c <- channelTable if v.channelId === c.id && v.isNonReviewed =!= true && c.isNonReviewed =!= true && v.isReviewed === true && v.visibility =!= VisibilityTypes.SoftDelete
+      p <- projectTable if v.projectId === p.id && p.visibility =!= VisibilityTypes.SoftDelete
+      ou <- userTable if p.userId === ou.id
+      ru <- userTable if v.reviewerId === ru.id
+    } yield {
+      (v, p, c, u.map(_.name), ou, ru)
+    }).sortBy { case (v, _, _, _, _, _) =>
+      v.approvedAt.desc.nullsLast
+    }
+
+    base.drop((page - 1) * queuePageSize).take(queuePageSize).result zip base.length.result
+  }
 
   def showReviews(author: String, slug: String, versionString: String): Action[AnyContent] =
     Authenticated.andThen(PermissionAction(ReviewProjects)).andThen(ProjectAction(author, slug)).asyncEitherT {

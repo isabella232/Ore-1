@@ -23,13 +23,13 @@
 }
 
 .btn-disabled {
-  background: white;
-  border-color: lighten($gray-focus, 10);
-  color: $gray-focus;
+  background: #4b4b4b;
+  border-color: darken(#4b4b4b, 9);
+  color: #7d7d7d;
 
   &:hover, &:focus {
     background: white;
-    border-color: $gray-focus;
+    border-color: $sponge_light_gray;
     box-shadow: none;
   }
 }

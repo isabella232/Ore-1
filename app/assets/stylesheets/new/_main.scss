@@ -12,6 +12,7 @@
 @import "pages/users";
 @import "pages/layout";
 @import "pages/projectCreation";
+@import "pages/review";
 
 .minor {
   color: gray;
@@ -27,6 +28,7 @@
   > .page-item, .page-item:last-child, .page-item:first-child {
     > .page-link {
       border-radius: 0;
+      padding: 0.725rem 1rem;
       @extend .btn-gray;
     }
 
@@ -81,9 +83,6 @@
         float: right;
         margin-top: 0.2em;
       }
-    }
-    th:hover:not(:first-child) {
-      background-color: $gray-hover;
     }
   }
   tfoot td:last-child {
