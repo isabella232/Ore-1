@@ -45,7 +45,7 @@ final class Reviews @Inject()(forms: OreForms)(
 ) extends OreBaseController {
 
   private def queuePageSize = this.config.ore.get[Int]("queue.page-size")
-  private def totalPages(itemCount: Int) = math.ceil(itemCount.toFloat / queuePageSize).toInt
+  private def totalPages(itemCount: Int) = math.ceil(itemCount.toDouble / queuePageSize).toInt
 
   /**
     * Shows the moderation queue for unreviewed versions.

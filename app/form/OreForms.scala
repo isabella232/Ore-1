@@ -319,8 +319,8 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
   /**
     * Used to process the first step of the upload process
     */
-  def ProjectCreateStep1(ownersUserCanUploadTo: Seq[Int]) = Form(single(
-    "owner" -> optional(number).verifying(ownerIdInList(ownersUserCanUploadTo))
+  def ProjectCreateStep1(ownersUserCanUploadTo: Seq[ObjectReference]) = Form(single(
+    "owner" -> optional(longNumber).verifying(ownerIdInList(ownersUserCanUploadTo))
   ))
 
   /**
@@ -333,12 +333,12 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
     "license-name" -> text,
     "license-url" -> url,
     "description" -> text,
-    "users" -> list(number),
+    "users" -> list(longNumber),
     "roles" -> list(text),
     "userUps" -> list(text),
     "roleUps" -> list(text),
     "update-icon" -> boolean,
-    "owner" -> optional(number),
+    "owner" -> optional(longNumber),
     "forum-sync" -> boolean
   )(ProjectSettingsForm.apply)(ProjectSettingsForm.unapply))
 

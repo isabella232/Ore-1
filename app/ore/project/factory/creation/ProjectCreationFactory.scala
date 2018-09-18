@@ -66,7 +66,7 @@ trait ProjectCreationFactory {
     * @param ownerId
     * @return
     */
-  def createProjectStep1(uploadData: PluginUpload, uploader: User, ownerId: Int)(implicit ec: ExecutionContext, messages: Messages) : Either[String, PendingProjectCreation] = {
+  def createProjectStep1(uploadData: PluginUpload, uploader: User, ownerId: Long)(implicit ec: ExecutionContext, messages: Messages) : Either[String, PendingProjectCreation] = {
     // Check files in PluginUpload
     val filePlugin = uploadData.pluginFileName
     var fileSignature = uploadData.signatureFileName
@@ -218,6 +218,7 @@ trait ProjectCreationFactory {
           role.user.flatMap { user =>
             dossier.addRole(role.copy(projectId = projectId)) *>
               user.sendNotification(Notification(
+                userId = user.id.value,
                 originId = ownerId,
                 notificationType = NotificationTypes.ProjectInvite,
                 messageArgs = NonEmptyList.of("notification.project.invite", role.roleType.title, project.name)

@@ -101,7 +101,7 @@ class ProjectCreation @Inject()(stats: StatTracker,
       canUploadTo = canUploadTo + user.id.value
 
       // Start validation process
-      if (pgpValid._1 == false) {
+      if (!pgpValid._1) {
         // Show error from PGP Key
         Redirect(self.showStep1()).withError(pgpValid._2)
 
@@ -160,12 +160,9 @@ class ProjectCreation @Inject()(stats: StatTracker,
     */
   def showStep2(): Action[AnyContent] = UserLock() async { implicit request =>
     projectCreationFromUser() match {
-      case Left(errorMessage) => {
+      case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
-
-      }
-      case Right(pendingProject) => {
-
+      case Right(pendingProject) =>
         // Check namespaces
         for {
           pluginId <- this.projects.withPluginId(pendingProject.underlying.pluginId).value
@@ -181,7 +178,6 @@ class ProjectCreation @Inject()(stats: StatTracker,
 
           Ok(views.creation.step2(pendingProject, pluginIdAvailable, namespaceAvailable))
         }
-      }
     }
   }
 
@@ -193,11 +189,9 @@ class ProjectCreation @Inject()(stats: StatTracker,
   def processStep2(): Action[AnyContent] = UserLock() async { implicit request =>
     // Get the possible pending project
     projectCreationFromUser() match {
-      case Left(errorMessage) => {
+      case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
-
-      }
-      case Right(pendingProject) => {
+      case Right(pendingProject) =>
         this.forms.ProjectCreateStep2().bindFromRequest().fold(
           hasErrors =>
             Future.successful(FormError(self.showStep2(), hasErrors)),
@@ -207,7 +201,6 @@ class ProjectCreation @Inject()(stats: StatTracker,
             Future.successful(Redirect(self.showStep3()))
           }
         )
-      }
     }
   }
 
@@ -218,18 +211,15 @@ class ProjectCreation @Inject()(stats: StatTracker,
     */
   def showStep3(): Action[AnyContent] = UserLock() async { implicit request =>
     projectCreationFromUser() match {
-      case Left(errorMessage) => {
+      case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
-
-      }
-      case Right(pendingProject) => {
+      case Right(pendingProject) =>
         for {
           owner <- pendingProject.underlying.owner.user
           orgaData <- owner.toMaybeOrganization.semiflatMap(OrganizationData.of).value
         } yield {
           Ok(views.creation.step3(pendingProject, owner, pendingProject.file.data.get.authors.distinct.filterNot(_.equals(owner.name)), orgaData))
         }
-      }
     }
   }
 
@@ -242,11 +232,9 @@ class ProjectCreation @Inject()(stats: StatTracker,
     // Get the possible pending project
     //TODO: process invitations
     projectCreationFromUser() match {
-      case Left(errorMessage) => {
+      case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
-
-      }
-      case Right(pendingProject) => {
+      case Right(pendingProject) =>
         this.forms.ProjectMemberRoles.bindFromRequest().fold(
           hasErrors =>
             Future.successful(FormError(self.showStep3(), hasErrors)),
@@ -266,7 +254,6 @@ class ProjectCreation @Inject()(stats: StatTracker,
             }
           }
         )
-      }
     }
   }
 
@@ -277,17 +264,14 @@ class ProjectCreation @Inject()(stats: StatTracker,
     */
   def showStep4(): Action[AnyContent] = UserLock() async { implicit request =>
     projectCreationFromUser() match {
-      case Left(errorMessage) => {
+      case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
-
-      }
-      case Right(pendingProject) => {
+      case Right(pendingProject) =>
         for {
           owner <- pendingProject.underlying.owner.user
         } yield {
           Ok(views.creation.step4(pendingProject, owner))
         }
-      }
     }
   }
 
@@ -300,11 +284,9 @@ class ProjectCreation @Inject()(stats: StatTracker,
     // Get the possible pending project
     //TODO: process creation
     projectCreationFromUser() match {
-      case Left(errorMessage) => {
+      case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
-
-      }
-      case Right(pendingProject) => {
+      case Right(pendingProject) =>
         Future.successful(Redirect(controllers.project.routes.Projects.show(pendingProject.underlying.ownerName, pendingProject.underlying.slug)))
         this.forms.VersionCreate.bindFromRequest.fold(
           hasErrors =>
@@ -323,7 +305,6 @@ class ProjectCreation @Inject()(stats: StatTracker,
             }
           }
         )
-      }
     }
   }
 
