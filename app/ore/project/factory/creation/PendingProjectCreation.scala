@@ -19,7 +19,7 @@ import scala.concurrent.{ExecutionContext, Future}
   * @param file     Uploaded plugin
   */
 case class PendingProjectCreation(factory: ProjectCreationFactory,
-                                  underlying: Project,
+                                  var underlying: Project,
                                   file: PluginFile,
                                   channelName: String,
                                   var pendingVersion: PendingVersionCreation,

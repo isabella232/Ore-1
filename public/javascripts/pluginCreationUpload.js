@@ -51,13 +51,21 @@ $(function() {
         // Remove fake path in filename
         fileName = fileName.substr(fileName.lastIndexOf('\\') + 1, fileName.length);
 
+        // Reset alert and buttons
+        $('.upload-step1-file').removeClass('alert-success alert-info').addClass('alert-info');
+        $('.upload-step1-sig-icon').html('');
+        $('.upload-step1-sig-message').text('');
+        $('#uploadFileBtn').removeClass('btn-success btn-primary').addClass('btn-secondary');
+        $('#uploadSignatureBtn').removeClass('btn-success btn-primary').addClass('btn-secondary');
+        $('#uploadFinishBtn').removeClass('btn-success btn-primary').addClass('btn-secondary');
+
         // Show filename and size to user
         $('.upload-step1-file-message').text(fileName + '  –  ' + filesize(this.files[0].size));
         $('.upload-step1-file').show();
 
         // Show next button
         $('#uploadFileBtn').toggleClass('btn-primary').toggleClass('btn-success');
-        $('#uploadSignaterBtn').toggleClass('btn-secondary').toggleClass('btn-primary');
+        $('#uploadSignatureBtn').toggleClass('btn-secondary').toggleClass('btn-primary');
     });
 
     $('#uploadSignatureInput').on('change', function() {
@@ -78,7 +86,7 @@ $(function() {
 
         $('.upload-step1-file').toggleClass('alert-info').toggleClass('alert-success');
 
-        $('#uploadSignaterBtn').toggleClass('btn-primary').toggleClass('btn-success');
+        $('#uploadSignatureBtn').toggleClass('btn-primary').toggleClass('btn-success');
         $('#uploadFinishBtn').toggleClass('btn-secondary').toggleClass('btn-primary');
 
         // Show upload messages
@@ -89,7 +97,7 @@ $(function() {
 
     $("#uploadFinishBtn").on('click', function () {
         // TODO: Fix icon spinning icon
-        $('#uploadFinishBtn i').toggleClass('fa-file-upload').toggleClass('fa-spinner fa-spin');
+        $('#uploadFinishBtn i').toggleClass('fa-file-upload').toggleClass('fa-spinner fa-spin fas fa-fw');
         $("#uploadFileForm").submit();
     });
 

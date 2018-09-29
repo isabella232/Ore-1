@@ -196,9 +196,14 @@ class ProjectCreation @Inject()(stats: StatTracker,
           hasErrors =>
             Future.successful(FormError(self.showStep2(), hasErrors)),
           formData => {
-            pendingProject.settings.save(pendingProject.underlying, formData)
+            for {
+              updatedProject <- pendingProject.settings.save(pendingProject.underlying, formData)
+            } yield {
+              // updatedProject returns a copy of the project with the new data, make sure to add it to the pendingProject again so we don't lose it
+              pendingProject.underlying = updatedProject._1
 
-            Future.successful(Redirect(self.showStep3()))
+              Redirect(self.showStep3())
+            }
           }
         )
     }
