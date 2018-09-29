@@ -195,7 +195,10 @@ GET     /:author/:slug/versions/:version/signature                  @controllers
 GET     /:author/:slug/versions/recommended/jar                     @controllers.project.Versions.downloadRecommendedJar(author, slug, token: Option[String])
 GET     /:author/:slug/versions/:version/jar                        @controllers.project.Versions.downloadJar(author, slug, version, token: Option[String])
 
-GET     /:author/:slug/versions/new                                 @controllers.project.Versions.showCreator(author, slug)
+GET     /:author/:slug/versions/new                                 @controllers.project.VersionCreation.showStep1(author, slug)
+POST    /:author/:slug/versions/new                                 @controllers.project.VersionCreation.processStep1(author, slug)
+
+GET     /:author/:slug/versions/newOld                              @controllers.project.Versions.showCreator(author, slug)
 POST    /:author/:slug/versions/new/upload                          @controllers.project.Versions.upload(author, slug)
 GET     /:author/:slug/versions/new/:version                        @controllers.project.Versions.showCreatorWithMeta(author, slug, version)
 
