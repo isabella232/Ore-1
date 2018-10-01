@@ -121,8 +121,8 @@ function addUploadDialog() {
     var newEntry = $('.upload-container .alert:first-child').clone();
 
     // Edit settings
-    $(newEntry).find('.upload-file-input').attr('name', 'pluginFile[]');
-    $(newEntry).find('.upload-signature-input').attr('name', 'pluginSig[]');
+    $(newEntry).find('.upload-file-input').attr('name', 'pluginFile-' + $('.upload-container .alert').length);
+    $(newEntry).find('.upload-signature-input').attr('name', 'pluginSig-' + + $('.upload-container .alert').length);
 
     // Append entry
     $('.upload-container').append(newEntry);

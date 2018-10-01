@@ -45,4 +45,19 @@ object PluginUpload {
     }
   }
 
+  def bindFromRequestArray()(implicit request: Request[AnyContent]): Set[PluginUpload] = {
+    var result = Set[PluginUpload]()
+    request.body.asMultipartFormData.flatMap { formData =>
+      val pluginFiles = formData.files.filter(_.key.startsWith("pluginFile-"))
+
+      pluginFiles.foreach { pluginFile =>
+        val pluginPart = pluginFile
+        val sigPart = formData.file(pluginFile.key.replaceAll("pluginFile-", "pluginSig-"))
+
+        if (sigPart.isDefined)
+          result += PluginUpload(pluginPart.ref, pluginPart.filename, sigPart.get.ref, sigPart.get.filename)
+      }
+      Some(result)
+    }.get
+  }
 }

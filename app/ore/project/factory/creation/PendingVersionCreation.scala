@@ -25,14 +25,6 @@ case class PendingVersionCreation(factory: ProjectCreationFactory,
                                   override val cacheApi: SyncCacheApi)
   extends Cacheable {
 
-  /*
-  def complete()(implicit ec: ExecutionContext): Future[(Version, Channel, Seq[ProjectTag])] = {
-    free()
-    //this.factory.createVersion(this)
-  }
-  */
-
-
   override def key: String = this.project.url + '/' + this.underlying.versionString
 
   def dependenciesAsGhostTags: Seq[Tag] = {

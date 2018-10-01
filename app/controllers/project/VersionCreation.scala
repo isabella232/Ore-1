@@ -86,13 +86,14 @@ class VersionCreation @Inject()(stats: StatTracker,
         // Show error from PGP Key
         Redirect(self.showStep1(author, slug)).withError(pgpValid._2)
       } else {
-        val uploadData = PluginUpload.bindFromRequest()
+        val uploadData = PluginUpload.bindFromRequestArray()
 
         if (uploadData.isEmpty) {
           // No data found
           Redirect(self.showStep1(author, slug)).withError("error.noFile")
 
         } else {
+          // Process the uploads
           Redirect("")
         }
       }
@@ -104,20 +105,11 @@ class VersionCreation @Inject()(stats: StatTracker,
 
 /*
   def upload(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).async { implicit request =>
-    val call = self.showCreator(author, slug)
-    val user = request.user
-
-    val uploadData = this.factory.getUploadError(user)
-      .map(error => Redirect(call).withError(error))
-      .toLeft(())
-      .flatMap(_ => PluginUpload.bindFromRequest().toRight(Redirect(call).withError("error.noFile")))
 
     EitherT.fromEither[Future](uploadData).flatMap { data =>
       //TODO: We should get rid of this try
       try {
-        this.factory
-          .processSubsequentPluginUpload(data, user, request.data.project)
-          .leftMap(err => Redirect(call).withError(err))
+        this.factory.processSubsequentPluginUpload(data, user, request.data.project).leftMap(err => Redirect(call).withError(err))
       } catch {
         case e: InvalidPluginFileException =>
           EitherT.leftT[Future, PendingVersion](Redirect(call).withErrors(Option(e.getMessage).toList))
