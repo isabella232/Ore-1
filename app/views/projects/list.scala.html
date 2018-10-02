@@ -10,7 +10,7 @@ Collection of all projects.
 @(models: Seq[(Project, User, Version, Seq[Tag])], page: Int, pageSize: Int, call: Int => Call)(implicit config: OreConfig)
 @projectRoutes = @{ controllers.project.routes.Projects }
 <ul class="list-unstyled project-list">
-@models.map { case (project, owner, rv, rvTags) =>
+@models.map { case (project, owner, _, rvTags) =>
     <li class="media project mb-2">
         <img class="mr-3 align-self-center icon sm" src="@owner.avatarUrl" alt="@project.name icon">
         <div class="media-body">

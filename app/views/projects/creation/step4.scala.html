@@ -6,12 +6,11 @@ Page used for uploading and creating new projects.
 @import ore.OreConfig
 @import ore.project.factory.creation.PendingProjectCreation
 @import views.html.helper.{CSRF, form}
-@import views.html.projects.creation.template
 @import security.NonceFilter._
-@(pendingProject: PendingProjectCreation, owner: User)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@(pendingProject: PendingProjectCreation)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
 @project = @{pendingProject.underlying}
 @version = @{pendingProject.pendingVersion.underlying}
-@template(messages("project.create"), 4) {
+@projects.creation.creationTemplate(messages("project.create"), 4) {
 
     @form(action = controllers.project.routes.ProjectCreation.processStep4(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileFormStep4") {
         @CSRF.formField

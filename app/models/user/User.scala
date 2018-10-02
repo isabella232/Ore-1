@@ -85,7 +85,6 @@ case class User(
     * @return True if key is ready for use
     */
   // TODO: Replace method for {isPgpKeyPubKeyReadyForUpload}
-  @deprecated
   def isPgpPubKeyReady(implicit config: OreConfig, service: ModelService): Boolean =
     this.pgpPubKey.isDefined && this.lastPgpPubKeyUpdate.forall { lastUpdate =>
       val cooldown = config.security.get[Long]("keyChangeCooldown")
@@ -93,7 +92,11 @@ case class User(
       minTime.before(service.theTime)
     }
 
-  def isPgpPubKeyReadyForUpload()(implicit ec: ExecutionContext, service: ModelService, config: OreConfig): Future[(Boolean, String)] = {
+  def isPgpPubKeyReadyForUpload()(
+      implicit ec: ExecutionContext,
+      service: ModelService,
+      config: OreConfig
+  ): Future[(Boolean, String)] = {
     for {
       projectCount <- this.projects.size
     } yield {
@@ -106,7 +109,7 @@ case class User(
       } else {
         this.lastPgpPubKeyUpdate.map { lastUpdate =>
           val cooldown = config.security.get[Long]("keyChangeCooldown")
-          val minTime = new Timestamp(lastUpdate.getTime + cooldown)
+          val minTime  = new Timestamp(lastUpdate.getTime + cooldown)
           if (minTime.before(service.theTime)) {
             (true, "")
           } else {

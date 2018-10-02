@@ -4,11 +4,10 @@ Page used for uploading and creating new projects.
 @import controllers.sugar.Requests.OreRequest
 @import ore.OreConfig
 @import views.html.helper.{CSRF, form}
-@import views.html.projects.creation.template
 
 @import ore.project.factory.creation.PendingProjectCreation
 @(pendingProject: PendingProjectCreation, pluginIdAvailable: Boolean, namespaceAvailable: Boolean)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
-@template(messages("project.create"), 2) {
+@projects.creation.creationTemplate(messages("project.create"), 2) {
 
     @form(action = controllers.project.routes.ProjectCreation.processStep2(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileFormStep2") {
         @CSRF.formField

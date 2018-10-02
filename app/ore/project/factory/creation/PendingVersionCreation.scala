@@ -1,9 +1,9 @@
 package ore.project.factory.creation
 
 import models.project._
-import ore.Colors.Color
+import ore.Color
 import ore.project.io.PluginFile
-import ore.{Cacheable, Platforms}
+import ore.{Cacheable, Platform}
 import play.api.cache.SyncCacheApi
 
 /**
@@ -15,19 +15,19 @@ import play.api.cache.SyncCacheApi
   * @param underlying     Version that is pending
   * @param plugin         Uploaded plugin
   */
-case class PendingVersionCreation(factory: ProjectCreationFactory,
-                                  var project: Project,
-                                  var channelName: String,
-                                  var channelColor: Color,
-                                  underlying: Version,
-                                  plugin: PluginFile,
-                                  var createForumPost: Boolean,
-                                  override val cacheApi: SyncCacheApi)
-  extends Cacheable {
+case class PendingVersionCreation(
+    factory: ProjectCreationFactory,
+    var project: Project,
+    var channelName: String,
+    var channelColor: Color,
+    underlying: Version,
+    plugin: PluginFile,
+    var createForumPost: Boolean,
+    override val cacheApi: SyncCacheApi
+) extends Cacheable {
 
   override def key: String = this.project.url + '/' + this.underlying.versionString
 
-  def dependenciesAsGhostTags: Seq[Tag] = {
-    Platforms.getPlatformGhostTags(this.underlying.dependencies)
-  }
+  def dependenciesAsGhostTags: Seq[Tag] =
+    Platform.getPlatformGhostTags(this.underlying.dependencies)
 }

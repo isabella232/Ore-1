@@ -10,7 +10,7 @@
 @orgRoles = @{RoleType.values.filter(r => r.roleClass == classOf[OrganizationRole] && (r.isAssignable || r == RoleType.OrganizationOwner))}
 @projectRoles = @{RoleType.values.filter(r => r.roleClass == classOf[ProjectRole] && (r.isAssignable || r == RoleType.ProjectOwner))}
 
-@panel(title: String, size: Int = 12)(content: Html) = {
+@card(title: String, size: Int = 12)(content: Html) = {
     <div class="col-md-@size">
         <div class="card">
             <div class="card-header">@title</div>

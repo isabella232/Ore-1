@@ -52,7 +52,7 @@ object PluginUpload {
 
       pluginFiles.foreach { pluginFile =>
         val pluginPart = pluginFile
-        val sigPart = formData.file(pluginFile.key.replaceAll("pluginFile-", "pluginSig-"))
+        val sigPart    = formData.file(pluginFile.key.replaceAll("pluginFile-", "pluginSig-"))
 
         if (sigPart.isDefined)
           result += PluginUpload(pluginPart.ref, pluginPart.filename, sigPart.get.ref, sigPart.get.filename)

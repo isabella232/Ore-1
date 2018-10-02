@@ -25,7 +25,7 @@
 }
 
 @currentLink(page: Int) = @{
-    var somePage = Some(page)
+    val somePage = Some(page)
 
     if(currentTab == 2) {
         routes.Reviews.showVersionQueueWIP(somePage)

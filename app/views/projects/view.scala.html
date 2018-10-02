@@ -48,7 +48,7 @@ Base template for Project overview.
                                     </a>
                                 </li>
 
-                                @if(p.project.topicId != -1) {
+                                @if(p.project.topicId.isDefined) {
                                     <li id="discussion" class="">
                                         <a href="@Projects.showDiscussion(
                                             p.project.ownerName, p.project.slug)">
@@ -145,7 +145,7 @@ Base template for Project overview.
                                     @CSRF.formField
                                     <div class="modal-body">
                                         <ul class="list-group list-flags">
-                                        @for(i <- 0 until FlagReason.values.size) {
+                                        @for(i <- FlagReason.values.indices) {
                                             <li class="list-group-item">
                                                 <span>@FlagReason.withValue(i).title</span>
                                                 <span class="pull-right">
@@ -236,7 +236,7 @@ Base template for Project overview.
                 <li class="nav-item">
                     <a id="versions" class="nav-link" href="@Versions.showList(p.project.ownerName, p.project.slug, None)"><i class="fa fa-download"></i> @messages("project.versions")</a>
                 </li>
-                @if(p.project.topicId != -1) {
+                @if(p.project.topicId.isDefined) {
                     <li class="nav-item">
                         <a id="discussion" class="nav-link" href="@Projects.showDiscussion(p.project.ownerName, p.project.slug)"><i class="fa fa-users"></i> @messages("project.discuss")</a>
                     </li>
@@ -264,11 +264,11 @@ Base template for Project overview.
 
     <div class="project-header-container">
         <div class="container">
-            @if(p.visibility != VisibilityTypes.Public) {
+            @if(p.visibility != Visibility.Public) {
                 <div class="row">
                     <div class="col-12">
                         <div class="alert alert-danger" role="alert" style="margin: 0.2em 0 0 0">
-                        @if(p.visibility == VisibilityTypes.New) {
+                        @if(p.visibility == Visibility.New) {
                             @messages("visibility.notice." + p.visibility.nameKey)
                             @if(sp.perms(EditPages)) {
                                 <br>
@@ -276,7 +276,7 @@ Base template for Project overview.
                                 <a class="btn btn-success pull-right" href="@p.fullSlug/manage/publish" style="margin-top: -.5em">Publish</a>
                             }
                         } else {
-                            @if(p.visibility == VisibilityTypes.NeedsChanges) {
+                            @if(p.visibility == Visibility.NeedsChanges) {
                                 @if(sp.perms(EditPages)) {
                                     <a class="btn btn-success pull-right" href="@p.fullSlug/manage/sendforapproval">Send for approval</a>
                                 }
@@ -285,7 +285,7 @@ Base template for Project overview.
                                     @p.renderVisibilityChange.getOrElse("Unknown")
 
                                 } else {
-                                @if(p.visibility == VisibilityTypes.SoftDelete) {
+                                @if(p.visibility == Visibility.SoftDelete) {
 
                                     @messages("visibility.notice." + p.visibility.nameKey, p.lastVisibilityChangeUser)
                                     @p.renderVisibilityChange.getOrElse("")

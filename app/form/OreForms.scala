@@ -315,31 +315,36 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
     )
   )
 
-
   /**
     * Used to process the first step of the upload process
     */
-  def ProjectCreateStep1(ownersUserCanUploadTo: Seq[ObjectReference]) = Form(single(
-    "owner" -> optional(longNumber).verifying(ownerIdInList(ownersUserCanUploadTo))
-  ))
+  def ProjectCreateStep1(ownersUserCanUploadTo: Seq[ObjectReference]) =
+    Form(
+      single(
+        "owner" -> optional(longNumber).verifying(ownerIdInList(ownersUserCanUploadTo))
+      )
+    )
 
   /**
     * Submits settings changes for a Project.
     */
-  def ProjectCreateStep2() = Form(mapping(
-    "category" -> text,
-    "issues" -> url,
-    "source" -> url,
-    "license-name" -> text,
-    "license-url" -> url,
-    "description" -> text,
-    "users" -> list(longNumber),
-    "roles" -> list(text),
-    "userUps" -> list(text),
-    "roleUps" -> list(text),
-    "update-icon" -> boolean,
-    "owner" -> optional(longNumber),
-    "forum-sync" -> boolean
-  )(ProjectSettingsForm.apply)(ProjectSettingsForm.unapply))
+  def ProjectCreateStep2() =
+    Form(
+      mapping(
+        "category"     -> text,
+        "issues"       -> url,
+        "source"       -> url,
+        "license-name" -> text,
+        "license-url"  -> url,
+        "description"  -> text,
+        "users"        -> list(longNumber),
+        "roles"        -> list(text),
+        "userUps"      -> list(text),
+        "roleUps"      -> list(text),
+        "update-icon"  -> boolean,
+        "owner"        -> optional(longNumber),
+        "forum-sync"   -> boolean
+      )(ProjectSettingsForm.apply)(ProjectSettingsForm.unapply)
+    )
 
 }

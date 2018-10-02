@@ -5,7 +5,7 @@
 @import security.NonceFilter._
 @import util.StringUtils._
 @(mostRecentUnfinishedReview: Option[Review], reviews: Seq[(Review, Option[String])], project: Project, version: Version)(implicit messages: Messages,
-        request: OreRequest[_], config: OreConfig)
+        request: OreRequest[_], config: OreConfig, flash: Flash)
 
 @projectRoutes = @{controllers.project.routes.Projects}
 @versionRoutes = @{controllers.project.routes.Versions}
@@ -32,7 +32,7 @@
                     </span>
                     <span class="btn-group-sm">
                         @if(mostRecentUnfinishedReview.isDefined) {
-                            @if(request.data.isCurrentUser(mostRecentUnfinishedReview.get.userId)) {
+                            @if(request.headerData.isCurrentUser(mostRecentUnfinishedReview.get.userId)) {
                                 <button class="btn btn-review-stop btn-danger"><i class="fa fa-times-circle-o"></i> @messages("review.stop")</button>
                                 <button class="btn btn-review-approve btn-success"><i class="fa fa-thumbs-up"></i> @messages("user.queue.approve")</button>
                             } else {
@@ -54,7 +54,7 @@
     </div>
 
     @if(mostRecentUnfinishedReview.isDefined) {
-        @if(request.data.isCurrentUser(mostRecentUnfinishedReview.get.userId)) {
+        @if(request.headerData.isCurrentUser(mostRecentUnfinishedReview.get.userId)) {
             <div class="row">
                 <div class="col-12">
                     <div class="input-group" style="width: 100%;

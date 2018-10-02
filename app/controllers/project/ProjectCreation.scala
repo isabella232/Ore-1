@@ -10,7 +10,7 @@ import db.impl.OrePostgresDriver.api._
 import discourse.OreDiscourseApi
 import form.OreForms
 import javax.inject.Inject
-import models.project.{Tag, TagColors, Version}
+import models.project.{Tag, TagColor, Version}
 import models.user.{LoggedAction, UserActionLogger}
 import models.viewhelper.OrganizationData
 import ore.permission._
@@ -31,25 +31,19 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
   * Controller for handling Project related actions.
   */
-class ProjectCreation @Inject()(stats: StatTracker,
-                                forms: OreForms,
-                                factory: ProjectFactory,
-                                creationFactory: ProjectCreationFactory)(
-     implicit val ec: ExecutionContext,
-     syncCache: SyncCacheApi,
-     cache: AsyncCacheApi,
-     bakery: Bakery,
-     sso: SingleSignOnConsumer,
-     auth: SpongeAuthApi,
-     forums: OreDiscourseApi,
-     messagesApi: MessagesApi,
-     env: OreEnv,
-     config: OreConfig,
-     service: ModelService
-   ) extends OreBaseController {
+class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreationFactory)(
+    implicit val ec: ExecutionContext,
+    cache: AsyncCacheApi,
+    bakery: Bakery,
+    sso: SingleSignOnConsumer,
+    auth: SpongeAuthApi,
+    env: OreEnv,
+    config: OreConfig,
+    service: ModelService
+) extends OreBaseController {
 
   implicit val fileManager: ProjectFiles = creationFactory.fileManager
-  private val self = controllers.project.routes.ProjectCreation
+  private val self                       = controllers.project.routes.ProjectCreation
 
   /**
     * Displays the "create project" page.
@@ -59,12 +53,17 @@ class ProjectCreation @Inject()(stats: StatTracker,
     *
     * @return Create project view
     */
-  def showStep1(): Action[AnyContent] = UserLock() async { implicit request =>
+  def showStep1(): Action[AnyContent] = UserLock().async { implicit request =>
     val user = request.user
     for {
-      pgpValid <- user.isPgpPubKeyReadyForUpload
+      pgpValid  <- user.isPgpPubKeyReadyForUpload
       userOrgas <- user.organizations.all
-      userOrgasCanCreate <- Future.traverse(userOrgas)(org => user can CreateProject in org map { perm => (org, perm)})
+      userOrgasCanCreate <- Future.traverse(userOrgas)(
+        org =>
+          (user.can(CreateProject) in org).map { perm =>
+            (org, perm)
+        }
+      )
     } yield {
       val createProjectOrgas = userOrgasCanCreate.collect {
         case (orga, perm) if perm => orga
@@ -83,7 +82,7 @@ class ProjectCreation @Inject()(stats: StatTracker,
     *
     * @return
     */
-  def processStep1(): Action[AnyContent] = UserLock() async { implicit request =>
+  def processStep1(): Action[AnyContent] = UserLock().async { implicit request =>
     val user = request.user
     for {
       // PGP Validation check
@@ -91,7 +90,12 @@ class ProjectCreation @Inject()(stats: StatTracker,
 
       // Get organization the user is allowed to upload to
       userOrgas <- user.organizations.all
-      userOrgasCanCreate <- Future.traverse(userOrgas)(org => user can CreateProject in org map { perm => (org.id.value, perm)})
+      userOrgasCanCreate <- Future.traverse(userOrgas)(
+        org =>
+          (user.can(CreateProject) in org).map { perm =>
+            (org.id.value, perm)
+        }
+      )
 
     } yield {
       // Make list of userId's current user can upload to
@@ -114,42 +118,43 @@ class ProjectCreation @Inject()(stats: StatTracker,
 
         } else {
           // Process the form (returns the optional selected owner)
-          this.forms.ProjectCreateStep1(canUploadTo.toSeq).bindFromRequest().fold(
-            hasErrors =>
-              // Show error
-              Redirect(self.showStep1()).withError(pgpValid._2),
+          this.forms
+            .ProjectCreateStep1(canUploadTo.toSeq)
+            .bindFromRequest()
+            .fold(
+              hasErrors =>
+                // Show error
+                Redirect(self.showStep1()).withError(pgpValid._2),
+              formData => {
+                // Get selected project Owner (fallback to user itself)
+                val projectOwner = formData.getOrElse(user.id.value)
 
-            formData => {
-              // Get selected project Owner (fallback to user itself)
-              val projectOwner = formData.getOrElse(user.id.value)
+                // Peding project can throw Exceptions so we will give it a try catch block
+                try {
+                  val pendingProjectCreate = this.creationFactory.createProjectStep1(uploadData.get, user, projectOwner)
 
-              // Peding project can throw Exceptions so we will give it a try catch block
-              try {
-                val pendingProjectCreate = this.creationFactory.createProjectStep1(uploadData.get, user, projectOwner)
+                  // Project can return errors so check if we have them
+                  pendingProjectCreate match {
+                    case Right(pendingProject) =>
+                      // Cache project
+                      pendingProject.cache()
 
-                // Project can return errors so check if we have them
-                pendingProjectCreate match {
-                  case Right(pendingProject) =>
-                    // Cache project
-                    pendingProject.cache()
+                      // Show step2
+                      Redirect(self.showStep2()).withCookies(bakery.bake("_newproject", pendingProject.key))
 
-                    // Show step2
-                    Redirect(self.showStep2()).withCookies(bakery.bake("_newproject", pendingProject.key))
-
-                  case Left(errorMessage) =>
-                    Redirect(self.showStep1()).withError(errorMessage)
+                    case Left(errorMessage) =>
+                      Redirect(self.showStep1()).withError(errorMessage)
+                  }
+                } catch {
+                  case e: Exception =>
+                    Redirect(self.showStep1()).withErrors(Option(e.getMessage).toList)
                 }
-              } catch {
-                case e: Exception =>
-                  Redirect(self.showStep1()).withErrors(Option(e.getMessage).toList)
               }
-            }
-          )
+            )
         }
       }
     }
   }
-
 
   /**
     * Displays the metadata of the uploaded file in Step1
@@ -158,7 +163,7 @@ class ProjectCreation @Inject()(stats: StatTracker,
     *
     * @return Configuration view
     */
-  def showStep2(): Action[AnyContent] = UserLock() async { implicit request =>
+  def showStep2(): Action[AnyContent] = UserLock().async { implicit request =>
     projectCreationFromUser() match {
       case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
@@ -166,7 +171,8 @@ class ProjectCreation @Inject()(stats: StatTracker,
         // Check namespaces
         for {
           pluginId <- this.projects.withPluginId(pendingProject.underlying.pluginId).value
-          namespaceAvailable <- this.projects.isNamespaceAvailable(pendingProject.underlying.ownerName, pendingProject.underlying.slug)
+          namespaceAvailable <- this.projects
+            .isNamespaceAvailable(pendingProject.underlying.ownerName, pendingProject.underlying.slug)
         } yield {
           val pluginIdAvailable = pluginId.isEmpty
 
@@ -186,44 +192,52 @@ class ProjectCreation @Inject()(stats: StatTracker,
     *
     * @return
     */
-  def processStep2(): Action[AnyContent] = UserLock() async { implicit request =>
+  def processStep2(): Action[AnyContent] = UserLock().async { implicit request =>
     // Get the possible pending project
     projectCreationFromUser() match {
       case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
-        this.forms.ProjectCreateStep2().bindFromRequest().fold(
-          hasErrors =>
-            Future.successful(FormError(self.showStep2(), hasErrors)),
-          formData => {
-            for {
-              updatedProject <- pendingProject.settings.save(pendingProject.underlying, formData)
-            } yield {
-              // updatedProject returns a copy of the project with the new data, make sure to add it to the pendingProject again so we don't lose it
-              pendingProject.underlying = updatedProject._1
+        this.forms
+          .ProjectCreateStep2()
+          .bindFromRequest()
+          .fold(
+            hasErrors => Future.successful(FormError(self.showStep2())(hasErrors)),
+            formData => {
+              for {
+                updatedProject <- pendingProject.settings.save(pendingProject.underlying, formData)
+              } yield {
+                // updatedProject returns a copy of the project with the new data, make sure to add it to the pendingProject again so we don't lose it
+                pendingProject.underlying = updatedProject._1
 
-              Redirect(self.showStep3())
+                Redirect(self.showStep3())
+              }
             }
-          }
-        )
+          )
     }
   }
-
 
   /**
     *
     * @return
     */
-  def showStep3(): Action[AnyContent] = UserLock() async { implicit request =>
+  def showStep3(): Action[AnyContent] = UserLock().async { implicit request =>
     projectCreationFromUser() match {
       case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
         for {
-          owner <- pendingProject.underlying.owner.user
+          owner    <- pendingProject.underlying.owner.user
           orgaData <- owner.toMaybeOrganization.semiflatMap(OrganizationData.of).value
         } yield {
-          Ok(views.creation.step3(pendingProject, owner, pendingProject.file.data.get.authors.distinct.filterNot(_.equals(owner.name)), orgaData))
+          Ok(
+            views.creation.step3(
+              pendingProject,
+              owner,
+              pendingProject.file.data.get.authors.distinct.filterNot(_.equals(owner.name)),
+              orgaData
+            )
+          )
         }
     }
   }
@@ -233,41 +247,41 @@ class ProjectCreation @Inject()(stats: StatTracker,
     *
     * @return
     */
-  def processStep3(): Action[AnyContent] = UserLock() async { implicit request =>
+  def processStep3(): Action[AnyContent] = UserLock().async { implicit request =>
     // Get the possible pending project
     //TODO: process invitations
     projectCreationFromUser() match {
       case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
-        this.forms.ProjectMemberRoles.bindFromRequest().fold(
-          hasErrors =>
-            Future.successful(FormError(self.showStep3(), hasErrors)),
-          success = formData => {
-            if (formData.roles.count(RoleType.ProjectOwner.value.equalsIgnoreCase) != 0) {
-              Future.successful(Redirect(self.showStep3()).withError("error"))
-            } else {
-              val newPending = pendingProject.copy(
-                roles = formData.build()
-              )
-              newPending.cache()
-              for {
-                owner <- newPending.underlying.owner.user
-              } yield {
-                Redirect(self.showStep4())
+        this.forms.ProjectMemberRoles
+          .bindFromRequest()
+          .fold(
+            hasErrors => Future.successful(FormError(self.showStep3())(hasErrors)),
+            success = formData => {
+              if (formData.roles.count(RoleType.ProjectOwner.value.equalsIgnoreCase) != 0) {
+                Future.successful(Redirect(self.showStep3()).withError("error"))
+              } else {
+                val newPending = pendingProject.copy(
+                  roles = formData.build()
+                )
+                newPending.cache()
+                for {
+                  owner <- newPending.underlying.owner.user
+                } yield {
+                  Redirect(self.showStep4())
+                }
               }
             }
-          }
-        )
+          )
     }
   }
-
 
   /**
     *
     * @return
     */
-  def showStep4(): Action[AnyContent] = UserLock() async { implicit request =>
+  def showStep4(): Action[AnyContent] = UserLock().async { implicit request =>
     projectCreationFromUser() match {
       case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
@@ -275,7 +289,7 @@ class ProjectCreation @Inject()(stats: StatTracker,
         for {
           owner <- pendingProject.underlying.owner.user
         } yield {
-          Ok(views.creation.step4(pendingProject, owner))
+          Ok(views.creation.step4(pendingProject))
         }
     }
   }
@@ -285,17 +299,21 @@ class ProjectCreation @Inject()(stats: StatTracker,
     *
     * @return
     */
-  def processStep4(): Action[AnyContent] = UserLock() async { implicit request =>
+  def processStep4(): Action[AnyContent] = UserLock().async { implicit request =>
     // Get the possible pending project
     //TODO: process creation
     projectCreationFromUser() match {
       case Left(errorMessage) =>
         Future.successful(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
-        Future.successful(Redirect(controllers.project.routes.Projects.show(pendingProject.underlying.ownerName, pendingProject.underlying.slug)))
+        Future.successful(
+          Redirect(
+            controllers.project.routes.Projects
+              .show(pendingProject.underlying.ownerName, pendingProject.underlying.slug)
+          )
+        )
         this.forms.VersionCreate.bindFromRequest.fold(
-          hasErrors =>
-            Future.successful(FormError(self.showStep3(), hasErrors)),
+          hasErrors => Future.successful(FormError(self.showStep3())(hasErrors)),
           versionData => {
 
             val pendingVersion = pendingProject.pendingVersion
@@ -306,7 +324,10 @@ class ProjectCreation @Inject()(stats: StatTracker,
             pendingProject.complete.map { created =>
               UserActionLogger.log(request, LoggedAction.ProjectCreated, created._1.id.value, "created", "null")
               addUnstableTag(created._2, versionData.unstable)
-              Redirect(controllers.project.routes.Projects.show(pendingProject.underlying.ownerName, pendingProject.underlying.slug))
+              Redirect(
+                controllers.project.routes.Projects
+                  .show(pendingProject.underlying.ownerName, pendingProject.underlying.slug)
+              )
             }
           }
         )
@@ -316,27 +337,34 @@ class ProjectCreation @Inject()(stats: StatTracker,
   //TODO: Remove duplicated code
   private def addUnstableTag(version: Version, unstable: Boolean) = {
     if (unstable) {
-      service.access(classOf[ProjectTag]).filter(t => t.name === "Unstable" && t.data === "").flatMap { tagsWithVersion =>
-        if (tagsWithVersion.isEmpty) {
-          val tag = Tag(
-            versionIds = List(version.id.value),
-            name = "Unstable",
-            data = "",
-            color = TagColors.Unstable
-          )
-          service.access(classOf[ProjectTag]).add(tag).flatMap { tag =>
-            // requery the tag because it now includes the id
-            service.access(classOf[ProjectTag]).filter(t => t.name === tag.name && t.data === tag.data).map(_.toList.head)
-          } flatMap(newTag => service.update(version.copy(tagIds = newTag.id.value :: version.tagIds)))
-        } else {
-          val tag = tagsWithVersion.head
-          service.update(tag.copy(versionIds = version.id.value :: tag.versionIds)) *>
-            service.update(version.copy(tagIds = tag.id.value :: version.tagIds))
-        }
+      service.access(classOf[ProjectTag]).filter(t => t.name === "Unstable" && t.data === "").flatMap {
+        tagsWithVersion =>
+          if (tagsWithVersion.isEmpty) {
+            val tag = Tag(
+              versionIds = List(version.id.value),
+              name = "Unstable",
+              data = "",
+              color = TagColor.Unstable
+            )
+            service
+              .access(classOf[ProjectTag])
+              .add(tag)
+              .flatMap { tag =>
+                // requery the tag because it now includes the id
+                service
+                  .access(classOf[ProjectTag])
+                  .filter(t => t.name === tag.name && t.data === tag.data)
+                  .map(_.toList.head)
+              }
+              .flatMap(newTag => service.update(version.copy(tagIds = newTag.id.value :: version.tagIds)))
+          } else {
+            val tag = tagsWithVersion.head
+            service.update(tag.copy(versionIds = version.id.value :: tag.versionIds)) *>
+              service.update(version.copy(tagIds = tag.id.value :: version.tagIds))
+          }
       }
     }
   }
-
 
   /**
     * Helper method to get the current PendingProject from the user that is doing the request

@@ -14,17 +14,15 @@
     <label for="category">Category</label>
     @* Custom-select so it doesn't look shit *@
     <select class="custom-select" id="category" name="category" form="@form">
-    @for(i <- 0 until Categories.values.size) {
-        @defining(Categories(i)) { category =>
+        @Category.values.foreach { category =>
             @if(category.isVisible) {
                 <option @if(selected.isDefined && selected.get.equals(category)) { selected } >
                 @category.title
                 </option>
             }
         }
-    }
     </select>
-    <small class="form-text text-muted">Categorize your project into one of @Categories.visible.size categories. Appropriately categorizing your project makes it easier for people to find.</small>
+    <small class="form-text text-muted">Categorize your project into one of @Category.visible.size categories. Appropriately categorizing your project makes it easier for people to find.</small>
 </div>
 
 <div class="border-bottom mb-5 pb-5">

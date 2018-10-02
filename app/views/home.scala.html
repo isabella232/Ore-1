@@ -9,11 +9,12 @@ sorted according to different criteria.
 @import controllers.sugar.Requests.OreRequest
 @import models.project.{Project, Tag, Version}
 @import models.user.User
-@import ore.project.ProjectSortingStrategies.{values, _}
 @import ore.project.{Category, ProjectSortingStrategies}
 @import ore.{OreConfig, Platform, PlatformCategory}
 @import security.NonceFilter._
 @import views.html.utils.alert
+@import ore.project.ProjectSortingStrategies.ProjectSortingStrategy
+@import ore.project.ProjectSortingStrategies.{values, _}
 @(models: Seq[(Project, User, Version, Seq[Tag])], visibleCategories: Option[Seq[Category]], query: Option[String], page: Int,
         sort: ProjectSortingStrategy, platformCategory: Option[PlatformCategory], platform: Option[Platform])(implicit messages: Messages, flash: Flash,
         request: OreRequest[_], config: OreConfig)
@@ -83,7 +84,7 @@ sorted according to different criteria.
 
             @if(query.isDefined) {
                 <div class="queryRemoval mb-3">
-                    <a href="@routes.Application.showHome(Some(Categories.toQueryString(visibleCategories.getOrElse(Seq()))), None, Option(sort.id), None, if (platform.isDefined) Some(platform.get.id.toString) else None, None)">
+                    <a href="@routes.Application.showHome(Some(Category.toQueryString(visibleCategories.getOrElse(Seq()))), None, Option(sort.id), None, if (platform.isDefined) Some(platform.get.value.toString) else None, None)">
                         <i class="fa fa-window-close"></i> Clear current search query
                     </a>
                 </div>
@@ -111,15 +112,15 @@ sorted according to different criteria.
                 <div class="card-header">
                     @messages("project.category.plural")
                     @if(visibleCategories.isDefined) {
-                        <a href="@routes.Application.showHome(None, query, Option(sort.id), None, if (platform.isDefined) Some(platform.get.id.toString) else None, None)">
+                        <a href="@routes.Application.showHome(None, query, Option(sort.id), None, if (platform.isDefined) Some(platform.get.value.toString) else None, None)">
                             <i class="category-reset fas fa-times"></i>
                         </a>
                     }
                 </div>
                 <div class="list-group">
-                    @for(category <- Categories.visible) {
+                    @for(category <- Category.visible) {
                         <a class="list-group-item list-group-item-action @if(visibleCategories.isDefined && visibleCategories.get.contains(category)) { active }"
-                            href="@routes.Application.showHome(Some(Categories.toQueryStringWith(visibleCategories.getOrElse(Seq()), category)), query, Option(sort.id), Option(page), if (platform.isDefined) Some(platform.get.id.toString) else None, None)">
+                            href="@routes.Application.showHome(Some(Category.toQueryStringWith(visibleCategories.getOrElse(Seq()), category)), query, Option(sort.id), Option(page), if (platform.isDefined) Some(platform.get.value.toString) else None, None)">
                             <i class="fa-fw @category.icon"></i>
                             @category.title
                         </a>

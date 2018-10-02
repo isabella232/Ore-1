@@ -10,10 +10,9 @@ Page used for uploading and creating new projects.
 @import play.twirl.api.Html
 @import security.NonceFilter._
 @import views.html.helper.{CSRF, form}
-@import views.html.projects.creation.template
 
 @(pgpStatus: (Boolean, String), createProjectOrgas: Seq[Organization])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
-@template(messages("project.create"), 1) {
+@projects.creation.creationTemplate(messages("project.create"), 1) {
     <script type="text/javascript" src="@routes.Assets.at("javascripts/pluginCreationUpload.js")"></script>
 
     <ul>

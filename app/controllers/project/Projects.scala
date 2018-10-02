@@ -71,9 +71,6 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
       orgas      <- request.user.organizations.all
       createOrga <- Future.traverse(orgas)(request.user.can(CreateProject).in(_))
     } yield {
-      val createdOrgas = orgas.zip(createOrga).collect {
-        case (orga, true) => orga
-      }
       Ok(views.creation.step1((true, ""), Seq.empty))
     }
   }

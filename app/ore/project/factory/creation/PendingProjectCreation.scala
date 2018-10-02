@@ -18,15 +18,16 @@ import scala.concurrent.{ExecutionContext, Future}
   * @param underlying  Pending project
   * @param file     Uploaded plugin
   */
-case class PendingProjectCreation(factory: ProjectCreationFactory,
-                                  var underlying: Project,
-                                  file: PluginFile,
-                                  channelName: String,
-                                  var pendingVersion: PendingVersionCreation,
-                                  var roles: Set[ProjectRole] = Set(),
-                                  override val cacheApi: SyncCacheApi)
-                                  (implicit service: ModelService)
-                                   extends Cacheable {
+case class PendingProjectCreation(
+    factory: ProjectCreationFactory,
+    var underlying: Project,
+    file: PluginFile,
+    channelName: String,
+    var pendingVersion: PendingVersionCreation,
+    var roles: Set[ProjectRole] = Set(),
+    override val cacheApi: SyncCacheApi
+)(implicit service: ModelService)
+    extends Cacheable {
 
   /**
     * The [[Project]]'s internal settings.
@@ -44,7 +45,6 @@ case class PendingProjectCreation(factory: ProjectCreationFactory,
       updatedProject <- service.update(newProject.copy(recommendedVersionId = Some(newVersion._1.id.value)))
     } yield (updatedProject, newVersion._1)
   }
-
 
   override def key: String = this.underlying.ownerName + '/' + this.underlying.slug
 

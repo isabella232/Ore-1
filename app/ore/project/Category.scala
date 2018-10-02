@@ -45,4 +45,20 @@ object Category extends IntEnum[Category] {
       val id = Try(idStr.toInt).getOrElse(-1)
       withValueOpt(id)
     }
+
+  def toQueryString(categories: Seq[Category]): String = categories.map(c => c.value).mkString(",")
+
+  def toQueryStringWith(categories: Seq[Category], category: Category): String = {
+    var result: Seq[Category] = Seq()
+    if (categories.isEmpty || categories.isEmpty) {
+      result = Seq(category)
+    } else {
+      if (categories.contains(category)) {
+        result = (categories.toSet - category).toSeq
+      } else {
+        result = (categories.toSet + category).toSeq
+      }
+    }
+    toQueryString(result)
+  }
 }

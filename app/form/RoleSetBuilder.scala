@@ -34,8 +34,8 @@ trait RoleSetBuilder[M <: RoleModel] {
     (for ((userId, i) <- this.users.zipWithIndex) yield {
       newRole(userId, RoleType.withValue(roles(i)))
     }).toSet.filter(role => {
-    role.roleType.roleClass.equals(classOf[ProjectRole])
-  })
+      role.roleType.roleClass.equals(classOf[ProjectRole])
+    })
 
   /**
     * Creates a new role for the specified user ID and role type.

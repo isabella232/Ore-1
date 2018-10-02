@@ -5,10 +5,9 @@ Page used for uploading and creating new projects.
 @import models.user.Organization
 @import ore.OreConfig
 @import views.html.helper.{CSRF, form}
-@import views.html.projects.versions.creation.template
 
 @(pgpStatus: (Boolean, String), author: String, slug: String)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
-@template(messages("version.create"), 1) {
+@projects.versions.creation.template(messages("version.create"), 1) {
     <script type="text/javascript" src="@routes.Assets.at("javascripts/versionCreationUpload.js")"></script>
 
     @form(action = controllers.project.routes.VersionCreation.processStep1(author, slug), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileForm") {

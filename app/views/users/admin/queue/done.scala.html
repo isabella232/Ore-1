@@ -12,8 +12,6 @@
 @import java.sql.Timestamp
 @import java.time.Instant
 
-@import views.html.users.admin.queue.template
-
 @(reviews: Seq[(Version, Project, Channel, Option[String], User, User)], currentPage: Int, totalPages: Int)(implicit messages: Messages, request: OreRequest[_], config: OreConfig, flash: Flash)
 
 @users.admin.queue.template(3, currentPage, totalPages) {
@@ -31,7 +29,7 @@
                 </tr>
             </thead>
             <tbody>
-            @reviews.map { case (version: Version, project: Project, channel: Channel, author: Option[String], user: User, reviewer: User) =>
+            @reviews.map { case (version: Version, project: Project, channel: Channel, _, user: User, reviewer: User) =>
             <tr>
                 <td class="text-nowrap">
                     @userAvatar(Some(project.ownerName), user.avatarUrl, clazz = "user-avatar-xs")

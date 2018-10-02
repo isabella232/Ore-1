@@ -10,7 +10,7 @@ import db.impl.OrePostgresDriver.api._
 import discourse.OreDiscourseApi
 import form.OreForms
 import javax.inject.Inject
-import models.project.{Tag, TagColors, Version}
+import models.project.{Tag, TagColor, Version}
 import models.user.{LoggedAction, UserActionLogger}
 import models.viewhelper.OrganizationData
 import ore.permission._
@@ -31,25 +31,19 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
   * Controller for handling Project related actions.
   */
-class VersionCreation @Inject()(stats: StatTracker,
-                                forms: OreForms,
-                                factory: ProjectFactory,
-                                creationFactory: ProjectCreationFactory)(
-     implicit val ec: ExecutionContext,
-     syncCache: SyncCacheApi,
-     cache: AsyncCacheApi,
-     bakery: Bakery,
-     sso: SingleSignOnConsumer,
-     auth: SpongeAuthApi,
-     forums: OreDiscourseApi,
-     messagesApi: MessagesApi,
-     env: OreEnv,
-     config: OreConfig,
-     service: ModelService
-   ) extends OreBaseController {
+class VersionCreation @Inject()(creationFactory: ProjectCreationFactory)(
+    implicit val ec: ExecutionContext,
+    cache: AsyncCacheApi,
+    bakery: Bakery,
+    sso: SingleSignOnConsumer,
+    auth: SpongeAuthApi,
+    env: OreEnv,
+    config: OreConfig,
+    service: ModelService
+) extends OreBaseController {
 
   implicit val fileManager: ProjectFiles = creationFactory.fileManager
-  private val self = controllers.project.routes.VersionCreation
+  private val self                       = controllers.project.routes.VersionCreation
 
   /**
     * Displays the "create version" page.
@@ -58,9 +52,9 @@ class VersionCreation @Inject()(stats: StatTracker,
     *
     * @return Create version view
     */
-  def showStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug) async { request =>
+  def showStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).async { request =>
     implicit val r: OreRequest[AnyContent] = request.request
-    val user = request.user
+    val user                               = request.user
     for {
       pgpValid <- user.isPgpPubKeyReadyForUpload
     } yield {
@@ -72,38 +66,36 @@ class VersionCreation @Inject()(stats: StatTracker,
     *
     * @return
     */
-  def processStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug) async { request =>
-    implicit val r: OreRequest[AnyContent] = request.request
-    val user = request.user
+  def processStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).async {
+    request =>
+      implicit val r: OreRequest[AnyContent] = request.request
+      val user                               = request.user
 
-    for {
-      // PGP Validation check
-      pgpValid <- user.isPgpPubKeyReadyForUpload
-    } yield {
+      for {
+        // PGP Validation check
+        pgpValid <- user.isPgpPubKeyReadyForUpload
+      } yield {
 
-      // Start validation process
-      if (!pgpValid._1) {
-        // Show error from PGP Key
-        Redirect(self.showStep1(author, slug)).withError(pgpValid._2)
-      } else {
-        val uploadData = PluginUpload.bindFromRequestArray()
-
-        if (uploadData.isEmpty) {
-          // No data found
-          Redirect(self.showStep1(author, slug)).withError("error.noFile")
-
+        // Start validation process
+        if (!pgpValid._1) {
+          // Show error from PGP Key
+          Redirect(self.showStep1(author, slug)).withError(pgpValid._2)
         } else {
-          // Process the uploads
-          Redirect("")
+          val uploadData = PluginUpload.bindFromRequestArray()
+
+          if (uploadData.isEmpty) {
+            // No data found
+            Redirect(self.showStep1(author, slug)).withError("error.noFile")
+
+          } else {
+            // Process the uploads
+            Redirect("")
+          }
         }
       }
-    }
   }
 
-
-
-
-/*
+  /*
   def upload(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).async { implicit request =>
 
     EitherT.fromEither[Future](uploadData).flatMap { data =>
@@ -119,17 +111,11 @@ class VersionCreation @Inject()(stats: StatTracker,
       Redirect(self.showCreatorWithMeta(request.data.project.ownerName, slug, pendingVersion.underlying.versionString))
     }.merge
   }
- */
-
-
-
-
-
-
+   */
 
   /**
     * Will check if user is unlocked, has access to upload version and give user and project back in the request
     */
-  private def VersionUploadAction(author: String, slug: String)
-  = AuthedProjectAction(author, slug, requireUnlock = true) andThen ProjectPermissionAction(UploadVersions)
+  private def VersionUploadAction(author: String, slug: String) =
+    AuthedProjectAction(author, slug, requireUnlock = true).andThen(ProjectPermissionAction(UploadVersions))
 }
