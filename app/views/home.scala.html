@@ -121,7 +121,7 @@ sorted according to different criteria.
                     @for(category <- Category.visible) {
                         <a class="list-group-item list-group-item-action @if(visibleCategories.isDefined && visibleCategories.get.contains(category)) { active }"
                             href="@routes.Application.showHome(Some(Category.toQueryStringWith(visibleCategories.getOrElse(Seq()), category)), query, Option(sort.id), Option(page), if (platform.isDefined) Some(platform.get.value.toString) else None, None)">
-                            <i class="fa-fw @category.icon"></i>
+                            <i class="fas fa-fw fa-@category.icon"></i>
                             @category.title
                         </a>
                     }

@@ -153,7 +153,7 @@
     @content
 
     <div class="modal fade" id="modal-pgp-edit" tabindex="-1" role="dialog" aria-labelledby="label-pgp">
-        <div class="modal-dialog" role="document">
+        <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h4 class="modal-title">
@@ -172,52 +172,50 @@
                 @form(action = u.pgpFormCall, 'id -> "form-pgp", 'class -> u.pgpFormClass) {
                     @CSRF.formField
                     <div class="modal-body">
-                        <div class="alert alert-danger" style="display: none;">
-                            <span class="error"></span>
-                        </div>
-
-                        <div class="setting setting-no-border setting-pgp">
-                            <div class="row pgp-header">
-                                <h4>@messages("user.pgp.pubKey")</h4>
-                                @u.user.pgpPubKeyInfo.map { keyInfo =>
-                                    <div class="dates minor">
-                                        <i>Created on @prettifyDate(keyInfo.createdAt)</i><br/>
-                                        @keyInfo.expirationDate.map { expirationDate =>
-                                            <i>Expires on @prettifyDate(expirationDate)</i>
-                                        }
-                                    </div>
-                                }
+                        <div class="container-fluid">
+                            <div class="alert alert-danger" style="display: none;">
+                                <span class="error"></span>
                             </div>
 
-                            <div class="row">
-                                @u.user.pgpPubKeyInfo.map { keyInfo =>
-                                    <table width="100%">
-                                        <tr>
-                                            <td><strong>ID</strong></td>
-                                            <td><pre>@keyInfo.id</pre></td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Name</strong></td>
-                                            <td>@keyInfo.userName</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Email</strong></td>
-                                            <td><a href="mailto:@keyInfo.email">@keyInfo.email</a></td>
-                                        </tr>
-                                    </table>
-                                }
+                            <div class="setting setting-no-border setting-pgp">
+                                <div class="row">
+                                    @u.user.pgpPubKeyInfo.map { keyInfo =>
+                                        <table width="100%">
+                                            <tr>
+                                                <td><strong>ID</strong></td>
+                                                <td><code>@keyInfo.id</code></td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Name</strong></td>
+                                                <td>@keyInfo.userName</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Email</strong></td>
+                                                <td><a href="mailto:@keyInfo.email">@keyInfo.email</a></td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Created at</strong></td>
+                                                <td>@prettifyDate(keyInfo.createdAt)</td>
+                                            </tr>
+                                            @keyInfo.expirationDate.map { expirationDate =>
+                                                <tr>
+                                                    <td><strong>Expires on</strong></td>
+                                                    <td>@prettifyDate(expirationDate)</td>
+                                                </tr>
+                                            }
+                                        </table>
+                                    }
 
-                                @if(u.user.pgpPubKey.isEmpty) {
-                                    <p>@messages("user.pgp.pubKey.info")</p>
-                                }
+                                    @if(u.user.pgpPubKey.isEmpty) {
+                                        <p>@messages("user.pgp.pubKey.info")</p>
+                                    }
 
-                                @if(u.user.pgpPubKey.isEmpty) {
-                                    <textarea class="form-control" name="pgp-pub-key" rows="10"></textarea>
-                                    <i class="pull-right"><a href="#TODO">@messages("user.pgp.help")</a></i>
-                                }
+                                    @if(u.user.pgpPubKey.isEmpty) {
+                                        <textarea class="form-control" name="pgp-pub-key" rows="10"></textarea>
+                                    }
+                                </div>
                             </div>
                         </div>
-                        <div class="clearfix"></div>
                     </div>
 
                     <div class="modal-footer">
