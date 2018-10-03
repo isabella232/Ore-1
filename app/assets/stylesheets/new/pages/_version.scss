@@ -1,0 +1,13 @@
+.unsafe-dl .info {
+  p {
+    margin-bottom: 0;
+
+    span {
+      font-weight: bold;
+    }
+
+    &:last-child {
+      margin-bottom: 1em;
+    }
+  }
+}

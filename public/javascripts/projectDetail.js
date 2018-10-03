@@ -28,6 +28,7 @@ var KEY_K = 75;
 var projectOwner = null;
 var projectSlug = null;
 var alreadyStarred = false;
+var watching = false;
 
 /*
  * ==================================================
@@ -188,41 +189,43 @@ $(function () {
     // watch button
     $('.btn-watch').click(function () {
         var status = $(this).find('.watch-status');
-        var watching = $(this).hasClass('watching');
-        if (watching) {
-            status.text('Watch');
-            $(this).removeClass('watching');
-        } else {
-            status.text('Unwatch');
-            $(this).addClass('watching');
-        }
 
         $.ajax({
             type: 'post',
             url: decodeHtml('/' + projectOwner + '/' + projectSlug) + '/watch/' + !watching,
-            data: {csrfToken: csrf}
+            data: {csrfToken: csrf},
+            success: function () {
+                if (watching) {
+                    status.text('Watch');
+                } else {
+                    status.text('Unwatch');
+                }
+
+                $(".btn-watch svg")
+                    .toggleClass('fa-eye')
+                    .toggleClass('fa-eye-slash');
+
+                watching = !watching;
+            }
         });
     });
 
     // setup star button
     var increment = alreadyStarred ? -1 : 1;
     $('.btn-star').click(function () {
-        var starred = $(this).find('.starred');
-        starred.html(' ' + (parseInt(starred.text()) + increment).toString());
         $.ajax({
             type: 'post',
             url: decodeHtml('/' + projectOwner + '/' + projectSlug) + '/star/' + (increment > 0),
-            data: {csrfToken: csrf}
+            data: {csrfToken: csrf},
+            success: function () {
+                var starred = $(".btn-star").find('.starred');
+                starred.html(' ' + (parseInt(starred.text()) + increment).toString());
+
+                $('#icon-star svg').attr("data-prefix", increment > 0 ? "fas" : "far");
+
+                increment *= -1;
+            }
         });
-
-        var icon = $('#icon-star');
-        if (increment > 0) {
-            icon.removeClass('fa-star-o').addClass('fa-star');
-        } else {
-            icon.removeClass('fa-star').addClass('fa-star-o');
-        }
-
-        increment *= -1;
     });
 
     // hotkeys
