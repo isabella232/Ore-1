@@ -99,8 +99,7 @@ function initBtnEdit() {
         editor.hide();
         preview.show();
 
-        var icon = $(this).find('i svg');
-        icon.removeClass('fa-eye').addClass('fa-circle-notch fa-spin');
+        $('.btn-preview i svg').toggleClass('fa-circle-notch fa-spin').toggleClass('fa-eye');
 
         $.ajax({
             type: 'post',
@@ -108,11 +107,9 @@ function initBtnEdit() {
             data: JSON.stringify({raw: raw}),
             contentType: 'application/json',
             dataType: 'html',
-            complete: function () {
-                icon.removeClass('fa-circle-notch fa-spin').addClass('fa-eye');
-            },
             success: function (cooked) {
                 preview.html(cooked);
+                $('.btn-preview i svg').toggleClass('fa-circle-notch fa-spin').toggleClass('fa-eye');
             }
         });
 

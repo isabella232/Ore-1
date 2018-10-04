@@ -208,21 +208,19 @@ trait ProjectCreationFactory {
       _          <- newProject.updateSettings(pending.settings)
       _ <- {
         // Invite members
-        val dossier: MembershipDossier[Project] {
-          type MembersTable = ProjectMembersTable
-          type MemberType   = ProjectMember
-          type RoleTable    = ProjectRoleTable
-          type RoleType     = ProjectRole
-        }             = newProject.memberships
+        val dossier   = newProject.memberships
         val owner     = newProject.owner
         val ownerId   = owner.userId
         val projectId = newProject.id.value
 
         val addRole =
-          dossier.addRole(new ProjectRole(ownerId, RoleType.ProjectOwner, projectId, accepted = true, visible = true))
+          dossier.addRole(
+            newProject,
+            new ProjectRole(ownerId, RoleType.ProjectOwner, projectId, accepted = true, visible = true)
+          )
         val addOtherRoles = Future.traverse(pending.roles) { role =>
           role.user.flatMap { user =>
-            dossier.addRole(role.copy(projectId = projectId)) *>
+            dossier.addRole(newProject, role.copy(projectId = projectId)) *>
               user.sendNotification(
                 Notification(
                   userId = user.id.value,

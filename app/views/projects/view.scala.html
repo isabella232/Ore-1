@@ -69,7 +69,7 @@ Base template for Project overview.
             }
         </div>
         @if(!noButtons) {
-            <div class="col-auto">
+            <div class="col">
                 @if(request.hasUser && !p.project.isDeleted) {
                     @if(!p.project.isOwner(request.currentUser.get)) {
                         <button class="btn btn-default btn-star">
@@ -136,7 +136,7 @@ Base template for Project overview.
                     </div>
                 }
                 @if(!p.project.isDeleted) {
-                    <div class="btn-group btn-download">
+                    <div class="btn-group btn-download mt-2 mt-sm-0">
                         <a href="@Versions.downloadRecommended(p.project.ownerName, p.project.slug, None)"
                         title="@messages("project.download.recommend")" data-toggle="tooltip"
                         data-placement="bottom" class="btn btn-yellow">
@@ -149,6 +149,21 @@ Base template for Project overview.
                             <li><a class="dropdown-item" href="@Versions.downloadRecommended(p.project.ownerName, p.project.slug, None)">@messages("general.download")</a></li>
                             <li><a href="#" class="copy-url dropdown-item" data-clipboard-text="@config.app.get[String]("baseUrl")@Versions.download(p.project.ownerName, p.project.slug, p.recommendedVersion.map(v => v.versionString).getOrElse(""), None)">Copy URL</a></li>
                         </ul>
+                    </div>
+                }
+                @if(request.hasUser && (request.headerData.globalPerm(ReviewFlags) || request.headerData.globalPerm(ViewLogs))) {
+                    <div class="dropdown d-inline-block">
+                        <button class="btn dropdown-toggle mt-2 mt-md-0" href="#" role="button" id="adminActions" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            <i class="fas fa-wrench"></i> Admin actions
+                        </button>
+
+                        <div class="dropdown-menu dropdown-menu-right" aria-labelledby="adminActions">
+                            <a class="dropdown-item" href="@Projects.showFlags(p.project.ownerName, p.project.slug)">Flag history (@p.flagCount)</a>
+                            <a class="dropdown-item" href="@Projects.showNotes(p.project.ownerName, p.project.slug)">Staff notes (@p.noteCount)</a>
+                            <a class="dropdown-item" href="@routes.Application.showLog(None, None, Some(p.project.id.value), None, None, None, None)">User Action Logs</a>
+                            <a class="dropdown-item" href="@Projects.showLog(p.project.ownerName, p.project.slug)">System Logs (@p.projectLogSize)</a>
+                            <a class="dropdown-item" href="https://forums.spongepowered.org/users/@p.project.ownerName">Owner on forum <i class="fas fa-external-link-alt fa-sm" aria-hidden="true"></i></a>
+                        </div>
                     </div>
                 }
             </div>
