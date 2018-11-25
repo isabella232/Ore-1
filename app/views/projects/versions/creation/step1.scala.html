@@ -6,7 +6,7 @@ Page used for uploading and creating new projects.
 @import ore.OreConfig
 @import views.html.helper.{CSRF, form}
 
-@(pgpStatus: (Boolean, String), author: String, slug: String)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@(pgpStatus: Either[String, Unit], author: String, slug: String)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
 @projects.versions.creation.template(messages("version.create"), 1) {
     <script type="text/javascript" src="@routes.Assets.versioned("javascripts/versionCreationUpload.js")"></script>
 
@@ -14,8 +14,8 @@ Page used for uploading and creating new projects.
         @CSRF.formField
 
         @* PGP Check: is not valid *@
-        @if(!pgpStatus._1) {
-            <div class="alert alert-danger">@messages(pgpStatus._2)</div>
+        @if(!pgpStatus.isLeft) {
+            <div class="alert alert-danger">@messages(pgpStatus.left.get)</div>
         } else {
             <div class="alert alert-danger alert-dismissible fade show upload-step1-error" role="alert" style="display:none;">
                 <span class="upload-step1-error-message"></span>

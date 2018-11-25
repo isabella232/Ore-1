@@ -2,17 +2,18 @@ package controllers
 
 import java.sql.Timestamp
 import java.time.Instant
-
 import javax.inject.Inject
 
 import scala.concurrent.ExecutionContext
+
 import play.api.cache.AsyncCacheApi
 import play.api.libs.json.JsObject
 import play.api.mvc.{Action, AnyContent, Result}
+
 import controllers.sugar.Bakery
 import controllers.sugar.Requests.AuthRequest
 import db.impl.OrePostgresDriver.api._
-import db.impl.schema.{OrganizationMembersTable, OrganizationRoleTable, OrganizationTable, UserTable}
+import db.impl.schema._
 import db.{DbRef, ModelService, ObjId, ObjectTimestamp}
 import form.OreForms
 import models.admin.{Message, Review}
@@ -24,6 +25,7 @@ import ore.user.notification.NotificationType
 import ore.{OreConfig, OreEnv}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
 import views.{html => views}
+
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.IO
 import cats.syntax.all._
@@ -52,7 +54,7 @@ final class Reviews @Inject()(forms: OreForms)(
     * @return View of unreviewed versions.
     */
   def showVersionQueuePending(page: Option[Int]): Action[AnyContent] =
-    Authenticated.andThen(PermissionAction[AuthRequest](ReviewProjects)).async { implicit request =>
+    Authenticated.andThen(PermissionAction[AuthRequest](ReviewProjects)).asyncF { implicit request =>
       val currentPage = page.getOrElse(1)
 
       service.runDBIO(queryVersionQueuePending(currentPage)).map { result =>
@@ -66,7 +68,7 @@ final class Reviews @Inject()(forms: OreForms)(
     * @return View of versions which are in review.
     */
   def showVersionQueueWIP(page: Option[Int]): Action[AnyContent] =
-    Authenticated.andThen(PermissionAction[AuthRequest](ReviewProjects)).async { implicit request =>
+    Authenticated.andThen(PermissionAction[AuthRequest](ReviewProjects)).asyncF { implicit request =>
       val currentPage = page.getOrElse(1)
 
       service.runDBIO(queryVersionQueueWIP(currentPage)).map { result =>
@@ -80,7 +82,7 @@ final class Reviews @Inject()(forms: OreForms)(
     * @return View of reviewed versions.
     */
   def showVersionQueueDone(page: Option[Int]): Action[AnyContent] =
-    Authenticated.andThen(PermissionAction[AuthRequest](ReviewProjects)).async { implicit request =>
+    Authenticated.andThen(PermissionAction[AuthRequest](ReviewProjects)).asyncF { implicit request =>
       val currentPage = page.getOrElse(1)
 
       service.runDBIO(queryVersionQueueDone(currentPage)).map { result =>

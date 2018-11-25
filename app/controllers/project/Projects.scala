@@ -469,22 +469,22 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     */
   def showGeneralSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
     implicit request =>
-      Future.successful(Ok(views.settings.generalSettings(request.data, request.scoped)))
+      IO.pure(Ok(views.settings.generalSettings(request.data, request.scoped)))
   }
 
-  def showMemberSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).async {
+  def showMemberSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
     implicit request =>
-      Future.successful(Ok(views.settings.memberSettings(request.data, request.scoped)))
+      IO.pure(Ok(views.settings.memberSettings(request.data, request.scoped)))
   }
 
-  def showKeySettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).async {
+  def showKeySettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
     implicit request =>
-      Future.successful(Ok(views.settings.keySettings(request.data, request.scoped)))
+      IO.pure(Ok(views.settings.keySettings(request.data, request.scoped)))
   }
 
-  def showActionSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).async {
+  def showActionSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
     implicit request =>
-      Future.successful(Ok(views.settings.actionSettings(request.data, request.scoped)))
+      IO.pure(Ok(views.settings.actionSettings(request.data, request.scoped)))
   }
 
   /**
@@ -606,13 +606,13 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
       }
   }
 
-  def saveGeneralSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).async {
+  def saveGeneralSettings(author: String, slug: String): Action[AnyContent] = SettingsEditAction(author, slug).asyncF {
     implicit request =>
       val data = request.data
       this.forms.ProjectSaveGeneral
         .bindFromRequest()
         .fold(
-          FormErrorLocalized(self.showGeneralSettings(author, slug)).andThen(Future.successful),
+          FormErrorLocalized(self.showGeneralSettings(author, slug)).andThen(IO.pure),
           formData => {
             data.settings
               .saveGeneral(data.project, formData)
@@ -676,7 +676,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
   def setVisibility(author: String, slug: String): Action[ProjectActionSettingsForm] = {
     AuthedProjectAction(author, slug, requireUnlock = true)
       .andThen(ProjectPermissionAction(HideProjects))
-      .async(parse.form(forms.ProjectVisibility)) { implicit request =>
+      .asyncF(parse.form(forms.ProjectVisibility)) { implicit request =>
         implicit val lang: Lang = request.lang
 
         Visibility.withValueOpt(request.body.visibility).map { newVisibility =>
@@ -694,7 +694,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
                     Redirect(self.showActionSettings(author, slug)).withSuccess(messagesApi.apply("visibility.changed", newVisibility.title))
                   }
                 } else {
-                  Future.successful(Redirect(self.showActionSettings(author, slug)).withError(messagesApi.apply("visibility.needsReason", newVisibility.title)))
+                  IO.pure(Redirect(self.showActionSettings(author, slug)).withError(messagesApi.apply("visibility.needsReason", newVisibility.title)))
                 }
               } else {
                 request.project.setVisibilityByUser(newVisibility, "", request.user.id.value, request).map { _ =>
@@ -702,10 +702,10 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
                 }
               }
             } else {
-              Future.successful(Unauthorized)
+              IO.pure(Unauthorized)
             }
           }
-        }.getOrElse(Future.successful(BadRequest))
+        }.getOrElse(IO.pure(BadRequest))
       }
   }
 

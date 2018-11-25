@@ -242,9 +242,9 @@ case class Project(
       creator: DbRef[User],
       request: AuthedProjectRequest[_]
   )(
-      implicit ec: ExecutionContext,
-      service: ModelService
-  ): Future[(Project, ProjectVisibilityChange)] = {
+    implicit service: ModelService,
+    cs: ContextShift[IO]
+  ): IO[(Project, ProjectVisibilityChange)] = {
     setVisibility(visibility, comment, creator).map { result =>
       UserActionLogger.log(
         request.request,

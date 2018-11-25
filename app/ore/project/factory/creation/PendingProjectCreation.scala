@@ -10,6 +10,8 @@ import models.user.role.ProjectUserRole
 import ore.Cacheable
 import ore.project.io.PluginFile
 
+import cats.effect.{ContextShift, IO}
+
 /**
   * Represents a Project with an uploaded plugin that has not yet been
   * created.
@@ -33,8 +35,8 @@ case class PendingProjectCreation(
     */
   val settings: ProjectSettings = ProjectSettings()
 
-  def complete()(implicit ec: ExecutionContext): Future[(Project, Version)] = {
-    free()
+  def complete()(implicit ec: ExecutionContext, cs: ContextShift[IO]): IO[(Project, Version)] = {
+    free
     for {
       newProject <- this.factory.createProject(this)
       newVersion <- {

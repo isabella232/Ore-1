@@ -51,10 +51,10 @@ case class ProjectSettings(
   override type T = ProjectSettingsTable
 
   def saveGeneral(project: Project, formData: ProjectGeneralSettingsForm)(
-      implicit fileManager: ProjectFiles,
-      ec: ExecutionContext,
-      service: ModelService
-  ): Future[(Project, ProjectSettings)] = {
+    implicit fileManager: ProjectFiles,
+    service: ModelService,
+    cs: ContextShift[IO]
+  ): IO[(Project, ProjectSettings)] = {
     val updateProject = service.updateIfDefined(
       project.copy(
         category = Category.values.find(_.title == formData.categoryName).get,
@@ -72,9 +72,7 @@ case class ProjectSettings(
       )
     )
 
-    val modelUpdates = updateProject.zip(updateSettings)
-
-    modelUpdates.map { t =>
+    (updateProject, updateSettings).parTupled.map { t =>
       if (formData.updateIcon) {
         fileManager.getPendingIconPath(project).foreach { pendingPath =>
           val iconDir = fileManager.getIconDir(project.ownerName, project.name)

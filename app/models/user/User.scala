@@ -24,7 +24,7 @@ import util.StringUtils._
 import util.syntax._
 
 import cats.Parallel
-import cats.data.OptionT
+import cats.data.{EitherT, OptionT}
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import com.google.common.base.Preconditions._
@@ -90,31 +90,32 @@ case class User(
       minTime.before(service.theTime)
     }
 
-  def isPgpPubKeyReadyForUpload()(
-      implicit ec: ExecutionContext,
+  def isPgpPubKeyReadyForUpload()(implicit
       service: ModelService,
       config: OreConfig
-  ): Future[(Boolean, String)] = {
-    for {
-      projectCount <- this.projects.size
-    } yield {
-      if (this.pgpPubKey.isEmpty) {
-        (false, "error.pgp.noPubKey")
-      } else if (projectCount == 0) {
-        (true, "")
-      } else if (this.lastPgpPubKeyUpdate.isEmpty) {
-        (true, "")
-      } else {
-        this.lastPgpPubKeyUpdate.map { lastUpdate =>
-          val minTime = new Timestamp(lastUpdate.getTime + config.security.keyChangeCooldown)
-          if (minTime.before(service.theTime)) {
-            (true, "")
-          } else {
-            (false, "error.pgp.keyChangeCooldown")
-          }
-        }.get
+  ): EitherT[IO, String, Unit] = {
+    EitherT(
+      for {
+        projectCount <- this.projects.size
+      } yield {
+        if (this.pgpPubKey.isEmpty) {
+          Left("error.pgp.noPubKey")
+        } else if (projectCount == 0) {
+          Right(())
+        } else if (this.lastPgpPubKeyUpdate.isEmpty) {
+          Right(())
+        } else {
+          this.lastPgpPubKeyUpdate.map { lastUpdate =>
+            val minTime = new Timestamp(lastUpdate.getTime + config.security.keyChangeCooldown)
+            if (minTime.before(service.theTime)) {
+              Right(())
+            } else {
+              Left("error.pgp.keyChangeCooldown")
+            }
+          }.get
+        }
       }
-    }
+    )
   }
 
   /**

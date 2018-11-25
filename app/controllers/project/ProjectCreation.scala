@@ -2,7 +2,7 @@ package controllers.project
 
 import javax.inject.Inject
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 import play.api.cache.AsyncCacheApi
 import play.api.mvc.{Action, AnyContent}
@@ -10,7 +10,7 @@ import play.api.mvc.{Action, AnyContent}
 import controllers.OreBaseController
 import controllers.sugar.Bakery
 import controllers.sugar.Requests.AuthRequest
-import db.{DbRef, ModelService}
+import db.ModelService
 import form.OreForms
 import models.project.{TagColor, Version, VersionTag}
 import models.user.{LoggedAction, User, UserActionLogger}
@@ -24,7 +24,8 @@ import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
 import views.html.{projects => views}
 
 import cats.data.OptionT
-import cats.instances.future._
+import cats.effect.{ContextShift, IO}
+import cats.instances.vector._
 import cats.syntax.all._
 
 /**
@@ -52,12 +53,12 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
     *
     * @return Create project view
     */
-  def showStep1(): Action[AnyContent] = UserLock().async { implicit request =>
+  def showStep1()(implicit cs: ContextShift[IO]): Action[AnyContent] = UserLock().asyncF { implicit request =>
     val user = request.user
     for {
       pgpValid  <- user.isPgpPubKeyReadyForUpload
       userOrgas <- user.organizations.allFromParent(user)
-      userOrgasCanCreate <- Future.traverse(userOrgas)(
+      userOrgasCanCreate <- userOrgas.toVector.parTraverse(
         org =>
           (user.can(CreateProject) in org).map { perm =>
             (org, perm)
@@ -68,7 +69,7 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
         case (orga, perm) if perm => orga
       }
 
-      Ok(views.creation.step1(pgpValid, createProjectOrgas))
+      Ok(views.creation.step1(pgpValid.value, createProjectOrgas))
     }
   }
 
@@ -81,7 +82,7 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
     *
     * @return
     */
-  def processStep1(): Action[AnyContent] = UserLock().async { implicit request =>
+  def processStep1()(implicit cs: ContextShift[IO]): Action[AnyContent] = UserLock().asyncF { implicit request =>
     val user = request.user
     for {
       // PGP Validation check
@@ -89,7 +90,7 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
 
       // Get organization the user is allowed to upload to
       userOrgas <- user.organizations.allFromParent(user)
-      userOrgasCanCreate <- Future.traverse(userOrgas)(
+      userOrgasCanCreate <- userOrgas.toVector.parTraverse(
         org =>
           (user.can(CreateProject) in org).map { perm =>
             (org.id.value, perm)
@@ -136,7 +137,7 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
                   pendingProjectCreate match {
                     case Right(pendingProject) =>
                       // Cache project
-                      pendingProject.cache()
+                      pendingProject.cache
 
                       // Show step2
                       Redirect(self.showStep2()).withCookies(bakery.bake("_newproject", pendingProject.key))
@@ -162,10 +163,10 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
     *
     * @return Configuration view
     */
-  def showStep2(): Action[AnyContent] = UserLock().async { implicit request =>
+  def showStep2(): Action[AnyContent] = UserLock().asyncF { implicit request =>
     projectCreationFromUser() match {
       case Left(errorMessage) =>
-        Future.successful(Redirect(self.showStep1()).withError(errorMessage))
+        IO.pure(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
         // Check namespaces
         for {
@@ -191,17 +192,17 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
     *
     * @return
     */
-  def processStep2(): Action[AnyContent] = UserLock().async { implicit request =>
+  def processStep2(): Action[AnyContent] = UserLock().asyncF { implicit request =>
     // Get the possible pending project
     projectCreationFromUser() match {
       case Left(errorMessage) =>
-        Future.successful(Redirect(self.showStep1()).withError(errorMessage))
+        IO.pure(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
         this.forms
           .ProjectCreateStep2()
           .bindFromRequest()
           .fold(
-            hasErrors => Future.successful(FormError(self.showStep2())(hasErrors)),
+            hasErrors => IO.pure(FormError(self.showStep2())(hasErrors)),
             formData => {
               for {
                 updatedProject <- pendingProject.settings.save(pendingProject.underlying, formData)
@@ -220,15 +221,15 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
     *
     * @return
     */
-  def showStep3(): Action[AnyContent] = UserLock().async { implicit request =>
+  def showStep3(): Action[AnyContent] = UserLock().asyncF { implicit request =>
     projectCreationFromUser() match {
       case Left(errorMessage) =>
-        Future.successful(Redirect(self.showStep1()).withError(errorMessage))
+        IO.pure(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
         val res = for {
           owner <- this.service.get[User](pendingProject.underlying.owner.userId)
           orgaData <- OptionT
-            .liftF(owner.toMaybeOrganization.semiflatMap(OrganizationData.of).value) //Type here is OptionT[Future, Option[OrgData]]
+            .liftF(owner.toMaybeOrganization.semiflatMap(OrganizationData.of).value) //Type here is OptionT[IO, Option[OrgData]]
         } yield
           Ok(
             views.creation.step3(
@@ -248,25 +249,25 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
     *
     * @return
     */
-  def processStep3(): Action[AnyContent] = UserLock().async { implicit request =>
+  def processStep3(): Action[AnyContent] = UserLock().asyncF { implicit request =>
     // Get the possible pending project
     //TODO: process invitations
     projectCreationFromUser() match {
       case Left(errorMessage) =>
-        Future.successful(Redirect(self.showStep1()).withError(errorMessage))
+        IO.pure(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
         this.forms.ProjectMemberRoles
           .bindFromRequest()
           .fold(
-            hasErrors => Future.successful(FormError(self.showStep3())(hasErrors)),
+            hasErrors => IO.pure(FormError(self.showStep3())(hasErrors)),
             success = formData => {
               if (formData.roles.count(Role.ProjectOwner.value.equalsIgnoreCase) != 0) {
-                Future.successful(Redirect(self.showStep3()).withError("error"))
+                IO.pure(Redirect(self.showStep3()).withError("error"))
               } else {
                 val newPending = pendingProject.copy(
                   roles = formData.build()
                 )
-                newPending.cache()
+                newPending.cache
 
                 val res = for {
                   owner <- this.service.get[User](pendingProject.underlying.owner.userId)
@@ -283,10 +284,10 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
     *
     * @return
     */
-  def showStep4(): Action[AnyContent] = UserLock().async { implicit request =>
+  def showStep4(): Action[AnyContent] = UserLock().asyncF { implicit request =>
     projectCreationFromUser() match {
       case Left(errorMessage) =>
-        Future.successful(Redirect(self.showStep1()).withError(errorMessage))
+        IO.pure(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
         val res = for {
           owner <- this.service.get[User](pendingProject.underlying.owner.userId)
@@ -301,21 +302,21 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
     *
     * @return
     */
-  def processStep4(): Action[AnyContent] = UserLock().async { implicit request =>
+  def processStep4(): Action[AnyContent] = UserLock().asyncF { implicit request =>
     // Get the possible pending project
     //TODO: process creation
     projectCreationFromUser() match {
       case Left(errorMessage) =>
-        Future.successful(Redirect(self.showStep1()).withError(errorMessage))
+        IO.pure(Redirect(self.showStep1()).withError(errorMessage))
       case Right(pendingProject) =>
-        Future.successful(
+        IO.pure(
           Redirect(
             controllers.project.routes.Projects
               .show(pendingProject.underlying.ownerName, pendingProject.underlying.slug)
           )
         )
         this.forms.VersionCreate.bindFromRequest.fold(
-          hasErrors => Future.successful(FormError(self.showStep3())(hasErrors)),
+          hasErrors => IO.pure(FormError(self.showStep3())(hasErrors)),
           versionData => {
 
             val pendingVersion = pendingProject.pendingVersion
@@ -348,7 +349,7 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
           )
         )
         .void
-    } else Future.unit
+    } else IO.unit
   }
 
   /**

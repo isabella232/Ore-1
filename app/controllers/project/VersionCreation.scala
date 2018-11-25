@@ -42,12 +42,11 @@ class VersionCreation @Inject()(creationFactory: ProjectCreationFactory)(
     *
     * @return Create version view
     */
-  def showStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).async { request =>
+  def showStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).asyncF { request =>
     implicit val r: OreRequest[AnyContent] = request.request
     val user                               = request.user
-    for {
-      pgpValid <- user.isPgpPubKeyReadyForUpload
-    } yield {
+
+    user.isPgpPubKeyReadyForUpload.value.map { pgpValid =>
       Ok(views.versions.creation.step1(pgpValid, author, slug))
     }
   }
@@ -56,33 +55,25 @@ class VersionCreation @Inject()(creationFactory: ProjectCreationFactory)(
     *
     * @return
     */
-  def processStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).async {
+  def processStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).asyncF {
     request =>
       implicit val r: OreRequest[AnyContent] = request.request
       val user                               = request.user
 
-      for {
-        // PGP Validation check
-        pgpValid <- user.isPgpPubKeyReadyForUpload
-      } yield {
-
-        // Start validation process
-        if (!pgpValid._1) {
-          // Show error from PGP Key
-          Redirect(self.showStep1(author, slug)).withError(pgpValid._2)
-        } else {
+      user.isPgpPubKeyReadyForUpload.value.map {
+        case Left(error) => Redirect(self.showStep1(author, slug)).withError(error)
+        case Right(()) =>
           val uploadData = PluginUpload.bindFromRequestArray()
 
           if (uploadData.isEmpty) {
-            // No data found
+          // No data found
             Redirect(self.showStep1(author, slug)).withError("error.noFile")
 
           } else {
             // Process the uploads
             Redirect("")
-          }
-        }
       }
+  }
   }
 
   /*
