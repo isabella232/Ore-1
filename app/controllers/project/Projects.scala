@@ -65,121 +65,6 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
   private def SettingsEditAction(author: String, slug: String) =
     AuthedProjectAction(author, slug, requireUnlock = true).andThen(ProjectPermissionAction(EditSettings))
 
-  /**
-    * Displays the "create project" page.
-    *
-    * @return Create project view
-    */
-  def showCreator(): Action[AnyContent] = UserLock().asyncF { implicit request =>
-    import cats.instances.vector._
-    for {
-      orgas      <- request.user.organizations.allFromParent(request.user)
-      createOrga <- orgas.toVector.parTraverse(request.user.can(CreateProject).in(_))
-    } yield {
-      Ok(views.creation.step1((true, ""), Seq.empty))
-    }
-  }
-
-  /**
-    * Uploads a Project's first plugin file for further processing.
-    *
-    * @return Result
-    */
-  def upload(): Action[AnyContent] = UserLock().asyncF { implicit request =>
-    val user = request.user
-    this.factory.getUploadError(user) match {
-      case Some(error) => IO.pure(Redirect(self.showCreator()).withError(error))
-      case None =>
-        PluginUpload.bindFromRequest() match {
-          case None =>
-            IO.pure(Redirect(self.showCreator()).withError("error.noFile"))
-          case Some(uploadData) =>
-            try {
-              val plugin = this.factory.processPluginUpload(uploadData, user)
-              plugin match {
-                case Right(pluginFile) =>
-                  val project = this.factory.startProject(pluginFile)
-                  val model   = project.underlying
-                  project.cache.as(Redirect(self.showCreatorWithMeta(model.ownerName, model.slug)))
-                case Left(errorMessage) =>
-                  IO.pure(Redirect(self.showCreator()).withError(errorMessage))
-              }
-            } catch {
-              case e: InvalidPluginFileException =>
-                IO.pure(Redirect(self.showCreator()).withErrors(Option(e.getMessage).toList))
-            }
-        }
-    }
-  }
-
-  /**
-    * Displays the "create project" page with uploaded plugin meta data.
-    *
-    * @param author Author of plugin
-    * @param slug   Project slug
-    * @return Create project view
-    */
-  def showCreatorWithMeta(author: String, slug: String): Action[AnyContent] = UserLock().asyncF { implicit request =>
-    this.factory.getPendingProject(author, slug) match {
-      case None => IO.pure(Redirect(self.showCreator()).withError("error.project.timeout"))
-      case Some(pending) =>
-        import cats.instances.vector._
-        for {
-          t <- (request.user.organizations.allFromParent(request.user), pending.underlying.owner.user).parTupled
-          (orgas, owner) = t
-          createOrga <- orgas.toVector.parTraverse(owner.can(CreateProject).in(_))
-        } yield {
-          val createdOrgas = orgas.zip(createOrga).collect {
-            case (orga, true) => orga
-          }
-          Ok(views.create(createdOrgas, Some(pending)))
-        }
-    }
-  }
-
-  /**
-    * Shows the members invitation page during Project creation.
-    *
-    * @param author   Project owner
-    * @param slug     Project slug
-    * @return         View of members config
-    */
-  def showInvitationForm(author: String, slug: String): Action[AnyContent] = UserLock().asyncF { implicit request =>
-    orgasUserCanUploadTo(request.user).flatMap { organisationUserCanUploadTo =>
-      this.factory.getPendingProject(author, slug) match {
-        case None =>
-          IO.pure(Redirect(self.showCreator()).withError("error.project.timeout"))
-        case Some(pendingProject) =>
-          import cats.instances.list._
-          this.forms
-            .ProjectSave(organisationUserCanUploadTo.toSeq)
-            .bindFromRequest()
-            .fold(
-              FormErrorLocalized(self.showCreator()).andThen(IO.pure),
-              formData => {
-                pendingProject.settings.save(pendingProject.underlying, formData).flatMap {
-                  case (newProject, newSettings) =>
-                    val newPending = pendingProject.copy(
-                      underlying = newProject,
-                      settings = newSettings
-                    )
-
-                    val authors = newPending.file.data.get.authors.toList
-                    (
-                      newPending.cache *> newPending.pendingVersion.cache,
-                      authors.filter(_ != request.user.name).parTraverse(users.withName(_).value),
-                      this.forums.countUsers(authors),
-                      newPending.underlying.owner.user
-                    ).parMapN { (_, users, registered, owner) =>
-                      Ok(views.invite(owner, newPending, users.flatten, registered))
-                    }
-                }
-              }
-            )
-      }
-    }
-  }
-
   private def orgasUserCanUploadTo(user: User): IO[Set[DbRef[Organization]]] = {
     import cats.instances.vector._
     for {
@@ -194,29 +79,6 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
       others.toSet + user.id.value // Add self
     }
   }
-
-  /**
-    * Continues on to the second step of Project creation where the user
-    * publishes their Project.
-    *
-    * @param author Author of project
-    * @param slug   Project slug
-    * @return Redirection to project page if successful
-    */
-  def showFirstVersionCreator(author: String, slug: String): Action[ProjectRoleSetBuilder] =
-    UserLock()(parse.form(forms.ProjectMemberRoles)).asyncF { implicit request =>
-      this.factory
-        .getPendingProject(author, slug)
-        .toRight(IO.pure(Redirect(self.showCreator()).withError("error.project.timeout")))
-        .map { pendingProject =>
-          val newPending     = pendingProject.copy(roles = request.body.build())
-          val pendingVersion = newPending.pendingVersion
-          newPending.cache.as(
-            Redirect(routes.Versions.showCreatorWithMeta(author, slug, pendingVersion.underlying.versionString))
-          )
-        }
-        .merge
-    }
 
   /**
     * Displays the Project with the specified author and name.
@@ -679,33 +541,43 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
       .asyncF(parse.form(forms.ProjectVisibility)) { implicit request =>
         implicit val lang: Lang = request.lang
 
-        Visibility.withValueOpt(request.body.visibility).map { newVisibility =>
-          request.user.can(newVisibility.permission).in(GlobalScope).flatMap { perm =>
-            if (perm) {
-              if (!Visibility.isPublic(newVisibility) && Visibility.isPublic(request.project.visibility)) {
-                this.forums.changeTopicVisibility(request.project, isVisible = false)
-              } else if (Visibility.isPublic(newVisibility) && !Visibility.isPublic(request.project.visibility)) {
-                this.forums.changeTopicVisibility(request.project, isVisible = true)
-              }
+        Visibility
+          .withValueOpt(request.body.visibility)
+          .map { newVisibility =>
+            request.user.can(newVisibility.permission).in(GlobalScope).flatMap { perm =>
+              if (perm) {
+                if (!Visibility.isPublic(newVisibility) && Visibility.isPublic(request.project.visibility)) {
+                  this.forums.changeTopicVisibility(request.project, isVisible = false)
+                } else if (Visibility.isPublic(newVisibility) && !Visibility.isPublic(request.project.visibility)) {
+                  this.forums.changeTopicVisibility(request.project, isVisible = true)
+                }
 
-              if (newVisibility.needsReason) {
-                if(request.body.comment.isDefined) {
-                  request.project.setVisibilityByUser(newVisibility, request.body.comment.get, request.user.id.value, request).map { _ =>
-                    Redirect(self.showActionSettings(author, slug)).withSuccess(messagesApi.apply("visibility.changed", newVisibility.title))
+                if (newVisibility.needsReason) {
+                  if (request.body.comment.isDefined) {
+                    request.project
+                      .setVisibilityByUser(newVisibility, request.body.comment.get, request.user.id.value, request)
+                      .map { _ =>
+                        Redirect(self.showActionSettings(author, slug))
+                          .withSuccess(messagesApi.apply("visibility.changed", newVisibility.title))
+                      }
+                  } else {
+                    IO.pure(
+                      Redirect(self.showActionSettings(author, slug))
+                        .withError(messagesApi.apply("visibility.needsReason", newVisibility.title))
+                    )
                   }
                 } else {
-                  IO.pure(Redirect(self.showActionSettings(author, slug)).withError(messagesApi.apply("visibility.needsReason", newVisibility.title)))
+                  request.project.setVisibilityByUser(newVisibility, "", request.user.id.value, request).map { _ =>
+                    Redirect(self.showActionSettings(author, slug))
+                      .withSuccess(messagesApi.apply("visibility.changed", newVisibility.title))
+                  }
                 }
               } else {
-                request.project.setVisibilityByUser(newVisibility, "", request.user.id.value, request).map { _ =>
-                  Redirect(self.showActionSettings(author, slug)).withSuccess(messagesApi.apply("visibility.changed", newVisibility.title))
-                }
+                IO.pure(Unauthorized)
               }
-            } else {
-              IO.pure(Unauthorized)
             }
           }
-        }.getOrElse(IO.pure(BadRequest))
+          .getOrElse(IO.pure(BadRequest))
       }
   }
 

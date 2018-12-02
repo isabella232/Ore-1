@@ -85,12 +85,6 @@ POST    /new/members                                                @controllers
 GET     /new/confirm                                                @controllers.project.ProjectCreation.showStep4()
 POST    /new/confirm                                                @controllers.project.ProjectCreation.processStep4()
 
-GET     /newOld                                                     @controllers.project.Projects.showCreator()
-
-POST    /new/upload                                                 @controllers.project.Projects.upload()
-GET     /new/:author/:slug                                          @controllers.project.Projects.showCreatorWithMeta(author, slug)
-POST    /new/:author/:slug/members                                  @controllers.project.Projects.showInvitationForm(author, slug)
-
 POST    /invite/:id/:status                                         @controllers.project.Projects.setInviteStatus(id: DbRef[ProjectUserRole], status)
 POST    /invite/:id/:status/:behalf                                 @controllers.project.Projects.setInviteStatusOnBehalf(id: DbRef[ProjectUserRole], status: String, behalf: String)
 
@@ -123,7 +117,6 @@ POST    /:user/settings/pgp                                         @controllers
 GET     /:user/settings/pgp/delete                                  @controllers.Users.deletePgpPublicKey(user, sso: Option[String], sig: Option[String])
 # -------- End Users --------
 
-POST    /:author/:slug                                              @controllers.project.Projects.showFirstVersionCreator(author, slug)
 GET     /:author/:slug                                              @controllers.project.Projects.show(author, slug)
 POST    /:author/:slug/star/:starred                                @controllers.project.Projects.setStarred(author, slug, starred: Boolean)
 POST    /:author/:slug/flag                                         @controllers.project.Projects.flag(author, slug)

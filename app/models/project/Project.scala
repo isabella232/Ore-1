@@ -242,8 +242,8 @@ case class Project(
       creator: DbRef[User],
       request: AuthedProjectRequest[_]
   )(
-    implicit service: ModelService,
-    cs: ContextShift[IO]
+      implicit service: ModelService,
+      cs: ContextShift[IO]
   ): IO[(Project, ProjectVisibilityChange)] = {
     setVisibility(visibility, comment, creator).map { result =>
       UserActionLogger.log(

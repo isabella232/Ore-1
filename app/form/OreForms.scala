@@ -67,7 +67,7 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
   lazy val ProjectVisibility = Form(
     mapping(
       "visibility" -> number,
-      "comment" -> optional(text)
+      "comment"    -> optional(text)
     )(ProjectActionSettingsForm.apply)(ProjectActionSettingsForm.unapply)
   )
 

@@ -42,13 +42,14 @@ class VersionCreation @Inject()(creationFactory: ProjectCreationFactory)(
     *
     * @return Create version view
     */
-  def showStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).asyncF { request =>
-    implicit val r: OreRequest[AnyContent] = request.request
-    val user                               = request.user
+  def showStep1(author: String, slug: String): Action[AnyContent] = VersionUploadAction(author, slug).asyncF {
+    request =>
+      implicit val r: OreRequest[AnyContent] = request.request
+      val user                               = request.user
 
-    user.isPgpPubKeyReadyForUpload.value.map { pgpValid =>
-      Ok(views.versions.creation.step1(pgpValid, author, slug))
-    }
+      user.isPgpPubKeyReadyForUpload.value.map { pgpValid =>
+        Ok(views.versions.creation.step1(pgpValid, author, slug))
+      }
   }
 
   /**
@@ -66,14 +67,14 @@ class VersionCreation @Inject()(creationFactory: ProjectCreationFactory)(
           val uploadData = PluginUpload.bindFromRequestArray()
 
           if (uploadData.isEmpty) {
-          // No data found
+            // No data found
             Redirect(self.showStep1(author, slug)).withError("error.noFile")
 
           } else {
             // Process the uploads
             Redirect("")
+          }
       }
-  }
   }
 
   /*

@@ -27,7 +27,8 @@ object Visibility extends IntEnum[Visibility] {
       extends Visibility(3, "NeedsChanges", ReviewProjects, needsReason = true, "striped project-needsChanges")
   case object NeedsApproval
       extends Visibility(4, "NeedsApproval", ReviewProjects, needsReason = false, "striped project-needsChanges")
-  case object SoftDelete extends Visibility(5, "SoftDelete", ReviewProjects, needsReason = true, "striped project-hidden")
+  case object SoftDelete
+      extends Visibility(5, "SoftDelete", ReviewProjects, needsReason = true, "striped project-hidden")
 
   def isPublic(visibility: Visibility): Boolean = visibility == Public || visibility == New
 

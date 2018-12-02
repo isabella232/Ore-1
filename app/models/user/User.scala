@@ -90,7 +90,8 @@ case class User(
       minTime.before(service.theTime)
     }
 
-  def isPgpPubKeyReadyForUpload()(implicit
+  def isPgpPubKeyReadyForUpload()(
+      implicit
       service: ModelService,
       config: OreConfig
   ): EitherT[IO, String, Unit] = {

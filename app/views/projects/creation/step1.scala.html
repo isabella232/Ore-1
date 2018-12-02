@@ -11,7 +11,7 @@ Page used for uploading and creating new projects.
 @import security.NonceFilter._
 @import views.html.helper.{CSRF, form}
 
-@(pgpStatus: (Boolean, String), createProjectOrgas: Seq[Organization])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@(pgpStatus: Either[String, Unit], createProjectOrgas: Seq[Organization])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
 @projects.creation.creationTemplate(messages("project.create"), 1) {
     <script type="text/javascript" src="@routes.Assets.versioned("javascripts/pluginCreationUpload.js")"></script>
 
@@ -26,8 +26,8 @@ Page used for uploading and creating new projects.
         @CSRF.formField
 
         @* PGP Check: is not valid *@
-        @if(!pgpStatus._1) {
-            <div class="alert alert-danger">@messages(pgpStatus._2)</div>
+        @if(!pgpStatus.isLeft) {
+            <div class="alert alert-danger">@messages(pgpStatus.left.get)</div>
         } else {
             <ul class="nav justify-content-center">
                 <li class="nav-item">

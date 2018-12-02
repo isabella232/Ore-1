@@ -56,7 +56,7 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
   def showStep1()(implicit cs: ContextShift[IO]): Action[AnyContent] = UserLock().asyncF { implicit request =>
     val user = request.user
     for {
-      pgpValid  <- user.isPgpPubKeyReadyForUpload
+      pgpValid  <- user.isPgpPubKeyReadyForUpload.value
       userOrgas <- user.organizations.allFromParent(user)
       userOrgasCanCreate <- userOrgas.toVector.parTraverse(
         org =>
@@ -86,7 +86,7 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
     val user = request.user
     for {
       // PGP Validation check
-      pgpValid <- user.isPgpPubKeyReadyForUpload
+      pgpValid <- user.isPgpPubKeyReadyForUpload.value
 
       // Get organization the user is allowed to upload to
       userOrgas <- user.organizations.allFromParent(user)
@@ -104,54 +104,51 @@ class ProjectCreation @Inject()(forms: OreForms, creationFactory: ProjectCreatio
       }
       canUploadTo = canUploadTo :+ user.id.value
 
-      // Start validation process
-      if (!pgpValid._1) {
-        // Show error from PGP Key
-        Redirect(self.showStep1()).withError(pgpValid._2)
+      pgpValid match {
+        case Left(error) => Redirect(self.showStep1()).withError(error)
+        case Right(()) =>
+          val uploadData = PluginUpload.bindFromRequest()
 
-      } else {
-        val uploadData = PluginUpload.bindFromRequest()
+          if (uploadData.isEmpty) {
+            // No data found
+            Redirect(self.showStep1()).withError("error.noFile")
 
-        if (uploadData.isEmpty) {
-          // No data found
-          Redirect(self.showStep1()).withError("error.noFile")
+          } else {
+            // Process the form (returns the optional selected owner)
+            this.forms
+              .ProjectCreateStep1(canUploadTo)
+              .bindFromRequest()
+              .fold(
+                hasErrors =>
+                  // Show error
+                  Redirect(self.showStep1()).withFormErrors(hasErrors.errors),
+                formData => {
+                  // Get selected project Owner (fallback to user itself)
+                  val projectOwner = formData.getOrElse(user.id.value)
 
-        } else {
-          // Process the form (returns the optional selected owner)
-          this.forms
-            .ProjectCreateStep1(canUploadTo.toSeq)
-            .bindFromRequest()
-            .fold(
-              hasErrors =>
-                // Show error
-                Redirect(self.showStep1()).withError(pgpValid._2),
-              formData => {
-                // Get selected project Owner (fallback to user itself)
-                val projectOwner = formData.getOrElse(user.id.value)
+                  // Peding project can throw Exceptions so we will give it a try catch block
+                  try {
+                    val pendingProjectCreate = this.creationFactory.createProjectStep1(uploadData.get, user, projectOwner)
 
-                // Peding project can throw Exceptions so we will give it a try catch block
-                try {
-                  val pendingProjectCreate = this.creationFactory.createProjectStep1(uploadData.get, user, projectOwner)
+                    // Project can return errors so check if we have them
+                    pendingProjectCreate match {
+                      case Right(pendingProject) =>
+                        // Cache project
+                        pendingProject.cache
 
-                  // Project can return errors so check if we have them
-                  pendingProjectCreate match {
-                    case Right(pendingProject) =>
-                      // Cache project
-                      pendingProject.cache
+                        // Show step2
+                        Redirect(self.showStep2()).withCookies(bakery.bake("_newproject", pendingProject.key))
 
-                      // Show step2
-                      Redirect(self.showStep2()).withCookies(bakery.bake("_newproject", pendingProject.key))
-
-                    case Left(errorMessage) =>
-                      Redirect(self.showStep1()).withError(errorMessage)
+                      case Left(errorMessage) =>
+                        Redirect(self.showStep1()).withError(errorMessage)
+                    }
+                  } catch {
+                    case e: Exception =>
+                      Redirect(self.showStep1()).withErrors(Option(e.getMessage).toList)
                   }
-                } catch {
-                  case e: Exception =>
-                    Redirect(self.showStep1()).withErrors(Option(e.getMessage).toList)
                 }
-              }
-            )
-        }
+              )
+          }
       }
     }
   }

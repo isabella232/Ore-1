@@ -27,7 +27,7 @@ import security.pgp.PGPVerifier
 import util.StringUtils.equalsIgnoreCase
 
 import akka.actor.ActorSystem
-import cats.data.NonEmptyList
+import cats.data.{EitherT, NonEmptyList}
 import cats.effect.{ContextShift, IO}
 import cats.instances.vector._
 import cats.instances.option._
@@ -67,113 +67,114 @@ trait ProjectCreationFactory {
   def createProjectStep1(uploadData: PluginUpload, uploader: User, ownerId: Long)(
       implicit ec: ExecutionContext,
       messages: Messages
-  ): Either[String, PendingProjectCreation] = {
+  ): EitherT[IO, String, PendingProjectCreation] = {
     // Check files in PluginUpload
     val filePlugin    = uploadData.pluginFileName
     var fileSignature = uploadData.signatureFileName
 
     if (!filePlugin.endsWith(".zip") && !filePlugin.endsWith(".jar")) {
-      return Left("error.plugin.fileExtension")
+      return EitherT.leftT("error.plugin.fileExtension")
     }
     if (!fileSignature.endsWith(".asc") && !fileSignature.endsWith(".sig")) {
-      return Left("error.plugin.sig.fileExtension")
+      return EitherT.leftT("error.plugin.sig.fileExtension")
     }
 
     uploader.isPgpPubKeyReadyForUpload.value.map {
-    case Left(error) => return Left(error)
-    case Right(())   =>
-      // Get paths of PluginUpload
-      var pathPlugin    = uploadData.pluginFile.path
-      var pathSignature = uploadData.signatureFile.path
+      case Left(error) => Left(error)
+      case Right(())   =>
+        // Get paths of PluginUpload
+        var pathPlugin    = uploadData.pluginFile.path
+        var pathSignature = uploadData.signatureFile.path
 
-      // Check signature of uploaded File
-      if (!this.pgpVerifier.verifyDetachedSignature(pathPlugin, pathSignature, uploader.pgpPubKey.get)) {
-        return Left("error.plugin.sig.failed")
-      }
+        // Check signature of uploaded File
+        if (!this.pgpVerifier.verifyDetachedSignature(pathPlugin, pathSignature, uploader.pgpPubKey.get)) {
+          Left("error.plugin.sig.failed")
+        } else {
+          for {
+            owner <- this.users.get(ownerId)
+          } yield {
+            // Move files to temp folder
+            val pathTempUpload = this.env.tmp.resolve(owner.name)
 
-      for {
-        owner <- this.users.get(ownerId)
-      } yield {
-        // Move files to temp folder
-        val pathTempUpload = this.env.tmp.resolve(owner.name)
+            if (notExists(pathTempUpload)) {
+              createDirectories(pathTempUpload)
+            }
 
-        if (notExists(pathTempUpload)) {
-          createDirectories(pathTempUpload)
+            // Rename signature file
+            val signatureFileExtension = fileSignature.substring(fileSignature.lastIndexOf("."))
+            fileSignature = filePlugin + signatureFileExtension
+
+            // Copy files
+            pathPlugin = copy(pathPlugin, pathTempUpload.resolve(filePlugin), StandardCopyOption.REPLACE_EXISTING)
+            pathSignature =
+              copy(pathSignature, pathTempUpload.resolve(fileSignature), StandardCopyOption.REPLACE_EXISTING)
+
+            // Make PluginFile
+            val pluginFile = new PluginFile(pathPlugin, pathSignature, uploader)
+
+            // Load metadata
+            val metaLoad = pluginFile.loadMeta()
+
+            // Check metaLoad
+            if (metaLoad.isLeft) {
+              return EitherT.leftT(metaLoad.left.get)
+            }
+
+            // Sanity check for if data is loaded
+            pluginFile.data.getOrElse(throw new IllegalStateException("plugin metadata not loaded?"))
+
+            // Get metaData
+            val metaData = metaLoad.right.get
+
+            // Start new Project Builder
+            val projectBuild = Project
+              .Builder(this.service)
+              .pluginId(metaData.id.get)
+              .ownerName(owner.name)
+              .ownerId(owner.id.value)
+              .name(metaData.get[String]("name").getOrElse("name not found"))
+              .visibility(Visibility.New)
+              .build()
+
+            // Start new Version Builder
+            val versionBuild = Version
+              .Builder(this.service)
+              .versionString(metaData.version.get)
+              .dependencyIds(metaData.dependencies.map(d => d.pluginId + ":" + d.version).toList)
+              .description(metaData.get[String]("description").getOrElse(""))
+              .projectId(projectBuild.id.unsafeToOption.getOrElse(-1)) // Version might be for an uncreated project
+              .fileSize(pathPlugin.toFile.length)
+              .hash(pluginFile.md5)
+              .fileName(pathPlugin.getFileName.toString)
+              .signatureFileName(pathSignature.getFileName.toString)
+              .authorId(ownerId)
+              .build()
+
+            // Make PendingVersion
+            val pendingVersion = PendingVersionCreation(
+              factory = this,
+              project = projectBuild,
+              channelName = this.config.getSuggestedNameForVersion(metaData.version.get),
+              channelColor = this.config.defaultChannelColor,
+              underlying = versionBuild,
+              plugin = pluginFile,
+              createForumPost = true,
+              cacheApi = this.cacheApi
+            )
+
+            // Make PendingProject
+            Right(
+              PendingProjectCreation(
+                factory = this,
+                underlying = projectBuild,
+                file = pluginFile,
+                channelName = this.config.getSuggestedNameForVersion(metaData.version.get),
+                pendingVersion = pendingVersion,
+                cacheApi = this.cacheApi
+              )
+            )
+          }
         }
-
-        // Rename signature file
-        val signatureFileExtension = fileSignature.substring(fileSignature.lastIndexOf("."))
-        fileSignature = filePlugin + signatureFileExtension
-
-        // Copy files
-        pathPlugin = copy(pathPlugin, pathTempUpload.resolve(filePlugin), StandardCopyOption.REPLACE_EXISTING)
-        pathSignature = copy(pathSignature, pathTempUpload.resolve(fileSignature), StandardCopyOption.REPLACE_EXISTING)
-
-        // Make PluginFile
-        val pluginFile = new PluginFile(pathPlugin, pathSignature, uploader)
-
-        // Load metadata
-        val metaLoad = pluginFile.loadMeta()
-
-        // Check metaLoad
-        if (metaLoad.isLeft) {
-          return Left(metaLoad.left.get)
-        }
-
-        // Sanity check for if data is loaded
-        pluginFile.data.getOrElse(throw new IllegalStateException("plugin metadata not loaded?"))
-
-        // Get metaData
-        val metaData = metaLoad.right.get
-
-        // Start new Project Builder
-        val projectBuild = Project
-          .Builder(this.service)
-          .pluginId(metaData.id.get)
-          .ownerName(owner.name)
-          .ownerId(owner.id.value)
-          .name(metaData.get[String]("name").getOrElse("name not found"))
-          .visibility(Visibility.New)
-          .build()
-
-        // Start new Version Builder
-        val versionBuild = Version
-          .Builder(this.service)
-          .versionString(metaData.version.get)
-          .dependencyIds(metaData.dependencies.map(d => d.pluginId + ":" + d.version).toList)
-          .description(metaData.get[String]("description").getOrElse(""))
-          .projectId(projectBuild.id.unsafeToOption.getOrElse(-1)) // Version might be for an uncreated project
-          .fileSize(pathPlugin.toFile.length)
-          .hash(pluginFile.md5)
-          .fileName(pathPlugin.getFileName.toString)
-          .signatureFileName(pathSignature.getFileName.toString)
-          .authorId(ownerId)
-          .build()
-
-        // Make PendingVersion
-        val pendingVersion = PendingVersionCreation(
-          factory = this,
-          project = projectBuild,
-          channelName = this.config.getSuggestedNameForVersion(metaData.version.get),
-          channelColor = this.config.defaultChannelColor,
-          underlying = versionBuild,
-          plugin = pluginFile,
-          createForumPost = true,
-          cacheApi = this.cacheApi
-        )
-
-        // Make PendingProject
-        Right(
-          PendingProjectCreation(
-            factory = this,
-            underlying = projectBuild,
-            file = pluginFile,
-            channelName = this.config.getSuggestedNameForVersion(metaData.version.get),
-            pendingVersion = pendingVersion,
-            cacheApi = this.cacheApi
-          )
-        )
-      }
     }
   }
 
@@ -187,7 +188,9 @@ trait ProjectCreationFactory {
     * @return New Project
     * @throws         IllegalArgumentException if the project already exists
     */
-  def createProject(pending: PendingProjectCreation)(implicit ec: ExecutionContext, cs: ContextShift[IO]): IO[Project] = {
+  def createProject(
+      pending: PendingProjectCreation
+  )(implicit ec: ExecutionContext, cs: ContextShift[IO]): IO[Project] = {
     val project = pending.underlying
 
     for {

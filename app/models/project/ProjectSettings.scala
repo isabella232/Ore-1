@@ -51,9 +51,9 @@ case class ProjectSettings(
   override type T = ProjectSettingsTable
 
   def saveGeneral(project: Project, formData: ProjectGeneralSettingsForm)(
-    implicit fileManager: ProjectFiles,
-    service: ModelService,
-    cs: ContextShift[IO]
+      implicit fileManager: ProjectFiles,
+      service: ModelService,
+      cs: ContextShift[IO]
   ): IO[(Project, ProjectSettings)] = {
     val updateProject = service.updateIfDefined(
       project.copy(

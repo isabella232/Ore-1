@@ -31,9 +31,14 @@ trait RoleSetBuilder[M <: UserRoleModel] {
     *
     * @return Result set
     */
-  def build(): Set[M] = users.zip(roles).map { case (userId, role) => newRole(userId, Role.withValue(role)) }.toSet.filter(userRole => {
-      userRole.role.category.equals(RoleCategory.Project)
-    })
+  def build(): Set[M] =
+    users
+      .zip(roles)
+      .map { case (userId, role) => newRole(userId, Role.withValue(role)) }
+      .toSet
+      .filter(userRole => {
+        userRole.role.category.equals(RoleCategory.Project)
+      })
 
   /**
     * Creates a new role for the specified user ID and role type.
