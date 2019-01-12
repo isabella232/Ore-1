@@ -2,14 +2,11 @@ package models.admin
 
 import java.sql.Timestamp
 
-import play.twirl.api.Html
-
 import db.impl.model.common.VisibilityChange
 import db.impl.schema.VersionVisibilityChangeTable
 import db.{DbRef, InsertFunc, Model, ModelQuery, ObjId, ObjectTimestamp}
-import models.project.{Page, Version, Visibility}
+import models.project.{Version, Visibility}
 import models.user.User
-import ore.OreConfig
 
 import slick.lifted.TableQuery
 
@@ -18,7 +15,7 @@ case class VersionVisibilityChange(
     createdAt: ObjectTimestamp,
     createdBy: Option[DbRef[User]],
     versionId: DbRef[Version],
-    comment: String,
+    messageId: DbRef[Message],
     resolvedAt: Option[Timestamp],
     resolvedBy: Option[DbRef[User]],
     visibility: Visibility
@@ -29,21 +26,18 @@ case class VersionVisibilityChange(
   override type M = VersionVisibilityChange
 
   /** The model's table */
-  override type T = VersionVisibilityChangeTable
-
-  /** Render the comment as Html */
-  def renderComment(implicit config: OreConfig): Html = Page.render(comment)
+  override type T = VersionVisibilityChangeTable)
 }
 object VersionVisibilityChange {
   def partial(
       createdBy: Option[DbRef[User]] = None,
       versionId: DbRef[Version],
-      comment: String,
+      messageId: DbRef[Message],
       resolvedAt: Option[Timestamp] = None,
       resolvedBy: Option[DbRef[User]] = None,
       visibility: Visibility = Visibility.New
   ): InsertFunc[VersionVisibilityChange] =
-    (id, time) => VersionVisibilityChange(id, time, createdBy, versionId, comment, resolvedAt, resolvedBy, visibility)
+    (id, time) => VersionVisibilityChange(id, time, createdBy, versionId, messageId, resolvedAt, resolvedBy, visibility)
 
   implicit val query: ModelQuery[VersionVisibilityChange] =
     ModelQuery.from[VersionVisibilityChange](TableQuery[VersionVisibilityChangeTable], _.copy(_, _))

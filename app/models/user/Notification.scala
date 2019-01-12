@@ -3,10 +3,10 @@ package models.user
 import db.impl.access.UserBase
 import db.impl.schema.NotificationTable
 import db.{DbRef, InsertFunc, Model, ModelQuery, ObjId, ObjectTimestamp}
+import models.project.Message
 import ore.user.UserOwned
 import ore.user.notification.NotificationType
 
-import cats.data.{NonEmptyList => NEL}
 import cats.effect.IO
 import slick.lifted.TableQuery
 
@@ -17,8 +17,7 @@ import slick.lifted.TableQuery
   * @param createdAt        Instant of cretion
   * @param userId           ID of User this notification belongs to
   * @param notificationType Type of notification
-  * @param messageArgs      The unlocalized message to display, with the
-  *                         parameters to use when localizing
+  * @param messageId        The message to display
   * @param action           Action to perform on click
   * @param isRead             True if notification has been read
   */
@@ -28,7 +27,7 @@ case class Notification(
     userId: DbRef[User],
     originId: DbRef[User],
     notificationType: NotificationType,
-    messageArgs: NEL[String],
+    messageId: DbRef[Message],
     action: Option[String],
     isRead: Boolean
 ) extends Model {
@@ -49,11 +48,11 @@ object Notification {
       userId: DbRef[User],
       originId: DbRef[User],
       notificationType: NotificationType,
-      messageArgs: NEL[String],
+      messageId: DbRef[Message],
       action: Option[String] = None,
       isRead: Boolean = false
   ): InsertFunc[Notification] =
-    (id, time) => Notification(id, time, userId, originId, notificationType, messageArgs, action, isRead)
+    (id, time) => Notification(id, time, userId, originId, notificationType, messageId, action, isRead)
 
   implicit val query: ModelQuery[Notification] =
     ModelQuery.from[Notification](TableQuery[NotificationTable], _.copy(_, _))

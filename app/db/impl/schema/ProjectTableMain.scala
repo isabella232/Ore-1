@@ -2,8 +2,6 @@ package db.impl.schema
 
 import java.sql.Timestamp
 
-import play.api.libs.json.JsValue
-
 import db.DbRef
 import db.impl.OrePostgresDriver.api._
 import db.impl.table.common.{DescriptionColumn, DownloadsColumn, NameColumn, VisibilityColumn}
@@ -31,7 +29,6 @@ trait ProjectTable
   def postId               = column[Int]("post_id")
   def isTopicDirty         = column[Boolean]("is_topic_dirty")
   def lastUpdated          = column[Timestamp]("last_updated")
-  def notes                = column[JsValue]("notes")
 
   override def * =
     mkProj(
@@ -53,8 +50,7 @@ trait ProjectTable
         postId.?,
         isTopicDirty,
         visibility,
-        lastUpdated,
-        notes
+        lastUpdated
       )
     )(mkTuple[Project]())
 }

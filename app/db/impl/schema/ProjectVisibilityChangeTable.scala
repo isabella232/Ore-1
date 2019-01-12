@@ -14,7 +14,7 @@ class ProjectVisibilityChangeTable(tag: Tag)
   def projectId = column[DbRef[Project]]("project_id")
 
   override def * =
-    mkProj((id.?, createdAt.?, createdBy.?, projectId, comment, resolvedAt.?, resolvedBy.?, visibility))(
+    mkProj((id.?, createdAt.?, createdBy.?, projectId, messageId, resolvedAt.?, resolvedBy.?, visibility))(
       mkTuple[ProjectVisibilityChange]()
     )
 }

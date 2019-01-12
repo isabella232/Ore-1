@@ -14,7 +14,7 @@ class VersionVisibilityChangeTable(tag: Tag)
   def versionId = column[DbRef[Version]]("version_id")
 
   override def * =
-    mkProj((id.?, createdAt.?, createdBy.?, versionId, comment, resolvedAt.?, resolvedBy.?, visibility))(
+    mkProj((id.?, createdAt.?, createdBy.?, versionId, messageId, resolvedAt.?, resolvedBy.?, visibility))(
       mkTuple[VersionVisibilityChange]()
     )
 }

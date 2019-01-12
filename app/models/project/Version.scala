@@ -21,7 +21,6 @@ import util.FileUtils
 import cats.data.OptionT
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
-import com.google.common.base.Preconditions.{checkArgument, checkNotNull}
 import slick.lifted.TableQuery
 
 /**
@@ -141,7 +140,7 @@ case class Version(
   override def visibilityChanges(implicit service: ModelService): ModelAccess[VersionVisibilityChange] =
     service.access(_.versionId === id.value)
 
-  override def setVisibility(visibility: Visibility, comment: String, creator: DbRef[User])(
+  override def setVisibility(visibility: Visibility, messageId: DbRef[Message], creator: DbRef[User])(
       implicit service: ModelService,
       cs: ContextShift[IO]
   ): IO[(Version, VersionVisibilityChange)] = {
@@ -162,7 +161,7 @@ case class Version(
         VersionVisibilityChange.partial(
           Some(creator),
           this.id.value,
-          comment,
+          messageId,
           None,
           None,
           visibility

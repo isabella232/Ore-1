@@ -3,11 +3,6 @@ package models.project
 import java.sql.Timestamp
 import java.time.Instant
 
-import play.api.i18n.Messages
-import play.api.libs.functional.syntax._
-import play.api.libs.json._
-import play.twirl.api.Html
-
 import db.access.{ModelAccess, ModelAssociationAccess, ModelAssociationAccessImpl}
 import db.impl.OrePostgresDriver.api._
 import db.impl.model.common.{Describable, Downloadable, Hideable, Named}
@@ -31,7 +26,6 @@ import ore.permission.scope.HasScope
 import ore.project.{Category, FlagReason, ProjectMember}
 import ore.user.MembershipDossier
 import ore.{Joinable, OreConfig, Visitable}
-import _root_.util.StringUtils
 import _root_.util.StringUtils._
 import _root_.util.syntax._
 
@@ -63,7 +57,6 @@ import slick.lifted.{Rep, TableQuery}
   * @param isTopicDirty           Whether this project's forum topic needs to be updated
   * @param visibility             Whether this project is visible to the default user
   * @param lastUpdated            Instant of last version release
-  * @param notes                  JSON notes
   */
 case class Project(
     id: ObjId[Project],
@@ -84,7 +77,6 @@ case class Project(
     isTopicDirty: Boolean,
     visibility: Visibility,
     lastUpdated: Timestamp,
-    notes: JsValue
 ) extends Model
     with Downloadable
     with Named
@@ -183,7 +175,7 @@ case class Project(
     *
     * @param visibility True if visible
     */
-  def setVisibility(visibility: Visibility, comment: String, creator: DbRef[User])(
+  def setVisibility(visibility: Visibility, messageId: DbRef[Message], creator: DbRef[User])(
       implicit service: ModelService,
       cs: ContextShift[IO]
   ): IO[(Project, ProjectVisibilityChange)] = {
@@ -204,7 +196,7 @@ case class Project(
         ProjectVisibilityChange.partial(
           Some(creator),
           this.id.value,
-          comment,
+          messageId,
           None,
           None,
           visibility
@@ -290,14 +282,14 @@ case class Project(
     * @param user   Flagger
     * @param reason Reason for flagging
     */
-  def flagFor(user: User, reason: FlagReason, comment: String)(
+  def flagFor(user: User, reason: FlagReason, messageId: DbRef[Message])(
       implicit service: ModelService
   ): IO[Flag] = {
     checkNotNull(user, "null user", "")
     checkNotNull(reason, "null reason", "")
     val userId = user.id.value
     checkArgument(userId != this.ownerId, "cannot flag own project", "")
-    service.access[Flag]().add(Flag.partial(this.id.value, user.id.value, reason, comment))
+    service.access[Flag]().add(Flag.partial(this.id.value, user.id.value, reason, messageId))
   }
 
   /**
@@ -402,48 +394,6 @@ case class Project(
   }
 
   def apiKeys(implicit service: ModelService): ModelAccess[ProjectApiKey] = service.access(_.projectId === id.value)
-
-  /**
-    * Add new note
-    */
-  def addNote(message: Note)(implicit service: ModelService): IO[Project] = {
-    val messages = decodeNotes :+ message
-    service.update(
-      copy(
-        notes = JsObject(
-          Seq("messages" -> Json.toJson(messages))
-        )
-      )
-    )
-  }
-
-  /**
-    * Get all messages
-    * @return
-    */
-  def decodeNotes: Seq[Note] = (notes \ "messages").asOpt[Seq[Note]].getOrElse(Nil)
-}
-
-/**
-  * This modal is needed to convert the json
-  */
-case class Note(message: String, user: DbRef[User], time: Long = System.currentTimeMillis()) {
-  def printTime(implicit oreConfig: Messages): String = StringUtils.prettifyDateAndTime(new Timestamp(time))
-  def render(implicit oreConfig: OreConfig): Html     = Page.render(message)
-}
-object Note {
-  implicit val noteWrites: Writes[Note] = (note: Note) =>
-    Json.obj(
-      "message" -> note.message,
-      "user"    -> note.user,
-      "time"    -> note.time
-  )
-
-  implicit val notesRead: Reads[Note] =
-    (JsPath \ "message")
-      .read[String]
-      .and((JsPath \ "user").read[DbRef[User]])
-      .and((JsPath \ "time").read[Long])(Note.apply _)
 }
 
 object Project {
@@ -464,8 +414,7 @@ object Project {
       postId: Option[Int] = None,
       isTopicDirty: Boolean = false,
       visibility: Visibility = Public,
-      lastUpdated: Timestamp = Timestamp.from(Instant.now()),
-      notes: JsValue = JsObject.empty
+      lastUpdated: Timestamp = Timestamp.from(Instant.now())
   ): InsertFunc[Project] =
     (id, time) =>
       Project(
@@ -486,8 +435,7 @@ object Project {
         postId,
         isTopicDirty,
         visibility,
-        lastUpdated,
-        notes
+        lastUpdated
     )
 
   implicit val query: ModelQuery[Project] =

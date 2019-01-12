@@ -2,8 +2,6 @@ package db.impl.schema
 
 import java.sql.Timestamp
 
-import play.api.libs.json.JsValue
-
 import db.DbRef
 import db.impl.OrePostgresDriver.api._
 import db.table.ModelTable
@@ -16,7 +14,6 @@ class ReviewTable(tag: Tag) extends ModelTable[Review](tag, "project_version_rev
   def versionId = column[DbRef[Version]]("version_id")
   def userId    = column[DbRef[User]]("user_id")
   def endedAt   = column[Timestamp]("ended_at")
-  def comment   = column[JsValue]("comment")
 
-  override def * = mkProj((id.?, createdAt.?, versionId, userId, endedAt.?, comment))(mkTuple[Review]())
+  override def * = mkProj((id.?, createdAt.?, versionId, userId, endedAt.?))(mkTuple[Review]())
 }

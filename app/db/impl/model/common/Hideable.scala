@@ -4,7 +4,7 @@ import db.access.ModelAccess
 import db.impl.OrePostgresDriver.api._
 import db.impl.table.common.VisibilityColumn
 import db.{DbRef, Model, ModelService}
-import models.project.Visibility
+import models.project.{Message, Visibility}
 import models.user.User
 
 import cats.data.OptionT
@@ -33,7 +33,7 @@ trait Hideable extends Model { self =>
     *
     * @param visibility True if visible
     */
-  def setVisibility(visibility: Visibility, comment: String, creator: DbRef[User])(
+  def setVisibility(visibility: Visibility, messageId: DbRef[Message], creator: DbRef[User])(
       implicit service: ModelService,
       cs: ContextShift[IO]
   ): IO[(M, ModelVisibilityChange)]

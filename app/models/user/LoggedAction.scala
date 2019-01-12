@@ -5,6 +5,7 @@ import scala.collection.immutable
 import controllers.sugar.Requests.AuthRequest
 import db.impl.schema.LoggedActionTable
 import db.{DbRef, InsertFunc, Model, ModelQuery, ModelService, ObjId, ObjectTimestamp}
+import models.project.Message
 import ore.StatTracker
 import ore.user.UserOwned
 
@@ -22,7 +23,8 @@ case class LoggedActionModel[Ctx](
     actionContext: LoggedActionContext[Ctx],
     actionContextId: DbRef[Ctx],
     newState: String,
-    oldState: String
+    oldState: String,
+    messageId: Option[DbRef[Message]]
 ) extends Model {
 
   override type T = LoggedActionTable[Ctx]
@@ -37,10 +39,22 @@ object LoggedActionModel {
       actionContext: LoggedActionContext[Ctx],
       actionContextId: DbRef[Ctx],
       newState: String,
-      oldState: String
+      oldState: String,
+      messageId: Option[DbRef[Message]]
   ): InsertFunc[LoggedActionModel[Ctx]] =
     (id, time) =>
-      LoggedActionModel(id, time, userId, address, action, actionContext, actionContextId, newState, oldState)
+      LoggedActionModel(
+        id,
+        time,
+        userId,
+        address,
+        action,
+        actionContext,
+        actionContextId,
+        newState,
+        oldState,
+        messageId
+    )
 
   implicit def query[Ctx]: ModelQuery[LoggedActionModel[Ctx]] =
     ModelQuery.from[LoggedActionModel[Ctx]](
@@ -150,7 +164,8 @@ object UserActionLogger {
       action: LoggedAction[Ctx],
       actionContextId: DbRef[Ctx],
       newState: String,
-      oldState: String
+      oldState: String,
+      messageId: Option[DbRef[Message]] = None
   )(implicit service: ModelService): IO[LoggedActionModel[Ctx]] =
     service.insert(
       LoggedActionModel.partial(
@@ -160,7 +175,8 @@ object UserActionLogger {
         action.context,
         actionContextId,
         newState,
-        oldState
+        oldState,
+        messageId
       )
     )
 

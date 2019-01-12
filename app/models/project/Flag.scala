@@ -28,7 +28,7 @@ case class Flag(
     projectId: DbRef[Project],
     userId: DbRef[User],
     reason: FlagReason,
-    comment: String,
+    messageId: DbRef[Message],
     isResolved: Boolean,
     resolvedAt: Option[Timestamp],
     resolvedBy: Option[DbRef[User]]
@@ -66,12 +66,12 @@ object Flag {
       projectId: DbRef[Project],
       userId: DbRef[User],
       reason: FlagReason,
-      comment: String,
+      messageId: DbRef[Message],
       isResolved: Boolean = false,
       resolvedAt: Option[Timestamp] = None,
       resolvedBy: Option[DbRef[User]] = None
   ): InsertFunc[Flag] =
-    (id, time) => Flag(id, time, projectId, userId, reason, comment, isResolved, resolvedAt, resolvedBy)
+    (id, time) => Flag(id, time, projectId, userId, reason, messageId, isResolved, resolvedAt, resolvedBy)
 
   implicit val query: ModelQuery[Flag] =
     ModelQuery.from[Flag](TableQuery[FlagTable], _.copy(_, _))
