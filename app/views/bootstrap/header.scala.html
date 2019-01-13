@@ -58,10 +58,6 @@ The main header displayed on each layout.
         <!-- Right navbar -->
         @if(user) {
             <ul class="nav navbar-nav navbar-collapse collapse navbar-right">
-                <li class="nav-icon authors-icon" @tooltip(messages("project.viewAuthors"))>
-                    <i class="icon fa fa-users"></i>
-                </li>
-
                 @if(request.headerData.activeCompetitions.size == 1) {
                     <li class="nav-icon competition-icon" @tooltip(messages("project.competitions"))>
                         <a href="@controllers.project.routes.Competitions.showProjects(request.headerData.activeCompetitions.head.id.value, None)">
@@ -70,7 +66,17 @@ The main header displayed on each layout.
                     </li>
                 }
 
+                <li class="nav-icon authors-icon" @tooltip(messages("project.viewAuthors"))>
+                    <i class="icon fa fa-users"></i>
+                </li>
+
                 @request.headerData.currentUser.map { user =>
+                    @if(request.headerData.globalPerm(ReviewProjects)) {
+                        <li class="nav-icon staff-icon" @tooltip(messages("project.viewStaff"))>
+                            <i class="icon fa fa-user-md"></i>
+                        </li>
+                    }
+
                     <li class="dropdown nav-icon new-controls">
                         <a href="#" class="drop-down-toggle" data-toggle="dropdown">
                             <i class="icon fa fa-plus"></i>

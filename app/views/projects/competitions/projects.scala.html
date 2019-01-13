@@ -10,6 +10,7 @@
 @import controllers.sugar.Requests.OreRequest
 @import ore.permission.EditCompetitions
 
+@import views.html.helper.CSRF
 @(competition: Competition, models: Seq[(Project, User, Version, Seq[VersionTag])], userProjects: Seq[Project], page: Int, pageSize: Int)(implicit messages: Messages, request: OreRequest[_],
         config: OreConfig, competitions: CompetitionBase, flash: Flash)
 
@@ -58,14 +59,14 @@
                             </div>
                         }
                     </div>
-                } else {
-                    <h1>@competition.name</h1>
                 }
+                <h1>@competition.name</h1>
             </div>
         </div>
         <div class="row">
             <div class="pull-right form-inline">
                 @helper.form(action = compRoutes.submitProject(competition.id.value)) {
+                    @CSRF.formField
                     @if(userProjects.nonEmpty) {
                         <select class="form-control" name="project">
                             <option selected value="-1">@Html(messages("competition.submit.selectProject"))</option>

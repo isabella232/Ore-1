@@ -73,6 +73,8 @@ admin.health.missingFile = Missing File
 
 editor.deleteConfirm    =   Are you sure you want to delete {0}? This cannot be undone.
 
+success.saved.competition = Competition settings saved.
+
 error.minLength                 =   Content too short.
 error.maxLength                 =   Content too long.
 error.noFile                    =   No file submitted.
@@ -81,6 +83,7 @@ error.noLogin                   =   Login is temporarily unavailable, please try
 error.loginFailed               =   Authentication failed.
 error.project.invalidPluginFile =   Invalid plugin file.
 error.project.competition.alreadySubmitted = You have already entered this project into this competition.
+error.competition.dates = The dates you have entered are invalid. Either the competition have already started, or it has already ended. 
 error.competition.submit.invalidProject = Please select a project to submit. 
 error.project.competition.entryLimit = You have reached the maximum amount of projects you can submit to this competition.
 error.project.competition.capacity = This competition is at capacity and is no longer taking submissions.

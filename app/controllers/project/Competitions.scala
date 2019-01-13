@@ -168,7 +168,13 @@ class Competitions @Inject()(forms: OreForms)(
 
           Ok(
             views.projects.competitions
-              .projects(request.competition, competitionEntries, userProjects, page.getOrElse(1), config.ore.projects.initLoad)
+              .projects(
+                request.competition,
+                competitionEntries,
+                userProjects,
+                page.getOrElse(1),
+                config.ore.projects.initLoad
+              )
           )
       }
   }
@@ -188,10 +194,11 @@ class Competitions @Inject()(forms: OreForms)(
         .get(projectId)
         .toRight(Redirect(self.showProjects(id, None)).withError("error.competition.submit.invalidProject"))
         .semiflatMap(project => project.settings.tupleLeft(project))
-        .flatMap { case (project, projectSettings) =>
-          this.competitions
-            .submitProject(project, projectSettings, request.competition)
-            .leftMap(error => Redirect(self.showProjects(id, None)).withErrors(error.toList))
+        .flatMap {
+          case (project, projectSettings) =>
+            this.competitions
+              .submitProject(project, projectSettings, request.competition)
+              .leftMap(error => Redirect(self.showProjects(id, None)).withErrors(error.toList))
         }
         .as(Redirect(self.showProjects(id, None)))
     }

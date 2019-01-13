@@ -259,7 +259,7 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
       "default-entries"   -> default(number(1), 1),
       "max-entries-total" -> default(number(-1), -1)
     )(CompetitionCreateForm.apply)(CompetitionCreateForm.unapply)
-      .verifying("error.dates.competition", _.checkDates())
+      .verifying("error.dates.competition", _.checkDates(checkStart = true))
   )
 
   /**
@@ -279,7 +279,7 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
       "default-entries"   -> default(number(1), 1),
       "max-entries-total" -> default(number(-1), -1)
     )(CompetitionSaveForm.apply)(CompetitionSaveForm.unapply)
-      .verifying("error.dates.competition", _.checkDates())
+      .verifying("error.dates.competition", _.checkDates(checkStart = false))
   )
 
   /**

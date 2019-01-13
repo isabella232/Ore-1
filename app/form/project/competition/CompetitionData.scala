@@ -17,6 +17,7 @@ trait CompetitionData {
   val maxEntryTotal: Int
   val timeZone: ZoneId = ZoneId.of(this.timeZoneId)
 
-  def checkDates(): Boolean = startDate.isAfter(LocalDateTime.now(this.timeZone)) && startDate.isBefore(this.endDate)
+  def checkDates(checkStart: Boolean): Boolean =
+    (startDate.isAfter(LocalDateTime.now(this.timeZone)) || !checkStart) && startDate.isBefore(this.endDate)
 
 }

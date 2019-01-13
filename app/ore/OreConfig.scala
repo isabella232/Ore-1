@@ -110,12 +110,12 @@ final class OreConfig @Inject()(config: Configuration) {
 
       object name extends ConfigCategory {
         val raw: Configuration = competitions.raw.get[Configuration]("name")
-        val maxLen: Int = raw.get[Int]("max-len")
+        val maxLen: Int        = raw.get[Int]("max-len")
       }
 
       object date extends ConfigCategory {
         val raw: Configuration = competitions.raw.get[Configuration]("date")
-        val format: String = raw.get[String]("format")
+        val format: String     = raw.get[String]("format")
       }
     }
   }

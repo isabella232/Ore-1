@@ -11,6 +11,7 @@
 @import scala.collection.JavaConverters._
 @import views.html.helper.form
 
+@import views.html.helper.CSRF
 @(competitions: Seq[Competition])(implicit messages: Messages, request: OreRequest[_], config: OreConfig, flash: Flash)
 
 @formatTime(competition: Competition) = @{
@@ -83,6 +84,7 @@
                                   @form(action = controllers.project.routes.Competitions.save(competition.id.value)) {
                                       <a href="#" data-toggle="modal" data-target="#modal-competition-delete"
                                          class="competition-delete"><i class="fa fa-trash"></i></a>
+                                      @CSRF.formField
 
                                       <div class="row">
                                           <div class="col-md-4">
@@ -197,7 +199,7 @@
                                                           </label>
                                                       </td>
                                                       <td>
-                                                          <input name="max-entries-total" type="number" min="0" value="@competition.maxEntryTotal" @maybeDisabled(competition)>
+                                                          <input name="max-entries-total" type="number" min="-1" value="@competition.maxEntryTotal" @maybeDisabled(competition)>
                                                       </td>
                                                   </tr>
                                               </table>

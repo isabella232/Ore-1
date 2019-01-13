@@ -7,6 +7,7 @@
 @import java.time.ZoneId
 @import scala.collection.JavaConverters._
 
+@import views.html.helper.CSRF
 @()(implicit messages: Messages, request: OreRequest[_], config: OreConfig, flash: Flash)
 
 @bootstrap.layout(messages("project.competition.create.title")) {
@@ -36,6 +37,7 @@
 
                         @form(action = controllers.project.routes.Competitions.create(),
                             'class -> "form-competition") {
+                            @CSRF.formField
                             <div class="setting setting-no-border">
                                 <h4>@messages("general.name")</h4>
                                 <input type="text" name="name" class="form-control" required
@@ -107,7 +109,7 @@
                                     <input name="default-votes" type="number" min="0" value="1" /><br/>
                                     <input name="staff-votes" type="number" min="0" value="1" /><br />
                                     <input name="default-entries" type="number" min="0" value="1"><br/>
-                                    <input name="max-entries-total" type="number" min="0" value="1">
+                                    <input name="max-entries-total" type="number" min="-1" value="1">
                                 </div>
                                 <div class="clearfix"></div>
 
