@@ -1,9 +1,12 @@
 package util
 
+import java.util.Base64
+
 import play.api.libs.ws.WSClient
 
-import cats.data.OptionT
+import cats.data.EitherT
 import cats.effect.IO
+import cats.syntax.all._
 
 object GitHubUtil {
 
@@ -13,13 +16,17 @@ object GitHubUtil {
 
   def isGitHubUrl(url: String): Boolean = gitHubUrlPattern.matcher(url).matches()
 
-  def getReadme(user: String, project: String)(implicit ws: WSClient): OptionT[IO, String] =
-    OptionT(
+  def getReadme(user: String, project: String)(implicit ws: WSClient): EitherT[IO, String, String] =
+    EitherT(
       IO.fromFuture(IO(ws.url(readmeApi.format(user, project)).get())).map { res =>
         if (res.status == 200) {
-          (res.json \ "download_url").validate[String].asOpt
-        } else None
+          (res.json \ "content")
+            .validate[String]
+            .asEither
+            .leftMap(
+              _.map(t => s"Failed to decode ${t._1.path} because ${t._2.map(_.message).mkString("\n")}").mkString("\n")
+            )
+        } else Left(res.body)
       }
-    ).semiflatMap(url => IO.fromFuture(IO(ws.url(url).get())))
-      .subflatMap(res => if (res.status == 200) res.body else None)
+    ).map(content => new String(Base64.getDecoder.decode(content.replace("\\n", "")), "UTF-8"))
 }

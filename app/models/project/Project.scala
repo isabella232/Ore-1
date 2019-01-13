@@ -37,7 +37,7 @@ import _root_.util.StringUtils
 import _root_.util.StringUtils._
 import _root_.util.syntax._
 
-import cats.data.OptionT
+import cats.data.{EitherT, OptionT}
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import com.google.common.base.Preconditions._
@@ -347,9 +347,10 @@ case class Project(
     }
   }
 
-  def getGithubReadme(implicit service: ModelService, config: OreConfig, ws: WSClient): OptionT[IO, String] =
+  def getGithubReadme(implicit service: ModelService, config: OreConfig, ws: WSClient): EitherT[IO, String, String] =
     OptionT(this.settings.map(_.source))
       .filter(GitHubUtil.isGitHubUrl)
+      .toRight("No github source")
       .flatMap { githubSource =>
         val urlParts  = githubSource.split("//github.com/", 2)(1).split("/")
         val ghUser    = urlParts(0)
@@ -367,9 +368,9 @@ case class Project(
   def homePageOrCreate(
       scrapGithub: Boolean
   )(implicit service: ModelService, config: OreConfig, ws: WSClient): IO[(Page, Boolean)] =
-    OptionT
-      .some[IO](scrapGithub)
-      .filter(identity)
+    EitherT
+      .rightT[IO, String](scrapGithub)
+      .ensure("")(identity)
       .flatMap(_ => getGithubReadme)
       .getOrElse(Page.homeMessage)
       .map { body =>
@@ -383,7 +384,7 @@ case class Project(
     * @return Project home page
     */
   def homePage(implicit service: ModelService, config: OreConfig, ws: WSClient): IO[Page] =
-    homePageOrCreate.map(_._1)
+    settings.flatMap(settings => homePageOrCreate(settings.githubSync)).map(_._1)
 
   /**
     * Returns true if a page with the specified name exists.
