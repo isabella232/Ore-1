@@ -1,7 +1,7 @@
 name := "ore"
 version := "1.7"
 
-lazy val `ore` = (project in file(".")).enablePlugins(PlayScala)
+lazy val `ore` = (project in file(".")).enablePlugins(PlayScala, DockerPlugin)
 
 scalaVersion := "2.12.8"
 scalacOptions ++= Seq(
@@ -124,3 +124,7 @@ pipelineStages := Seq(digest, gzip)
 // Disable generation of the API documentation for production builds
 sources in (Compile, doc) := Seq.empty
 publishArtifact in (Compile, packageDoc) := false
+
+maintainer in Docker := "SpongePowered"
+dockerUsername := sys.env.get("DOCKER_USER")
+dockerUpdateLatest := true
