@@ -91,6 +91,33 @@ case class User(
       minTime.before(service.theTime)
     }
 
+  def isPgpPubKeyReadyForUpload()(
+      implicit service: ModelService,
+      config: OreConfig
+  ): IO[(Boolean, String)] = {
+    for {
+      projectCount <- this.projects.size
+    } yield {
+      if (this.pgpPubKey.isEmpty) {
+        (false, "error.pgp.noPubKey")
+      } else if (projectCount == 0) {
+        (true, "")
+      } else if (this.lastPgpPubKeyUpdate.isEmpty) {
+        (true, "")
+      } else {
+        this.lastPgpPubKeyUpdate.map { lastUpdate =>
+          val cooldown = config.security.keyChangeCooldown
+          val minTime  = new Timestamp(lastUpdate.getTime + cooldown)
+          if (minTime.before(service.theTime)) {
+            (true, "")
+          } else {
+            (false, "error.pgp.keyChangeCooldown")
+          }
+        }.get
+      }
+    }
+  }
+
   /**
     * Returns this user's current language, or the default language if none
     * was configured.

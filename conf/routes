@@ -72,7 +72,9 @@ POST    /verify                                                     @controllers
 
 GET     /p/:pluginId                                                @controllers.project.Projects.showProjectById(pluginId)
 
-GET     /new                                                        @controllers.project.Projects.showCreator()
+GET     /newOld                                                     @controllers.project.Projects.showCreator()
+GET     /new                                                        @controllers.project.ProjectCreation.showStep1()
+POST    /new                                                        @controllers.project.ProjectCreation.processStep1()
 
 POST    /new/upload                                                 @controllers.project.Projects.upload()
 GET     /new/:author/:slug                                          @controllers.project.Projects.showCreatorWithMeta(author, slug)

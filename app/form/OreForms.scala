@@ -314,4 +314,14 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
       "api_key" -> nonEmptyText
     )
   )
+
+  /**
+    * Used to process the first step of the upload process
+    */
+  def ProjectCreateStep1(ownersUserCanUploadTo: Seq[DbRef[Organization]]) =
+    Form(
+      single(
+        "owner" -> optional(longNumber).verifying(ownerIdInList(ownersUserCanUploadTo))
+      )
+    )
 }

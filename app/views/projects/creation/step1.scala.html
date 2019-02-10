@@ -1,0 +1,77 @@
+@import controllers.sugar.Requests.OreRequest
+@import db.ModelService
+@import models.project.Project
+@import models.user.Organization
+@import ore.OreConfig
+@import ore.project.factory.PendingProject
+@import play.twirl.api.Html
+@import security.NonceFilter._
+@import views.html.helper.{CSRF, form}
+
+@(pgpStatus: (Boolean, String), createProjectOrgas: Seq[Organization])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@projects.creation.creationTemplate(messages("project.create"), 1) {
+    <script type="text/javascript" src="@routes.Assets.versioned("javascripts/pluginCreationUpload.js")"></script>
+
+    <ul>
+        <li>@Html(messages("project.create.infoText.head"))</li>
+        <li>@Html(messages("project.create.infoText.guidelines"))</li>
+        <li>@Html(messages("project.create.infoText.bottom"))</li>
+        <li>@Html(messages("project.create.infoText.pgp"))</li>
+    </ul>
+
+    @form(action = controllers.project.routes.ProjectCreation.processStep1(), 'enctype -> "multipart/form-data", 'id -> "form-upload", 'id -> "uploadFileForm") {
+        @CSRF.formField
+
+        @* PGP Check: is not valid *@
+        @if(!pgpStatus._1) {
+            <div class="alert alert-danger">@messages(pgpStatus._2)</div>
+        } else {
+            <div class="btn-group btn-group-justified">
+
+                <label class="btn btn-primary" id="uploadFileBtn">
+                    <input id="uploadFileInput" name="pluginFile" class="hidden" type="file">
+                    <i class="fas fa-file-medical"></i>
+                    Select plugin file
+                </label>
+
+                <label class="btn btn-default" id="uploadSignatureBtn">
+                    <input id="uploadSignatureInput" name="pluginSig" class="hidden" type="file">
+                    <i class="fas fa-file-signature"></i>
+                    Select signature file
+                </label>
+
+                @if(createProjectOrgas.nonEmpty) {
+                    <a class="btn btn-default" id="uploadOwnerSelect">
+                        <select class="form-control" id="inlineFormCustomSelect" name="owner">
+                            <option selected disabled>Select project owner</option>
+                            <option value="@request.currentUser.get.id">@request.currentUser.get.name</option>
+                            @createProjectOrgas.map { organization =>
+                                <option value="@organization.id.value">@organization.name</option>
+                            }
+                        </select>
+                    </a>
+                }
+
+                <a class="btn btn-default" id="uploadFinishBtn">
+                    <i class="fas fa-file-upload"></i>
+                    Upload
+                </a>
+            </div>
+
+            <div class="alert alert-danger alert-dismissible upload-step1-error" role="alert" style="display:none;">
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close" onclick="$('.upload-step1-error').hide();">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <span class="upload-step1-error-message"></span>
+            </div>
+
+            <div class="alert alert-info upload-step1-file mt-5" style="display:none;">
+                <span class="upload-step1-file-icon"><i class="fas fa-fw fa-file-alt"></i></span>
+                <span class="upload-step1-file-message"></span>
+                <br>
+                <span class="upload-step1-sig-icon"></span>
+                <span class="upload-step1-sig-message"></span>
+            </div>
+        }
+    }
+}
