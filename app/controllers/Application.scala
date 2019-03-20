@@ -17,9 +17,10 @@ import controllers.sugar.Requests.AuthRequest
 import db.access.ModelView
 import db.query.AppQueries
 import db.impl.OrePostgresDriver.api._
+import db.impl.schema.ProjectTableMain
 import models.project._
 import models.querymodels.{FlagActivity, ReviewActivity}
-import db.{Model, ModelCompanion, DbRef, ModelQuery, ModelService}
+import db.{DbRef, Model, ModelCompanion, ModelQuery, ModelService}
 import form.OreForms
 import models.admin.Review
 import models.user.role._
@@ -99,7 +100,9 @@ final class Application @Inject()(forms: OreForms)(
     val pageNum  = math.max(page.getOrElse(1), 1)
     val offset   = (pageNum - 1) * pageSize
 
-    service
+    val projectNumQ = TableQuery[ProjectTableMain].filter(_.visibility === (Visibility.Public: Visibility)).size
+
+    val projectListF = service
       .runDbCon(
         AppQueries
           .getHomeProjects(
@@ -115,11 +118,13 @@ final class Application @Inject()(forms: OreForms)(
           )
           .to[Vector]
       )
-      .map { data =>
-        val catList =
-          if (categoryList.isEmpty || Category.visible.toSet.equals(categoryList.toSet)) None else Some(categoryList)
-        Ok(views.home(data, catList, query.filter(_.nonEmpty), pageNum, ordering, pcat, pform, withRelevance))
-      }
+    val projectNumF = service.runDBIO(projectNumQ.result)
+
+    (projectListF, projectNumF).parMapN { (data, projectNum) =>
+      val catList =
+        if (categoryList.isEmpty || Category.visible.toSet.equals(categoryList.toSet)) None else Some(categoryList)
+      Ok(views.home(data, catList, query.filter(_.nonEmpty), pageNum, ordering, pcat, pform, withRelevance, projectNum))
+    }
   }
 
   /**
