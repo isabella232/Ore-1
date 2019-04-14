@@ -1,17 +1,36 @@
 package controllers.sugar
 
+import java.time.Instant
+
 import play.api.mvc.{Request, WrappedRequest}
 
-import db.Model
+import db.{Model, ModelService}
+import models.api.ApiKey
 import models.project.Project
 import models.user.{Organization, User}
 import models.viewhelper._
+import ore.permission.Permission
 import ore.permission.scope.{GlobalScope, HasScope}
+import util.syntax._
+
+import cats.effect.IO
 
 /**
   * Contains the custom WrappedRequests used by Ore.
   */
 object Requests {
+
+  case class ApiAuthInfo(user: Option[Model[User]], key: Option[ApiKey], expires: Instant, globalPerms: Permission)
+
+  case class ApiRequest[A](apiInfo: ApiAuthInfo, request: Request[A]) extends WrappedRequest[A](request) {
+    def user: Option[Model[User]] = apiInfo.user
+
+    def globalPermissions: Permission = apiInfo.globalPerms
+
+    def permissionIn[B: HasScope](b: B)(implicit service: ModelService): IO[Permission] =
+      if (b.scope == GlobalScope) IO.pure(apiInfo.globalPerms)
+      else apiInfo.key.fold(IO.pure(globalPermissions))(_.permissionsIn(b))
+  }
 
   /**
     * Base Request for Ore that holds all data needed for rendering the header

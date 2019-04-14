@@ -141,6 +141,15 @@ ore {
     queue {
         max-review-time = 1d
     }
+
+    api {
+        session {
+            public-expiration = 3h
+            expiration = 14d
+
+            check-interval = 5m
+        }
+    }
 }
 
 mail {

@@ -7,10 +7,10 @@ import java.util.Date
 import javax.inject.Inject
 
 import scala.concurrent.ExecutionContext
-import scala.util.{Success, Try}
+import scala.util.Try
 
 import play.api.cache.AsyncCacheApi
-import play.api.mvc.{Action, ActionBuilder, AnyContent, Result}
+import play.api.mvc.{Action, ActionBuilder, AnyContent}
 
 import controllers.sugar.Bakery
 import controllers.sugar.Requests.AuthRequest

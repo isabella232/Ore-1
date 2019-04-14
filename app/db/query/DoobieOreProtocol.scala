@@ -11,10 +11,11 @@ import scala.reflect.runtime.universe.TypeTag
 import play.api.i18n.Lang
 import play.api.libs.json.{JsValue, Json}
 
-import models.querymodels.ViewTag
-import db.{Model, ObjId, ObjTimestamp}
+import models.querymodels.{APIV2QueryVersionTag, ViewTag}
+import db.{DbRef, Model, ObjId, ObjTimestamp}
+import models.api.ApiKey
 import models.project.{ReviewState, TagColor, Visibility}
-import models.user.{LoggedAction, LoggedActionContext}
+import models.user.{LoggedAction, LoggedActionContext, User}
 import ore.Color
 import ore.permission.Permission
 import ore.permission.role.{Role, RoleCategory}
@@ -27,15 +28,19 @@ import ore.user.notification.NotificationType
 import cats.data.{NonEmptyList => NEL}
 import com.github.tminglei.slickpg.InetString
 import doobie._
+import doobie.enum.JdbcType
 import doobie.implicits._
 import doobie.postgres._
 import doobie.postgres.implicits._
 import enumeratum.values.{ValueEnum, ValueEnumEntry}
 import org.postgresql.util.{PGInterval, PGobject}
+import shapeless._
 
 trait DoobieOreProtocol {
 
   //implicit val logger = createLogger("Database")
+
+  def fragParens(frag: Fragment): Fragment = fr"(" ++ frag ++ fr")"
 
   def createLogger(name: String): LogHandler = {
     val logger = play.api.Logger(name)
@@ -150,7 +155,27 @@ trait DoobieOreProtocol {
     Meta[InetAddress].timap(address => InetString(address.toString))(str => InetAddress.getByName(str.value))
 
   implicit val permissionMeta: Meta[Permission] =
-    Meta[String].imap[Permission](Permission.fromBinString(_).get)(_.toBinString)
+    Meta.Advanced.one[Permission](
+      JdbcType.Bit,
+      NEL.one("bit"),
+      (r, i) => {
+        val s = r.getString(i)
+        if (s == null) null.asInstanceOf[Permission]
+        else Permission.fromBinString(s).get
+      },
+      (p, i, a) => {
+        val obj = new PGobject
+        obj.setType("bit")
+        obj.setValue(a.toBinString)
+        p.setObject(i, obj)
+      },
+      (p, i, a) => {
+        val obj = new PGobject
+        obj.setType("bit")
+        obj.setValue(a.toBinString)
+        p.updateObject(i, obj)
+      }
+    )
 
   implicit val roleCategoryMeta: Meta[RoleCategory] = pgEnumString[RoleCategory](
     name = "ROLE_CATEGORY",
@@ -191,5 +216,71 @@ trait DoobieOreProtocol {
 
   implicit val viewTagListWrite: Write[List[ViewTag]] =
     Write[(List[String], List[String], List[TagColor])].contramap(_.flatMap(ViewTag.unapply).unzip3)
+
+  implicit val userModelRead: Read[Model[User]] =
+    Read[ObjId[User] :: ObjTimestamp :: Option[String] :: String :: Option[String] :: Option[String] :: Option[
+      Timestamp
+    ] :: List[Prompt] :: Option[String] :: Option[Timestamp] :: Boolean :: Option[Lang] :: HNil].map {
+      case id :: createdAt :: fullName :: name :: email :: tagline :: joinDate :: readPrompts :: pgpPubKey :: lastPgpPubKeyUpdate :: isLocked :: lang :: HNil =>
+        Model(
+          id,
+          createdAt,
+          User(
+            id,
+            fullName,
+            name,
+            email,
+            tagline,
+            joinDate,
+            readPrompts,
+            pgpPubKey,
+            lastPgpPubKeyUpdate,
+            isLocked,
+            lang
+          )
+        )
+    }
+
+  implicit val userModelOptRead: Read[Option[Model[User]]] =
+    Read[Option[ObjId[User]] :: Option[ObjTimestamp] :: Option[String] :: Option[String] :: Option[String] :: Option[
+      String
+    ] :: Option[Timestamp] :: Option[List[Prompt]] :: Option[String] :: Option[Timestamp] :: Option[Boolean] :: Option[
+      Lang
+    ] :: HNil].map {
+      case Some(id) :: Some(createdAt) :: fullName :: Some(name) :: email :: tagline :: joinDate :: Some(readPrompts) :: pgpPubKey :: lastPgpPubKeyUpdate :: Some(
+            isLocked
+          ) :: lang :: HNil =>
+        Some(
+          Model(
+            id,
+            createdAt,
+            User(
+              id,
+              fullName,
+              name,
+              email,
+              tagline,
+              joinDate,
+              readPrompts,
+              pgpPubKey,
+              lastPgpPubKeyUpdate,
+              isLocked,
+              lang
+            )
+          )
+        )
+      case _ => None
+    }
+
+  implicit val apiKeyRead: Read[ApiKey] = Read[String :: DbRef[User] :: String :: Permission :: HNil].map {
+    case name :: ownerId :: token :: permissions :: HNil => ApiKey(name, ownerId, token, permissions)
+  }
+
+  implicit val apiKeyOptRead: Read[Option[ApiKey]] =
+    Read[Option[String] :: Option[DbRef[User]] :: Option[String] :: Option[Permission] :: HNil].map {
+      case Some(name) :: Some(ownerId) :: Some(token) :: Some(permissions) :: HNil =>
+        Some(ApiKey(name, ownerId, token, permissions))
+      case _ => None
+    }
 }
 object DoobieOreProtocol extends DoobieOreProtocol
