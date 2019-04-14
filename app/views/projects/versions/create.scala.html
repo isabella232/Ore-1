@@ -38,7 +38,6 @@
                 <div class="create-body panel-body">
                     <div class="minor create-blurb">
                         <p>@Html(messages("version.create.info", projectName))</p>
-                        <p>@Html(messages("project.create.infoText.pgp"))</p>
                     </div>
 
                     @if(pending.isDefined) {
@@ -187,7 +186,6 @@
                             @CSRF.formField
                             <label class="btn btn-default pull-left" for="pluginFile">
                                 <input id="pluginFile" name="pluginFile" type="file" style="display: none;">
-                                <input id="pluginSig" name="pluginSig" type="file" style="display: none;">
                                 @messages("version.create.selectFile")
                             </label>
 

@@ -15,7 +15,7 @@ import db.impl.access.UserBase.UserOrdering
 import db.impl.schema.{ApiKeyTable, DbRoleTable, ProjectRoleTable, UserTable}
 import db.query.UserQueries
 import db.{DbRef, Model, ModelService}
-import form.{OreForms, PGPPublicKeySubmission}
+import form.OreForms
 import mail.{EmailFactory, Mailer}
 import models.api.ApiKey
 import models.project.{Project, Version}
@@ -58,9 +58,6 @@ class Users @Inject()(
 ) extends OreBaseController {
 
   private val baseUrl = this.config.app.baseUrl
-
-  private val Logger    = scalalogging.Logger("Users")
-  private val MDCLogger = scalalogging.Logger.takingImplicit[OreMDC](Logger.underlying)
 
   /**
     * Redirect to auth page for SSO authentication.
@@ -240,61 +237,6 @@ class Users @Inject()(
         }
       } yield res
     }
-
-  /**
-    * Attempts to save a submitted PGP Public Key to the specified User
-    * profile.
-    *
-    * @param username User to save key to
-    * @return JSON response
-    */
-  def savePgpPublicKey(username: String): Action[PGPPublicKeySubmission] =
-    UserEditAction(username).asyncF(parse.form(forms.UserPgpPubKey, onErrors = FormError(ShowUser(username)))) {
-      implicit request =>
-        val keyInfo = request.body.info
-        val user    = request.user
-
-        // Send email notification
-        this.mailer.push(this.emails.create(user, this.emails.PgpUpdated))
-        val log = UserActionLogger.log(request, LoggedAction.UserPgpKeySaved, user.id, "", "")
-
-        val update = service.update(user)(
-          _.copy(
-            pgpPubKey = Some(keyInfo.raw),
-            lastPgpPubKeyUpdate =
-              if (user.lastPgpPubKeyUpdate.isDefined) Some(service.theTime)
-              else user.lastPgpPubKeyUpdate
-          )
-        )
-
-        (log *> update).as(Redirect(ShowUser(username)).flashing("pgp-updated" -> "true"))
-    }
-
-  /**
-    * Deletes the specified [[User]]'s PGP public key if it exists.
-    *
-    * @param username Username to delete key for
-    * @return Ok if deleted, bad request if didn't exist
-    */
-  def deletePgpPublicKey(username: String, sso: Option[String], sig: Option[String]): Action[AnyContent] = {
-    VerifiedAction(username, sso, sig).asyncF { implicit request =>
-      MDCLogger.debug("Deleting public key for " + username)
-      val user = request.user
-      if (user.pgpPubKey.isEmpty)
-        IO.pure(BadRequest)
-      else {
-        val log = UserActionLogger.log(request, LoggedAction.UserPgpKeyRemoved, user.id, "", "")
-        val insert = service.update(user)(
-          _.copy(
-            pgpPubKey = None,
-            lastPgpPubKeyUpdate = Some(service.theTime)
-          )
-        )
-
-        (log *> insert).as(Redirect(ShowUser(username)).flashing("pgp-updated" -> "true"))
-      }
-    }
-  }
 
   /**
     * Sets the "locked" status of a User.

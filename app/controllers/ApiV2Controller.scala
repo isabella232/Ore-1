@@ -468,7 +468,6 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
   private def readFileAsync(file: Path): IO[String] =
     IO.fromFuture(IO(FileIO.fromPath(file).fold(ByteString.empty)(_ ++ _).map(_.utf8String).runFold("")(_ + _)))
 
-  //TODO: Currently won't work until we deal with PGP stuff
   def deployVersion(pluginId: String, versionName: String): Action[MultipartFormData[Files.TemporaryFile]] =
     ApiAction(Permission.CreateVersion, APIScope.ProjectScope(pluginId))(parse.multipartFormData).asyncEitherT {
       implicit request =>
@@ -522,7 +521,7 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
           data            <- dataF
           file            <- fileF
           pendingVersion <- factory
-            .processSubsequentPluginUpload(PluginUpload(file.ref, file.filename, ???, ???), user, project)
+            .processSubsequentPluginUpload(PluginUpload(file.ref, file.filename), user, project)
             .leftMap(s => BadRequest(UserError(s)))
             .map { v =>
               v.copy(

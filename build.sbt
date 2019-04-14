@@ -62,12 +62,11 @@ lazy val playCommonSettings = Seq(
   pipelineStages := Seq(digest, gzip)
 )
 
-lazy val doobieVersion       = "0.6.0"
-lazy val flexmarkVersion     = "0.40.18"
-lazy val bouncycastleVersion = "1.61"
-lazy val playSlickVersion    = "4.0.0"
-lazy val slickPgVersion      = "0.17.1"
-lazy val circeVersion        = "0.11.1"
+lazy val doobieVersion    = "0.6.0"
+lazy val flexmarkVersion  = "0.40.18"
+lazy val playSlickVersion = "4.0.0"
+lazy val slickPgVersion   = "0.17.1"
+lazy val circeVersion     = "0.11.1"
 
 lazy val `ore` = (project in file("."))
   .enablePlugins(PlayScala)
@@ -91,9 +90,6 @@ lazy val `ore` = (project in file("."))
       "com.github.tminglei"        %% "slick-pg_play-json"            % slickPgVersion,
       "com.typesafe.scala-logging" %% "scala-logging"                 % "3.9.2",
       "io.sentry"                  % "sentry-logback"                 % "1.7.21",
-      "org.bouncycastle"           % "bcprov-jdk15on"                 % bouncycastleVersion,
-      "org.bouncycastle"           % "bcpkix-jdk15on"                 % bouncycastleVersion,
-      "org.bouncycastle"           % "bcpg-jdk15on"                   % bouncycastleVersion,
       "javax.mail"                 % "mail"                           % "1.4.7",
       "com.beachape"               %% "enumeratum"                    % "1.5.13",
       "com.beachape"               %% "enumeratum-slick"              % "1.5.15",
