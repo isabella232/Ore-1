@@ -1,39 +1,17 @@
-/*
- * ==================================================
- *  _____             _
- * |     |___ ___    |_|___
- * |  |  |  _| -_|_  | |_ -|
- * |_____|_| |___|_|_| |___|
- *                 |___|
- *
- * By Walker Crouse (windy) and contributors
- * (C) SpongePowered 2016-2017 MIT License
- * https://github.com/SpongePowered/Ore
- *
- * Powers the main project landing. Also implements the content editor seen on
- * project pages, version pages, and discussion tab.
- *
- * ==================================================
- */
+//=====> CONSTANTS
 
 var KEY_PLUS = 61;
 var KEY_MINUS = 173;
 
-/*
- * ==================================================
- * =               External constants               =
- * ==================================================
- */
+
+//=====> EXTERNAL CONSTANTS
 
 var projectOwner = null;
 var projectSlug = null;
 var alreadyStarred = false;
 
-/*
- * ==================================================
- * =                Helper functions                =
- * ==================================================
- */
+
+//=====> HELPER FUNCTIONS
 
 function getActiveTab() {
     return $('.project-navbar').find('li.active');
@@ -208,11 +186,8 @@ function initBtnEdit() {
     });
 }
 
-/*
- * ==================================================
- * =                   Doc ready                    =
- * ==================================================
- */
+
+//=====> DOCUMENT READY
 
 $(function() {
     initFlagList();
@@ -266,26 +241,5 @@ $(function() {
         }
 
         increment *= -1;
-    });
-
-    // hotkeys
-    var body = $('body');
-    body.keydown(function(event) {
-        var target = $(event.target);
-        if (target.is('body') && shouldExecuteHotkey(event)) {
-            var navBar = $('.project-navbar');
-            switch (event.keyCode) {
-                case KEY_PLUS:
-                    event.preventDefault();
-                    switchTabTo(getActiveTab().next(), navBar.find('li:first'));
-                    break;
-                case KEY_MINUS:
-                    event.preventDefault();
-                    switchTabTo(getActiveTab().prev(), navBar.find('#discussion'));
-                    break;
-                default:
-                    break;
-            }
-        }
     });
 });

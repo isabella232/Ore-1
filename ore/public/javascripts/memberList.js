@@ -1,26 +1,4 @@
-/*
- * ==================================================
- *  _____             _
- * |     |___ ___    |_|___
- * |  |  |  _| -_|_  | |_ -|
- * |_____|_| |___|_|_| |___|
- *                 |___|
- *
- * By Walker Crouse (windy) and contributors
- * (C) SpongePowered 2016-2017 MIT License
- * https://github.com/SpongePowered/Ore
- *
- * Powers the member list seen on the project creation page, project settings
- * and organization page.
- *
- * ==================================================
- */
-
-/*
- * ==================================================
- * =                Helper functions                =
- * ==================================================
- */
+//=====> HELPER FUNCTIONS
 
 function updateIndices() {
     var memberList = $('.list-members');
@@ -72,11 +50,8 @@ function initMember(memberRow) {
     });
 }
 
-/*
- * ==================================================
- * =                   Doc ready                    =
- * ==================================================
- */
+
+//=====> DOCUMENT READY
 
 $(function() {
     initMember($('.list-members').find('.list-group-item'));
