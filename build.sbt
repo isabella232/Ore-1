@@ -51,7 +51,7 @@ lazy val commonSettings = Seq(
 
 lazy val playCommonSettings = Seq(
   routesImport ++= Seq(
-    "db.DbRef",
+    "ore.db.DbRef",
     "models.admin._",
     "models.project._",
     "models.user._",
@@ -68,8 +68,19 @@ lazy val playSlickVersion = "4.0.0"
 lazy val slickPgVersion   = "0.17.1"
 lazy val circeVersion     = "0.11.1"
 
+lazy val db = project.settings(
+  commonSettings,
+  name := "ore-db",
+  libraryDependencies ++= Seq(
+    "com.typesafe.slick" %% "slick"       % "3.3.0",
+    "org.tpolecat"       %% "doobie-core" % doobieVersion,
+    "com.chuusai"        %% "shapeless"   % "2.3.3",
+  )
+)
+
 lazy val `ore` = project
   .enablePlugins(PlayScala)
+  .dependsOn(db)
   .settings(
     commonSettings,
     playCommonSettings,
@@ -88,16 +99,14 @@ lazy val `ore` = project
       "org.postgresql"             % "postgresql"                     % "42.2.5",
       "com.github.tminglei"        %% "slick-pg"                      % slickPgVersion,
       "com.github.tminglei"        %% "slick-pg_play-json"            % slickPgVersion,
+      "org.tpolecat"               %% "doobie-postgres"               % doobieVersion,
       "com.typesafe.scala-logging" %% "scala-logging"                 % "3.9.2",
       "io.sentry"                  % "sentry-logback"                 % "1.7.21",
       "javax.mail"                 % "mail"                           % "1.4.7",
       "com.beachape"               %% "enumeratum"                    % "1.5.13",
       "com.beachape"               %% "enumeratum-slick"              % "1.5.15",
-      "com.chuusai"                %% "shapeless"                     % "2.3.3",
       "org.typelevel"              %% "cats-core"                     % "1.6.0",
       "com.github.mpilquist"       %% "simulacrum"                    % "0.15.0",
-      "org.tpolecat"               %% "doobie-core"                   % doobieVersion,
-      "org.tpolecat"               %% "doobie-postgres"               % doobieVersion,
       "io.circe"                   %% "circe-core"                    % circeVersion,
       "io.circe"                   %% "circe-generic-extras"          % circeVersion,
       "io.circe"                   %% "circe-parser"                  % circeVersion,
@@ -124,4 +133,4 @@ lazy val `ore` = project
     )
   )
 
-lazy val oreAll = project.in(file(".")).aggregate(ore)
+lazy val oreAll = project.in(file(".")).aggregate(db, ore)
