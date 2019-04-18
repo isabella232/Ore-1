@@ -204,11 +204,16 @@ discourse {
     categoryDeleted    =   ${?DISCOURSE_CATEGORY_DELETED}
 
     api {
-        enabled       =   true
-        key           =   "changeme"
-        key           =   ${?DISCOURSE_API_KEY}
-        admin         =   system
-        timeout       =   10000ms
+        enabled              =   true
+        key                  =   "changeme"
+        key                  =   ${?DISCOURSE_API_KEY}
+        admin                =   system
+
+        breaker {
+            max-failures =   5
+            timeout      =   10s
+            reset        =   5m
+        }
     }
 }
 
