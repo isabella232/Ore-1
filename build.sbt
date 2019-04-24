@@ -105,6 +105,7 @@ lazy val `ore` = project
     commonSettings,
     playCommonSettings,
     name := "ore",
+    resolvers += "sponge".at("https://repo.spongepowered.org/maven"),
     libraryDependencies ++= Seq(caffeine, ws, guice),
     libraryDependencies ++= Seq(
       "org.spongepowered"          % "plugin-meta"                    % "0.4.1",
