@@ -33,6 +33,7 @@ import views.{html => views}
 import cats.data.EitherT
 import cats.effect.{IO, Timer}
 import cats.instances.list._
+import cats.instances.option._
 import cats.syntax.all._
 
 /**
@@ -301,7 +302,7 @@ class Users @Inject()(
 
       val notificationsF = service.runDBIO(
         nFilter(user.notifications(ModelView.raw(Notification)))
-          .join(TableQuery[UserTable])
+          .joinLeft(TableQuery[UserTable])
           .on(_.originId === _.id)
           .result
       )
@@ -310,7 +311,7 @@ class Users @Inject()(
       (notificationsF, invitesF).parMapN { (notifications, invites) =>
         Ok(
           views.users.notifications(
-            Model.unwrapNested[Seq[(Model[Notification], User)]](notifications),
+            Model.unwrapNested[Seq[(Model[Notification], Option[User])]](notifications),
             invites.map(t => t._1 -> t._2.obj),
             nFilter,
             iFilter
