@@ -9,25 +9,28 @@ import play.api.i18n.MessagesApi
 import play.api.mvc._
 
 import controllers.sugar.Bakery
-import db.impl.OrePostgresDriver.api._
 import db.impl.access.UserBase.UserOrdering
-import db.impl.query.UserQueries
-import db.impl.schema.{ApiKeyTable, UserTable}
+import db.impl.query.UserPagesQueries
+import ore.db.impl.OrePostgresDriver.api._
+import ore.db.impl.query.UserQueries
+import ore.db.impl.schema.{ApiKeyTable, UserTable}
 import form.OreForms
 import mail.{EmailFactory, Mailer}
-import models.project.Version
-import models.user._
+import ore.models.project.Version
+import ore.models.user._
 import models.viewhelper.{OrganizationData, ScopedOrganizationData, UserData}
+import ore.data.Prompt
 import ore.db.access.ModelView
 import ore.db.{DbRef, Model, ModelService}
 import ore.permission.Permission
 import ore.permission.role.Role
-import ore.project.ProjectSortingStrategy
-import ore.user.notification.{InviteFilter, NotificationFilter}
-import ore.user.{FakeUser, Prompt}
+import ore.models.project.ProjectSortingStrategy
+import ore.models.user.notification.{InviteFilter, NotificationFilter}
+import ore.models.user.FakeUser
+import ore.util.OreMDC
 import ore.{OreConfig, OreEnv}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
-import util.OreMDC
+import util.UserActionLogger
 import views.{html => views}
 
 import cats.data.EitherT
@@ -53,7 +56,7 @@ class Users @Inject()(
     env: OreEnv,
     config: OreConfig,
     cache: AsyncCacheApi,
-    service: ModelService
+    service: ModelService[IO]
 ) extends OreBaseController {
 
   private val baseUrl = this.config.app.baseUrl
@@ -86,7 +89,7 @@ class Users @Inject()(
           .getOrCreate(
             this.fakeUser.username,
             this.fakeUser,
-            ifInsert = fakeUser => fakeUser.globalRoles.addAssoc(Role.OreAdmin.toDbRole).void
+            ifInsert = fakeUser => fakeUser.globalRoles.addAssoc(Role.OreAdmin.toDbRole.id).void
           )
           .flatMap(fakeUser => this.redirectBack(returnPath.getOrElse(request.path), fakeUser))
       } else if (sso.isEmpty || sig.isEmpty) {
@@ -98,7 +101,7 @@ class Users @Inject()(
         // Redirected from SpongeSSO, decode SSO payload and convert to Ore user
         this.sso
           .authenticate(sso.get, sig.get)(isNonceValid)(OreMDC.NoMDC)
-          .map(sponge => User.fromSponge(sponge) -> sponge)
+          .map(sponge => sponge.toUser -> sponge)
           .semiflatMap {
             case (fromSponge, sponge) =>
               // Complete authentication
@@ -106,7 +109,7 @@ class Users @Inject()(
                 user <- users.getOrCreate(sponge.username, fromSponge)
                 _    <- user.globalRoles.deleteAllFromParent
                 _ <- sponge.newGlobalRoles
-                  .fold(IO.unit)(_.map(_.toDbRole).traverse_(user.globalRoles.addAssoc))
+                  .fold(IO.unit)(_.map(_.toDbRole.id).traverse_(user.globalRoles.addAssoc(_)))
                 result <- this.redirectBack(request.flash.get("url").getOrElse("/"), user)
               } yield result
           }
@@ -148,7 +151,7 @@ class Users @Inject()(
   }
 
   /**
-    * Shows the User's [[models.project.Project]]s page for the user with the
+    * Shows the User's [[ore.models.project.Project]]s page for the user with the
     * specified username.
     *
     * @param username   Username to lookup
@@ -170,7 +173,7 @@ class Users @Inject()(
           // TODO include orga projects?
           t1 <- (
             service.runDbCon(
-              UserQueries
+              UserPagesQueries
                 .getProjects(
                   username,
                   request.headerData.currentUser.map(_.id.value),
@@ -181,7 +184,7 @@ class Users @Inject()(
                 )
                 .to[Vector]
             ),
-            user.starred(),
+            user.starred,
             getOrga(username).value,
             getUserData(request, username).value
           ).parTupled
@@ -256,27 +259,27 @@ class Users @Inject()(
   }
 
   /**
-    * Shows a list of [[models.user.User]]s that have created a
-    * [[models.project.Project]].
+    * Shows a list of [[ore.models.user.User]]s that have created a
+    * [[ore.models.project.Project]].
     */
   def showAuthors(sort: Option[String], page: Option[Int]): Action[AnyContent] = OreAction.asyncF { implicit request =>
     val ordering = sort.getOrElse(UserOrdering.Projects)
     val p        = page.getOrElse(1)
 
-    service.runDbCon(UserQueries.getAuthors(p, ordering).to[Vector]).map { u =>
+    service.runDbCon(UserPagesQueries.getAuthors(p, ordering).to[Vector]).map { u =>
       Ok(views.users.authors(u, ordering, p))
     }
   }
 
   /**
-    * Shows a list of [[models.user.User]]s that have Ore staff roles.
+    * Shows a list of [[ore.models.user.User]]s that have Ore staff roles.
     */
   def showStaff(sort: Option[String], page: Option[Int]): Action[AnyContent] =
     Authenticated.andThen(PermissionAction(Permission.IsStaff)).asyncF { implicit request =>
       val ordering = sort.getOrElse(UserOrdering.Role)
       val p        = page.getOrElse(1)
 
-      service.runDbCon(UserQueries.getStaff(p, ordering).to[Vector]).map { u =>
+      service.runDbCon(UserPagesQueries.getStaff(p, ordering).to[Vector]).map { u =>
         Ok(views.users.staff(u, ordering, p))
       }
     }
@@ -322,7 +325,7 @@ class Users @Inject()(
   }
 
   /**
-    * Marks a [[models.user.User]]'s notification as read.
+    * Marks a [[ore.models.user.User]]'s notification as read.
     *
     * @param id Notification ID
     * @return   Ok if marked as read, NotFound if notification does not exist
@@ -336,13 +339,13 @@ class Users @Inject()(
   }
 
   /**
-    * Marks a [[ore.user.Prompt]] as read for the authenticated
-    * [[models.user.User]].
+    * Marks a [[Prompt]] as read for the authenticated
+    * [[ore.models.user.User]].
     *
     * @param id Prompt ID
     * @return   Ok if successful
     */
-  def markPromptRead(id: DbRef[Prompt]): Action[AnyContent] = Authenticated.asyncF { implicit request =>
+  def markPromptRead(id: Int): Action[AnyContent] = Authenticated.asyncF { implicit request =>
     Prompt.values.find(_.value == id) match {
       case None         => IO.pure(BadRequest)
       case Some(prompt) => request.user.markPromptAsRead(prompt).as(Ok)

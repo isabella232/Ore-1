@@ -4,10 +4,9 @@ Page used for uploading and creating new projects.
 @import play.twirl.api.Html
 
 @import controllers.sugar.Requests.OreRequest
-@import models.project.Project
-@import models.user.Organization
+@import ore.models.project.Project
 @import ore.OreConfig
-@import ore.project.factory.PendingProject
+@import ore.models.project.factory.PendingProject
 @import views.html.helper.{CSRF, form}
 @import views.html.utils
 @import java.sql.Timestamp
@@ -16,6 +15,8 @@ Page used for uploading and creating new projects.
 @import ore.db.ObjId
 @import views.html.helper.CSPNonce
 @import ore.db.Model
+@import ore.models.organization.Organization
+@import models.querymodels.ViewTag
 @(createProjectOrgas: Seq[Model[Organization]],pending: Option[PendingProject])(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
 
 @projectRoutes = @{controllers.project.routes.Projects}
@@ -70,7 +71,7 @@ Page used for uploading and creating new projects.
                                 <td>
                                     <div class="pull-right" id="upload-platform-tags">
                                     @for(t <- project.pendingVersion.dependenciesAsGhostTags) {
-                                        @projects.tag(t.asViewTag)
+                                        @projects.tag(ViewTag.fromVersionTag(t))
                                     }
                                     </div>
                                 </td>

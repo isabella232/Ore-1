@@ -1,6 +1,7 @@
 package db.impl
 
-import javax.inject.{Inject, Singleton}
+import javax.inject.Inject
+import javax.inject.Singleton
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -8,17 +9,18 @@ import scala.concurrent.{ExecutionContext, Future}
 import play.api.inject.ApplicationLifecycle
 
 import db.impl.access.ProjectBase
-import ore.db.ModelService
 import ore.{OreConfig, OreEnv}
-import util.OreMDC
+import ore.db.ModelService
+import ore.util.OreMDC
 
 import akka.actor.ActorSystem
+import cats.effect.IO
 import com.typesafe.scalalogging
 
 @Singleton
 class DbUpdateTask @Inject()(actorSystem: ActorSystem, config: OreConfig, lifecycle: ApplicationLifecycle)(
     implicit ec: ExecutionContext,
-    service: ModelService,
+    service: ModelService[IO],
     env: OreEnv
 ) extends Runnable {
 

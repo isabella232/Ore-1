@@ -1,12 +1,13 @@
 @import controllers.sugar.Requests.OreRequest
 @import models.viewhelper.{OrganizationData, ScopedOrganizationData, UserData}
 @import ore.OreConfig
-@import ore.user.Prompt
-@import util.StringUtils._
+@import ore.data.Prompt
+@import util.StringFormatterUtils._
 @import views.html.helper.{CSRF, form}
 @import views.html.utils.{modal, prompt, userAvatar}
 @import views.html.helper.CSPNonce
 @import ore.permission.Permission
+@import util.syntax._
 @(u: UserData, o: Option[(OrganizationData, ScopedOrganizationData)], additionalScripts: Html = Html(""))(content: Html)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
 
 @canEditOrgSettings = @{
@@ -18,7 +19,7 @@
 
 @scripts = {
     <script type="text/javascript" src="@routes.Assets.versioned("javascripts/userPage.js")"></script>
-    <script @CSPNonce.attr>USERNAME = '@u.user.name';</script>
+    <script @CSPNonce.attr>USERNAME = 'ore.models.user.name';</script>
     @additionalScripts
 }
 

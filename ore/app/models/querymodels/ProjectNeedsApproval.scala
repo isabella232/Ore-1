@@ -1,5 +1,6 @@
 package models.querymodels
-import models.project.Visibility
+import ore.data.project.ProjectNamespace
+import ore.models.project.Visibility
 
 case class ProjectNeedsApproval(
     namespace: ProjectNamespace,

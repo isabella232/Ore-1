@@ -7,20 +7,23 @@ import play.api.mvc.{RequestHeader, Result}
 
 import controllers.sugar.Bakery
 import controllers.sugar.Requests.ProjectRequest
-import _root_.db.impl.OrePostgresDriver.api._
-import _root_.db.impl.table.StatTable
-import models.project.{Project, Version}
-import models.statistic.{ProjectView, StatEntry, VersionDownload}
-import models.user.User
+import _root_.db.impl.access.UserBase
+import ore.db.impl.OrePostgresDriver.api._
+import ore.db.impl.table.StatTable
+import ore.models.project.{Project, Version}
+import ore.models.user.User
 import ore.StatTracker.COOKIE_NAME
 import ore.db.access.ModelView
 import ore.db._
+import ore.util.OreMDC
+import ore.models.statistic.{ProjectView, StatEntry, VersionDownload}
 import security.spauth.SpongeAuthApi
-import util.{IOUtils, OreMDC}
+import _root_.util.IOUtils
 
 import cats.data.OptionT
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
+import com.github.tminglei.slickpg.InetString
 import com.typesafe.scalalogging
 
 /**
@@ -28,7 +31,8 @@ import com.typesafe.scalalogging
   */
 trait StatTracker {
 
-  implicit def service: ModelService
+  implicit def service: ModelService[IO]
+  def users: UserBase = UserBase.fromService
 
   def bakery: Bakery
 
@@ -70,10 +74,18 @@ trait StatTracker {
     */
   def projectViewed(f: => Result)(
       implicit projectRequest: ProjectRequest[_],
-      auth: SpongeAuthApi,
-      mdc: OreMDC
+      auth: SpongeAuthApi
   ): IO[Result] = {
-    ProjectView.bindFromRequest.flatMap { statEntry =>
+    val statEntryF = users.current.map(_.id.value).value.map { userId =>
+      ProjectView(
+        modelId = projectRequest.data.project.id,
+        address = InetString(StatTracker.remoteAddress),
+        cookie = StatTracker.currentCookie,
+        userId = userId
+      )
+    }
+
+    statEntryF.flatMap { statEntry =>
       val projectView =
         record(statEntry, Project, ProjectView)((m, id) => m.copy(userId = Some(id)))
           .flatMap {
@@ -99,10 +111,18 @@ trait StatTracker {
   def versionDownloaded(version: Model[Version])(f: IO[Result])(
       implicit request: ProjectRequest[_],
       auth: SpongeAuthApi,
-      mdc: OreMDC,
       cs: ContextShift[IO]
   ): IO[Result] = {
-    VersionDownload.bindFromRequest(version).flatMap { statEntry =>
+    val statEntryF = users.current.map(_.id.value).value.map { userId =>
+      VersionDownload(
+        modelId = version.id,
+        address = InetString(StatTracker.remoteAddress),
+        cookie = StatTracker.currentCookie,
+        userId = userId
+      )
+    }
+
+    statEntryF.flatMap { statEntry =>
       val recordDownload =
         record(statEntry, Version, VersionDownload)((m, id) => m.copy(userId = Some(id)))
           .flatMap {
@@ -145,4 +165,4 @@ object StatTracker {
 
 }
 
-class OreStatTracker @Inject()(val service: ModelService, override val bakery: Bakery) extends StatTracker
+class OreStatTracker @Inject()(val service: ModelService[IO], override val bakery: Bakery) extends StatTracker

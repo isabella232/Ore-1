@@ -52,11 +52,10 @@ lazy val commonSettings = Seq(
 lazy val playCommonSettings = Seq(
   routesImport ++= Seq(
     "ore.db.DbRef",
-    "models.admin._",
-    "models.project._",
-    "models.user._",
-    "models.user.role._",
-    "ore.user._"
+    "ore.models.admin._",
+    "ore.models.project._",
+    "ore.models.user._",
+    "ore.models.user.role._"
   ).map(s => s"_root_.$s"),
   unmanagedResourceDirectories in Test += (baseDirectory.value / "target/web/public/test"),
   pipelineStages := Seq(digest, gzip)
@@ -99,9 +98,36 @@ lazy val discourse = project.settings(
   )
 )
 
+lazy val models = project
+  .dependsOn(db)
+  .settings(
+    commonSettings,
+    name := "ore-models",
+    libraryDependencies ++= Seq(
+      "org.postgresql"             % "postgresql"             % "42.2.5",
+      "com.github.tminglei"        %% "slick-pg"              % slickPgVersion,
+      "com.github.tminglei"        %% "slick-pg_circe-json"   % slickPgVersion,
+      "org.tpolecat"               %% "doobie-postgres"       % doobieVersion,
+      "org.tpolecat"               %% "doobie-postgres-circe" % doobieVersion,
+      "com.typesafe.scala-logging" %% "scala-logging"         % scalaLoggingVersion,
+      "com.beachape"               %% "enumeratum"            % "1.5.13",
+      "com.beachape"               %% "enumeratum-slick"      % "1.5.15",
+      "org.typelevel"              %% "cats-core"             % catsVersion,
+      "com.github.mpilquist"       %% "simulacrum"            % "0.16.0",
+      "io.circe"                   %% "circe-core"            % circeVersion,
+      "io.circe"                   %% "circe-generic-extras"  % circeVersion,
+      "io.circe"                   %% "circe-parser"          % circeVersion,
+    )
+  )
+
+def flexmarkDep(module: String) = {
+  val artifactId = if (module.isEmpty) "flexmark" else s"flexmark-$module"
+  "com.vladsch.flexmark" % artifactId % flexmarkVersion
+}
+
 lazy val `ore` = project
   .enablePlugins(PlayScala)
-  .dependsOn(db, discourse)
+  .dependsOn(db, discourse, models)
   .settings(
     commonSettings,
     playCommonSettings,
@@ -109,37 +135,34 @@ lazy val `ore` = project
     resolvers += "sponge".at("https://repo.spongepowered.org/maven"),
     libraryDependencies ++= Seq(caffeine, ws, guice),
     libraryDependencies ++= Seq(
-      "org.spongepowered"          % "plugin-meta"                    % "0.4.1",
-      "com.typesafe.play"          %% "play-slick"                    % playSlickVersion,
-      "com.typesafe.play"          %% "play-slick-evolutions"         % playSlickVersion,
-      "org.postgresql"             % "postgresql"                     % "42.2.5",
-      "com.github.tminglei"        %% "slick-pg"                      % slickPgVersion,
-      "com.github.tminglei"        %% "slick-pg_play-json"            % slickPgVersion,
-      "org.tpolecat"               %% "doobie-postgres"               % doobieVersion,
-      "com.typesafe.scala-logging" %% "scala-logging"                 % scalaLoggingVersion,
-      "io.sentry"                  % "sentry-logback"                 % "1.7.22",
-      "javax.mail"                 % "mail"                           % "1.4.7",
-      "com.beachape"               %% "enumeratum"                    % "1.5.13",
-      "com.beachape"               %% "enumeratum-slick"              % "1.5.15",
-      "org.typelevel"              %% "cats-core"                     % catsVersion,
-      "com.github.mpilquist"       %% "simulacrum"                    % "0.16.0",
-      "io.circe"                   %% "circe-core"                    % circeVersion,
-      "io.circe"                   %% "circe-generic-extras"          % circeVersion,
-      "io.circe"                   %% "circe-parser"                  % circeVersion,
-      "com.vladsch.flexmark"       % "flexmark"                       % flexmarkVersion,
-      "com.vladsch.flexmark"       % "flexmark-ext-autolink"          % flexmarkVersion,
-      "com.vladsch.flexmark"       % "flexmark-ext-anchorlink"        % flexmarkVersion,
-      "com.vladsch.flexmark"       % "flexmark-ext-gfm-strikethrough" % flexmarkVersion,
-      "com.vladsch.flexmark"       % "flexmark-ext-gfm-tasklist"      % flexmarkVersion,
-      "com.vladsch.flexmark"       % "flexmark-ext-tables"            % flexmarkVersion,
-      "com.vladsch.flexmark"       % "flexmark-ext-typographic"       % flexmarkVersion,
-      "com.vladsch.flexmark"       % "flexmark-ext-wikilink"          % flexmarkVersion,
-      "org.webjars.npm"            % "jquery"                         % "2.2.4",
-      "org.webjars"                % "font-awesome"                   % "5.8.1",
-      "org.webjars.npm"            % "filesize"                       % "3.6.1",
-      "org.webjars.npm"            % "moment"                         % "2.24.0",
-      "org.webjars.npm"            % "clipboard"                      % "2.0.4",
-      "org.webjars.npm"            % "chart.js"                       % "2.7.3"
+      "org.spongepowered"          % "plugin-meta"            % "0.4.1",
+      "com.typesafe.play"          %% "play-slick"            % playSlickVersion,
+      "com.typesafe.play"          %% "play-slick-evolutions" % playSlickVersion,
+      "com.typesafe.scala-logging" %% "scala-logging"         % scalaLoggingVersion,
+      "io.sentry"                  % "sentry-logback"         % "1.7.22",
+      "javax.mail"                 % "mail"                   % "1.4.7",
+      "org.typelevel"              %% "cats-core"             % catsVersion,
+      "io.circe"                   %% "circe-core"            % circeVersion,
+      "io.circe"                   %% "circe-generic-extras"  % circeVersion,
+      "io.circe"                   %% "circe-parser"          % circeVersion,
+    ),
+    libraryDependencies ++= Seq(
+      "",
+      "ext-autolink",
+      "ext-anchorlink",
+      "ext-gfm-strikethrough",
+      "ext-gfm-tasklist",
+      "ext-tables",
+      "ext-typographic",
+      "ext-wikilink"
+    ).map(flexmarkDep),
+    libraryDependencies ++= Seq(
+      "org.webjars.npm" % "jquery"       % "2.2.4",
+      "org.webjars"     % "font-awesome" % "5.8.1",
+      "org.webjars.npm" % "filesize"     % "3.6.1",
+      "org.webjars.npm" % "moment"       % "2.24.0",
+      "org.webjars.npm" % "clipboard"    % "2.0.4",
+      "org.webjars.npm" % "chart.js"     % "2.7.3"
     ),
     libraryDependencies ++= Seq(
       jdbc % Test,
@@ -149,4 +172,4 @@ lazy val `ore` = project
     )
   )
 
-lazy val oreAll = project.in(file(".")).aggregate(db, ore, discourse)
+lazy val oreAll = project.in(file(".")).aggregate(db, ore, discourse, models)

@@ -1,10 +1,14 @@
 package util
 
+import discourse.HasForumRepresentation
 import ore.db.access.QueryView
-import ore.organization.OrganizationOwned
+import ore.db.impl.common.Hideable
+import ore.markdown.IsMarkdownRenderable
+import ore.member.Joinable
+import ore.models.organization.OrganizationOwned
 import ore.permission.scope.HasScope
-import ore.project.ProjectOwned
-import ore.user.UserOwned
+import ore.models.project.ProjectOwned
+import ore.models.user.UserOwned
 
 package object syntax
     extends HasScope.ToHasScopeOps
@@ -12,3 +16,8 @@ package object syntax
     with ProjectOwned.ToProjectOwnedOps
     with UserOwned.ToUserOwnedOps
     with QueryView.ToQueryFilterableOps
+    with Hideable.ToHideableOps
+    with Joinable.ToJoinableOps
+    with IsMarkdownRenderable.ToIsMarkdownRenderableOps
+    with HasForumRepresentation.ToHasForumRepresentationOps
+    with ModelSyntax

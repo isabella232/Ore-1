@@ -9,11 +9,11 @@ import play.api.mvc.{Action, AnyContent}
 
 import controllers.OreBaseController
 import controllers.sugar.Bakery
-import db.impl.OrePostgresDriver.api._
-import db.impl.schema.{ChannelTable, VersionTable}
+import ore.db.impl.OrePostgresDriver.api._
+import ore.db.impl.schema.{ChannelTable, VersionTable}
 import form.OreForms
 import form.project.ChannelData
-import models.project.Channel
+import ore.models.project.Channel
 import ore.db.ModelService
 import ore.db.access.ModelView
 import ore.permission.Permission
@@ -22,6 +22,7 @@ import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
 import views.html.projects.{channels => views}
 
 import cats.data.OptionT
+import cats.effect.IO
 import cats.syntax.all._
 import slick.lifted.TableQuery
 
@@ -36,7 +37,7 @@ class Channels @Inject()(forms: OreForms)(
     sso: SingleSignOnConsumer,
     env: OreEnv,
     config: OreConfig,
-    service: ModelService
+    service: ModelService[IO]
 ) extends OreBaseController {
 
   private val self = controllers.project.routes.Channels

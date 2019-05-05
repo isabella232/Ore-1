@@ -17,30 +17,30 @@ import play.api.mvc.{Action, AnyContent, MultipartFormData, Result}
 import controllers.OreBaseController
 import controllers.sugar.Bakery
 import controllers.sugar.Requests.AuthRequest
-import db.impl.OrePostgresDriver.api._
+import ore.db.impl.OrePostgresDriver.api._
 import discourse.OreDiscourseApi
 import form.OreForms
 import form.project.{DiscussionReplyForm, FlagForm, ProjectRoleSetBuilder}
-import models.admin.ProjectLogEntry
-import models.api.ProjectApiKey
-import models.project.{Flag, Note, Page, Visibility}
-import models.user._
-import models.user.role.ProjectUserRole
+import ore.models.project.{Flag, Note, Page, Visibility}
+import ore.models.user._
+import ore.models.user.role.ProjectUserRole
 import models.viewhelper.ScopedOrganizationData
 import ore.db.access.ModelView
 import ore.db.{DbRef, Model, ModelService}
 import ore.markdown.MarkdownRenderer
+import ore.member.MembershipDossier
+import ore.models.admin.ProjectLogEntry
+import ore.models.api.ProjectApiKey
+import ore.models.organization.Organization
 import ore.permission._
-import ore.project.factory.ProjectFactory
-import ore.project.io.{PluginUpload, ProjectFiles}
-import ore.rest.ProjectApiKeyType
-import ore.user.MembershipDossier
-import ore.user.MembershipDossier._
+import ore.models.project.factory.ProjectFactory
+import ore.models.project.io.{PluginUpload, ProjectFiles}
+import ore.util.OreMDC
 import ore.{OreConfig, OreEnv, StatTracker}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
-import _root_.util.StringUtils._
+import ore.util.StringUtils._
 import _root_.util.syntax._
-import util.OreMDC
+import util.UserActionLogger
 import views.html.{projects => views}
 
 import cats.data.{EitherT, OptionT}
@@ -62,7 +62,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     messagesApi: MessagesApi,
     env: OreEnv,
     config: OreConfig,
-    service: ModelService,
+    service: ModelService[IO],
     renderer: MarkdownRenderer
 ) extends OreBaseController {
 
@@ -163,7 +163,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
             .fold(
               FormErrorLocalized(self.showCreator()).andThen(IO.pure),
               formData => {
-                pendingProject.settings.save(pendingProject, formData).flatMap {
+                formData.savePending(pendingProject.settings, pendingProject).flatMap {
                   case (newProject, newSettings) =>
                     val newPending = newProject.copy(settings = newSettings)
 
@@ -333,7 +333,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
   }
 
   /**
-    * Shows either a customly uploaded icon for a [[models.project.Project]]
+    * Shows either a customly uploaded icon for a [[ore.models.project.Project]]
     * or the owner's avatar if there is none.
     *
     * @param author Project owner
@@ -396,7 +396,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     }
 
   /**
-    * Sets whether a [[models.user.User]] is watching a project.
+    * Sets whether a [[ore.models.user.User]] is watching a project.
     *
     * @param author   Project owner
     * @param slug     Project slug
@@ -450,8 +450,10 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
         .projectRoles(ModelView.now(ProjectUserRole))
         .get(id)
         .semiflatMap { role =>
+          import MembershipDossier._
           status match {
-            case STATUS_DECLINE  => role.project.flatMap(MembershipDossier.project.removeRole(_, role)).as(Ok)
+            case STATUS_DECLINE =>
+              role.project.flatMap(project => project.memberships.removeRole(project)(role.id)).as(Ok)
             case STATUS_ACCEPT   => service.update(role)(_.copy(isAccepted = true)).as(Ok)
             case STATUS_UNACCEPT => service.update(role)(_.copy(isAccepted = false)).as(Ok)
             case _               => IO.pure(BadRequest)
@@ -479,8 +481,9 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
         if scopedData.permissions.has(Permission.ManageProjectMembers)
         project <- OptionT.liftF(role.project)
         res <- OptionT.liftF[IO, Status] {
+          import MembershipDossier._
           status match {
-            case STATUS_DECLINE  => project.memberships.removeRole(project, role).as(Ok)
+            case STATUS_DECLINE  => project.memberships.removeRole(project)(role.id).as(Ok)
             case STATUS_ACCEPT   => service.update(role)(_.copy(isAccepted = true)).as(Ok)
             case STATUS_UNACCEPT => service.update(role)(_.copy(isAccepted = false)).as(Ok)
             case _               => IO.pure(BadRequest)
@@ -502,13 +505,13 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     implicit request =>
       request.project
         .apiKeys(ModelView.now(ProjectApiKey))
-        .find(_.keyType === (ProjectApiKeyType.Deployment: ProjectApiKeyType))
+        .one
         .value
         .map(deployKey => Ok(views.settings(request.data, request.scoped, deployKey)))
   }
 
   /**
-    * Uploads a new icon to be saved for the specified [[models.project.Project]].
+    * Uploads a new icon to be saved for the specified [[ore.models.project.Project]].
     *
     * @param author Project owner
     * @param slug   Project slug
@@ -549,7 +552,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
   }
 
   /**
-    * Displays the specified [[models.project.Project]]'s current pending
+    * Displays the specified [[ore.models.project.Project]]'s current pending
     * icon, if any.
     *
     * @param author Project owner
@@ -565,7 +568,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
     }
 
   /**
-    * Removes a [[ore.project.ProjectMember]] from the specified project.
+    * Removes a [[ProjectMember]] from the specified project.
     *
     * @param author Project owner
     * @param slug   Project slug
@@ -577,7 +580,7 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
         .semiflatMap { user =>
           val project = request.data.project
           project.memberships
-            .removeMember(project, user)
+            .removeMember(project)(user.id)
             .productR(
               UserActionLogger.log(
                 request.request,
@@ -609,8 +612,8 @@ class Projects @Inject()(stats: StatTracker, forms: OreForms, factory: ProjectFa
           .fold(
             FormErrorLocalized(self.showSettings(author, slug)).andThen(IO.pure),
             formData => {
-              data.settings
-                .save(data.project, formData)
+              formData
+                .save(data.settings, data.project, MDCLogger)
                 .productR {
                   UserActionLogger.log(
                     request.request,

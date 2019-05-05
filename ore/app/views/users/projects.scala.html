@@ -1,8 +1,8 @@
 @import controllers.project.{routes => projectRoutes}
 @import controllers.routes.{Users => userRoutes}
 @import controllers.sugar.Requests.OreRequest
-@import models.project.{Project, Version, VersionTag}
-@import models.user.User
+@import ore.models.project.{Project, Version, VersionTag}
+@import ore.models.user.User
 @import models.viewhelper.{OrganizationData, ScopedOrganizationData, UserData}
 @import ore.OreConfig
 @import ore.permission.role.Role
@@ -10,6 +10,7 @@
 @import views.html.utils.userAvatar
 @import models.querymodels.ProjectListEntry
 @import ore.permission.Permission
+@import util.syntax._
 @(u: UserData, o: Option[(OrganizationData, ScopedOrganizationData)], models: Seq[ProjectListEntry], starred: Seq[(Project, Option[Version])],
         page: Int)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
 

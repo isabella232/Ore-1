@@ -3,9 +3,9 @@ package discourse
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
-import db.impl.OrePostgresDriver.api._
-import db.impl.schema.{ProjectTableMain, VersionTable}
-import models.project.{Project, Version, Visibility}
+import ore.db.impl.OrePostgresDriver.api._
+import ore.db.impl.schema.{ProjectTableMain, VersionTable}
+import ore.models.project.{Project, Version, Visibility}
 import ore.OreConfig
 import ore.db.ModelService
 import ore.db.access.ModelView
@@ -19,7 +19,7 @@ import com.typesafe.scalalogging
   */
 class RecoveryTask(scheduler: Scheduler, retryRate: FiniteDuration, api: OreDiscourseApi)(
     implicit ec: ExecutionContext,
-    service: ModelService,
+    service: ModelService[IO],
     config: OreConfig
 ) extends Runnable {
 

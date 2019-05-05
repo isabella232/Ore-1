@@ -1,21 +1,23 @@
 package db.impl.access
 
-import models.user.role.OrganizationUserRole
-import models.user.{Notification, Organization, User}
 import ore.OreConfig
+import ore.data.user.notification.NotificationType
 import ore.db.access.ModelView
 import ore.db.{DbRef, Model, ModelService, ObjId}
+import ore.models.organization.Organization
+import ore.models.user.role.OrganizationUserRole
+import ore.models.user.{Notification, User}
 import ore.permission.role.Role
-import ore.user.notification.NotificationType
+import ore.util.{OreMDC, StringUtils}
 import security.spauth.SpongeAuthApi
-import util.{OreMDC, StringUtils}
+import util.syntax._
 
 import cats.data.{EitherT, NonEmptyList, OptionT}
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import com.typesafe.scalalogging
 
-class OrganizationBase(implicit val service: ModelService) {
+class OrganizationBase(implicit val service: ModelService[IO]) {
 
   private val Logger    = scalalogging.Logger("Organizations")
   private val MDCLogger = scalalogging.Logger.takingImplicit[OreMDC](Logger.underlying)
@@ -74,10 +76,9 @@ class OrganizationBase(implicit val service: ModelService) {
         // and should be treated as such.
         for {
           userOrg <- org.toUser.getOrElseF(IO.raiseError(new IllegalStateException("User not created")))
-          _       <- userOrg.globalRoles.addAssoc(Role.Organization.toDbRole)
+          _       <- userOrg.globalRoles.addAssoc(Role.Organization.toDbRole.id.value)
           _ <- // Add the owner
-          org.memberships.addRole(
-            org,
+          org.memberships.addRole(org)(
             ownerId,
             OrganizationUserRole(
               userId = ownerId,
@@ -92,7 +93,7 @@ class OrganizationBase(implicit val service: ModelService) {
 
             members.toVector.parTraverse { role =>
               // TODO remove role.user db access we really only need the userid we already have for notifications
-              org.memberships.addRole(org, role.userId, role.copy(organizationId = org.id)).flatMap { _ =>
+              org.memberships.addRole(org)(role.userId, role.copy(organizationId = org.id)).flatMap { _ =>
                 service.insert(
                   Notification(
                     userId = role.userId,
@@ -124,5 +125,5 @@ class OrganizationBase(implicit val service: ModelService) {
 object OrganizationBase {
   def apply()(implicit organizationBase: OrganizationBase): OrganizationBase = organizationBase
 
-  implicit def fromService(implicit service: ModelService): OrganizationBase = new OrganizationBase()
+  implicit def fromService(implicit service: ModelService[IO]): OrganizationBase = new OrganizationBase()
 }

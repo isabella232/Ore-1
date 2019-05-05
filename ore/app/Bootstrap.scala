@@ -6,16 +6,17 @@ import db.impl.DbUpdateTask
 import discourse.OreDiscourseApi
 import ore.OreConfig
 import ore.db.ModelService
-import ore.project.ProjectTask
-import ore.user.UserTask
+import ore.models.project.ProjectTask
+import ore.models.user.UserTask
 
+import cats.effect.IO
 import com.typesafe.scalalogging
 
 /**
   * Handles initialization logic for the application.
   */
 abstract class Bootstrap(
-    service: ModelService,
+    service: ModelService[IO],
     forums: OreDiscourseApi,
     config: OreConfig,
     projectTask: ProjectTask,
@@ -45,7 +46,7 @@ abstract class Bootstrap(
 
 @Singleton
 class BootstrapImpl @Inject()(
-    modelService: ModelService,
+    modelService: ModelService[IO],
     forums: OreDiscourseApi,
     config: OreConfig,
     projectTask: ProjectTask,

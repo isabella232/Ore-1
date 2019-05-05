@@ -11,7 +11,7 @@ import play.api.libs.json._
 import play.api.libs.ws.{WSClient, WSResponse}
 
 import ore.OreConfig
-import _root_.util.OreMDC
+import ore.util.OreMDC
 import _root_.util.WSUtils.parseJson
 
 import cats.ApplicativeError
@@ -80,9 +80,6 @@ trait SpongeAuthApi {
 
   /**
     * Returns the signed_data that can be used to construct the change-avatar
-    * @param username
-    * @param ec
-    * @return
     */
   def getChangeAvatarToken(
       requester: String,
