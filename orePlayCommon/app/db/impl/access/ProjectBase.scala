@@ -5,7 +5,7 @@ import java.nio.file.Files
 import java.nio.file.Files._
 import java.time.Instant
 
-import db.impl.query.AppQueries
+import db.impl.query.SharedQueries
 import discourse.OreDiscourseApi
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
@@ -59,7 +59,7 @@ class ProjectBase(implicit val service: ModelService[IO], env: OreEnv) {
 
   def refreshHomePage(logger: LoggerTakingImplicit[OreMDC])(implicit mdc: OreMDC): IO[Unit] =
     service
-      .runDbCon(AppQueries.refreshHomeView.run)
+      .runDbCon(SharedQueries.refreshHomeView.run)
       .runAsync(IOUtils.logCallback("Failed to refresh home page", logger))
       .toIO
 

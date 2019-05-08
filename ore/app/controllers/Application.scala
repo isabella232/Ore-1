@@ -55,7 +55,6 @@ final class Application @Inject()(forms: OreForms)(
     sso: SingleSignOnConsumer,
     env: OreEnv,
     config: OreConfig,
-    cache: AsyncCacheApi,
     service: ModelService[IO],
     renderer: MarkdownRenderer
 ) extends OreBaseController {
@@ -445,4 +444,8 @@ final class Application @Inject()(forms: OreForms)(
         Ok(views.users.admin.visibility(needsApproval, waitingProject))
       }
     }
+
+  def swagger(): Action[AnyContent] = OreAction { implicit request =>
+    Ok(views.swagger())
+  }
 }

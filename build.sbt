@@ -55,10 +55,19 @@ lazy val playCommonSettings = Seq(
     "ore.models.admin._",
     "ore.models.project._",
     "ore.models.user._",
-    "ore.models.user.role._"
+    "ore.models.user.role._",
+    "ore.permission.NamedPermission",
+    "ore.data.project.Category",
   ).map(s => s"_root_.$s"),
   unmanagedResourceDirectories in Test += (baseDirectory.value / "target/web/public/test"),
   pipelineStages := Seq(digest, gzip)
+)
+
+lazy val playTestDeps = Seq(
+  jdbc % Test,
+  //specs2 % Test,
+  "org.scalatestplus.play" %% "scalatestplus-play" % "4.0.2"       % Test,
+  "org.tpolecat"           %% "doobie-scalatest"   % doobieVersion % Test
 )
 
 lazy val catsVersion         = "1.6.0"
@@ -120,23 +129,56 @@ lazy val models = project
     )
   )
 
+lazy val orePlayCommon: Project = project
+  .enablePlugins(PlayScala)
+  .dependsOn(discourse, models)
+  .settings(
+    commonSettings,
+    playCommonSettings,
+    name := "ore-play-common",
+    resolvers += "sponge".at("https://repo.spongepowered.org/maven"),
+    libraryDependencies ++= Seq(caffeine, ws),
+    libraryDependencies ++= Seq(
+      "org.spongepowered" % "plugin-meta" % "0.4.1",
+      "com.typesafe.play" %% "play-slick" % playSlickVersion,
+    ),
+    aggregateReverseRoutes := Seq(ore)
+  )
+
+lazy val apiV2 = project
+  .enablePlugins(PlayScala)
+  .dependsOn(orePlayCommon)
+  .settings(
+    commonSettings,
+    playCommonSettings,
+    name := "ore-apiv2",
+    routesImport ++= Seq(
+      "util.APIBinders._"
+    ).map(s => s"_root_.$s"),
+    libraryDependencies ++= Seq(
+      "com.typesafe.scala-logging" %% "scala-logging"        % scalaLoggingVersion,
+      "org.typelevel"              %% "cats-core"            % catsVersion,
+      "io.circe"                   %% "circe-core"           % circeVersion,
+      "io.circe"                   %% "circe-generic-extras" % circeVersion,
+      "io.circe"                   %% "circe-parser"         % circeVersion,
+    ),
+    libraryDependencies ++= playTestDeps
+  )
+
 def flexmarkDep(module: String) = {
   val artifactId = if (module.isEmpty) "flexmark" else s"flexmark-$module"
   "com.vladsch.flexmark" % artifactId % flexmarkVersion
 }
 
-lazy val `ore` = project
-  .enablePlugins(PlayScala)
-  .dependsOn(db, discourse, models)
+lazy val ore = project
+  .enablePlugins(PlayScala, SwaggerPlugin)
+  .dependsOn(orePlayCommon, apiV2)
   .settings(
     commonSettings,
     playCommonSettings,
     name := "ore",
-    resolvers += "sponge".at("https://repo.spongepowered.org/maven"),
-    libraryDependencies ++= Seq(caffeine, ws, guice),
+    libraryDependencies += guice,
     libraryDependencies ++= Seq(
-      "org.spongepowered"          % "plugin-meta"            % "0.4.1",
-      "com.typesafe.play"          %% "play-slick"            % playSlickVersion,
       "com.typesafe.play"          %% "play-slick-evolutions" % playSlickVersion,
       "com.typesafe.scala-logging" %% "scala-logging"         % scalaLoggingVersion,
       "io.sentry"                  % "sentry-logback"         % "1.7.22",
@@ -162,14 +204,17 @@ lazy val `ore` = project
       "org.webjars.npm" % "filesize"     % "3.6.1",
       "org.webjars.npm" % "moment"       % "2.24.0",
       "org.webjars.npm" % "clipboard"    % "2.0.4",
-      "org.webjars.npm" % "chart.js"     % "2.7.3"
+      "org.webjars.npm" % "chart.js"     % "2.7.3",
+      "org.webjars"     % "swagger-ui"   % "3.22.0"
     ),
-    libraryDependencies ++= Seq(
-      jdbc % Test,
-      //specs2 % Test,
-      "org.scalatestplus.play" %% "scalatestplus-play" % "4.0.2"       % Test,
-      "org.tpolecat"           %% "doobie-scalatest"   % doobieVersion % Test
-    )
+    libraryDependencies ++= playTestDeps,
+    swaggerRoutesFile := "apiv2.routes",
+    swaggerDomainNameSpaces := Seq(
+      "models.protocols.APIV2",
+      "controllers.apiv2.ApiV2Controller",
+    ),
+    swaggerAPIVersion := "2.0",
+    swaggerV3 := true
   )
 
 lazy val oreAll = project.in(file(".")).aggregate(db, ore, discourse, models)

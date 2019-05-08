@@ -2,7 +2,6 @@ package controllers.sugar
 
 import play.api.mvc.Call
 
-import controllers.routes
 import ore.models.project.Project
 import ore.models.user.User
 
@@ -14,7 +13,7 @@ trait Calls {
   /**
     * A call to the home page.
     */
-  val ShowHome: Call = routes.Application.showHome(None, None, None, None, None, None, None)
+  val ShowHome: Call = controllers.routes.Application.showHome(None, None, None, None, None, None, None)
 
   /**
     * A call to a [[User]] page.
@@ -22,7 +21,7 @@ trait Calls {
     * @param username Username of user
     * @return         Call to user page
     */
-  def ShowUser(username: String): Call = routes.Users.showProjects(username, None)
+  def ShowUser(username: String): Call = controllers.routes.Users.showProjects(username, None)
 
   /**
     * A call to a [[User]] page.

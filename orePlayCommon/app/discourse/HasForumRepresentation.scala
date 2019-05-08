@@ -2,7 +2,6 @@ package discourse
 
 import scala.language.{higherKinds, implicitConversions}
 
-import controllers.project.Pages
 import ore.OreConfig
 import ore.db.{Model, ModelService}
 import ore.models.project.{Page, Version}
@@ -11,12 +10,15 @@ import util.IOUtils
 import util.syntax._
 
 import cats.effect.IO
+import com.typesafe.scalalogging
 
 trait HasForumRepresentation[F[_], A] {
 
   def updateForumContents(a: Model[A])(contents: String): F[Model[A]]
 }
 object HasForumRepresentation {
+
+  private val PagesLogger = scalalogging.Logger.takingImplicit[OreMDC]("Pages")
 
   implicit def pageHasForumRepresentation(
       implicit service: ModelService[IO],
@@ -35,7 +37,7 @@ object HasForumRepresentation {
         _ <- if (a.name == Page.homeName && project.topicId.isDefined)
           forums
             .updateProjectTopic(project)
-            .runAsync(IOUtils.logCallback("Failed to update page with forums", Pages.Logger)(OreMDC.NoMDC))
+            .runAsync(IOUtils.logCallback("Failed to update page with forums", PagesLogger)(OreMDC.NoMDC))
             .toIO
         else IO.unit
       } yield updated

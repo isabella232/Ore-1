@@ -11,9 +11,7 @@ import ore.data.Color
 import ore.models.project.Channel
 import ore.models.user.User
 import ore.db.DbRef
-import util.StringUtils._
-
-import org.spongepowered.plugin.meta.version.ComparableVersion
+import ore.util.StringUtils._
 
 /**
   * A helper class for the Ore configuration.
@@ -254,7 +252,7 @@ final class OreConfig @Inject()(config: Configuration) {
     * @return         Suggested channel name
     */
   def getSuggestedNameForVersion(version: String): String =
-    Option(new ComparableVersion(version).getFirstString).getOrElse(this.defaultChannelName)
+    this.defaultChannelName
 
   /** Returns true if the application is running in debug mode. */
   def isDebug: Boolean = this.ore.debug

@@ -1,4 +1,4 @@
-package controllers
+package controllers.apiv2
 
 import scala.language.higherKinds
 
@@ -7,37 +7,36 @@ import java.time.{Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
 import javax.inject.Inject
 
+import scala.collection.immutable
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
-import play.api.cache.AsyncCacheApi
 import play.api.http.HttpErrorHandler
 import play.api.i18n.Lang
 import play.api.libs.Files
 import play.api.mvc._
 
-import controllers.ApiV2Controller._
+import controllers.OreBaseController
+import controllers.apiv2.ApiV2Controller._
 import controllers.sugar.Requests.{ApiAuthInfo, ApiRequest}
 import controllers.sugar.{Bakery, CircePlayController}
-import ore.db.impl.OrePostgresDriver.api._
 import db.impl.query.APIV2Queries
-import ore.db.impl.schema.{ApiKeyTable, OrganizationTable, ProjectTableMain}
-import ore.models.project.{Page, Version}
 import models.protocols.APIV2
 import models.querymodels.{APIV2QueryVersion, APIV2QueryVersionTag}
+import ore.{OreConfig, OreEnv}
 import ore.data.project.Category
-import ore.models.user.User
 import ore.db.access.ModelView
+import ore.db.impl.OrePostgresDriver.api._
+import ore.db.impl.schema.{ApiKeyTable, OrganizationTable, ProjectTableMain}
 import ore.db.{Model, ModelService}
 import ore.models.api.ApiSession
-import ore.permission.scope.{GlobalScope, OrganizationScope, ProjectScope, Scope}
-import ore.permission.{NamedPermission, Permission}
 import ore.models.project.factory.ProjectFactory
 import ore.models.project.io.PluginUpload
-import ore.models.project.ProjectSortingStrategy
-import ore.models.user.FakeUser
+import ore.models.project.{Page, ProjectSortingStrategy, Version}
+import ore.models.user.{FakeUser, User}
+import ore.permission.scope.{GlobalScope, OrganizationScope, ProjectScope, Scope}
+import ore.permission.{NamedPermission, Permission}
 import ore.util.OreMDC
-import ore.{OreConfig, OreEnv}
 import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
 import _root_.util.IOUtils
 import _root_.util.syntax._
@@ -52,6 +51,7 @@ import cats.instances.list._
 import cats.instances.option._
 import cats.syntax.all._
 import com.typesafe.scalalogging
+import enumeratum._
 import io.circe._
 import io.circe.generic.extras._
 import io.circe.syntax._
@@ -64,7 +64,6 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
     bakery: Bakery,
     auth: SpongeAuthApi,
     sso: SingleSignOnConsumer,
-    cache: AsyncCacheApi,
     mat: Materializer
 ) extends OreBaseController
     with CircePlayController {
@@ -72,9 +71,6 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
   private val Logger = scalalogging.Logger.takingImplicit[OreMDC]("ApiV2")
 
   private def limitOrDefault(limit: Option[Long], default: Long) = math.min(limit.getOrElse(default), default)
-
-  private def parseOpt[F[_]: Traverse, A](opt: F[String], parse: String => Option[A], errorMsg: => String) =
-    opt.traverse(parse(_)).toRight(BadRequest(errorMsg))
 
   def apiAction: ActionRefiner[Request, ApiRequest] = new ActionRefiner[Request, ApiRequest] {
     def executionContext: ExecutionContext = ec
@@ -184,7 +180,7 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
         ReturnedApiSession(
           key.token,
           LocalDateTime.ofInstant(key.expires, ZoneOffset.UTC),
-          "user"
+          SessionType.User
         )
       )
     }
@@ -206,11 +202,11 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
       case Some(ApiKeyHeaderRegex(identifier, token)) =>
         OptionT(service.runDbCon(APIV2Queries.findApiKey(identifier, token).option)).map {
           case (keyId, keyOwnerId) =>
-            "key" -> ApiSession(uuidToken, Some(keyId), Some(keyOwnerId), sessionExpiration)
+            SessionType.Key -> ApiSession(uuidToken, Some(keyId), Some(keyOwnerId), sessionExpiration)
         }
-      case Some(_) => OptionT.none[IO, (String, ApiSession)]
+      case Some(_) => OptionT.none[IO, (SessionType, ApiSession)]
       case None =>
-        OptionT.pure[IO]("public" -> ApiSession(uuidToken, None, None, publicSessionExpiration))
+        OptionT.pure[IO](SessionType.Public -> ApiSession(uuidToken, None, None, publicSessionExpiration))
     }
 
     sessionToInsert
@@ -244,7 +240,7 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
           ReturnedApiSession(
             key.token,
             LocalDateTime.ofInstant(key.expires, ZoneOffset.UTC),
-            "dev"
+            SessionType.Dev
           )
         )
       }
@@ -300,111 +296,100 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
         }
     }
 
-  def createApiScope(pluginId: Option[String], organizationName: Option[String]): Either[Result, (String, APIScope)] =
+  def createApiScope(pluginId: Option[String], organizationName: Option[String]): Either[Result, APIScope] =
     (pluginId, organizationName) match {
       case (Some(_), Some(_)) =>
         Left(BadRequest(ApiError("Can't check for project and organization permissions at the same time")))
-      case (Some(plugId), None)  => Right("project"      -> APIScope.ProjectScope(plugId))
-      case (None, Some(orgName)) => Right("organization" -> APIScope.OrganizationScope(orgName))
-      case (None, None)          => Right("global"       -> APIScope.GlobalScope)
+      case (Some(plugId), None)  => Right(APIScope.ProjectScope(plugId))
+      case (None, Some(orgName)) => Right(APIScope.OrganizationScope(orgName))
+      case (None, None)          => Right(APIScope.GlobalScope)
     }
 
   def permissionsInCreatedApiScope(pluginId: Option[String], organizationName: Option[String])(
       implicit request: ApiRequest[_]
-  ): EitherT[IO, Result, (String, Permission)] =
+  ): EitherT[IO, Result, (APIScope, Permission)] =
     EitherT
       .fromEither[IO](createApiScope(pluginId, organizationName))
-      .flatMap(t => apiScopeToRealScope(t._2).tupleLeft(t._1).toRight(NotFound: Result))
+      .flatMap(t => apiScopeToRealScope(t).tupleLeft(t).toRight(NotFound: Result))
       .semiflatMap(t => request.permissionIn(t._2).tupleLeft(t._1))
 
   def showPermissions(pluginId: Option[String], organizationName: Option[String]): Action[AnyContent] =
     ApiAction(Permission.None, APIScope.GlobalScope).asyncEitherT { implicit request =>
       permissionsInCreatedApiScope(pluginId, organizationName).map {
-        case (tpe, perms) =>
+        case (scope, perms) =>
           Ok(
             KeyPermissions(
-              tpe,
+              scope.tpe,
               perms.toNamedSeq.toList
             )
           )
       }
     }
 
-  def has(permissions: Seq[String], pluginId: Option[String], organizationName: Option[String])(
+  def has(permissions: Seq[NamedPermission], pluginId: Option[String], organizationName: Option[String])(
       check: (Seq[NamedPermission], Permission) => Boolean
   ): Action[AnyContent] =
     ApiAction(Permission.None, APIScope.GlobalScope).asyncEitherT { implicit request =>
-      NamedPermission
-        .parseNamed(permissions)
-        .fold(EitherT.leftT[IO, Result](BadRequest(ApiError("Invalid permission name")))) { namedPerms =>
-          permissionsInCreatedApiScope(pluginId, organizationName).map {
-            case (tpe, perms) =>
-              Ok(PermissionCheck(tpe, check(namedPerms, perms)))
-          }
-        }
+      permissionsInCreatedApiScope(pluginId, organizationName).map {
+        case (scope, perms) =>
+          Ok(PermissionCheck(scope.tpe, check(permissions, perms)))
+      }
     }
 
-  def hasAll(permissions: Seq[String], pluginId: Option[String], organizationName: Option[String]): Action[AnyContent] =
+  def hasAll(permissions: Seq[NamedPermission], pluginId: Option[String], organizationName: Option[String]): Action[AnyContent] =
     has(permissions, pluginId, organizationName)((seq, perm) => seq.forall(p => perm.has(p.permission)))
 
-  def hasAny(permissions: Seq[String], pluginId: Option[String], organizationName: Option[String]): Action[AnyContent] =
+  def hasAny(permissions: Seq[NamedPermission], pluginId: Option[String], organizationName: Option[String]): Action[AnyContent] =
     has(permissions, pluginId, organizationName)((seq, perm) => seq.exists(p => perm.has(p.permission)))
 
   def listProjects(
       q: Option[String],
-      categories: Seq[String],
+      categories: Seq[Category],
       tags: Seq[String],
       owner: Option[String],
-      sort: Option[String],
+      sort: Option[ProjectSortingStrategy],
       relevance: Option[Boolean],
       limit: Option[Long],
       offset: Long
   ): Action[AnyContent] =
     ApiAction(Permission.ViewPublicInfo, APIScope.GlobalScope).asyncF { request =>
-      val res = for {
-        cats      <- parseOpt(categories.toList, Category.fromApiName, "Unknown category")
-        sortStrat <- parseOpt(sort, ProjectSortingStrategy.fromApiName, "Unknown sort strategy")
-      } yield {
-        val realLimit = limitOrDefault(limit, config.ore.projects.initLoad)
-        val getProjects = APIV2Queries
-          .projectQuery(
-            None,
-            cats,
-            tags.toList,
-            q,
-            owner,
-            request.globalPermissions.has(Permission.SeeHidden),
-            request.user.map(_.id),
-            sortStrat.getOrElse(ProjectSortingStrategy.Default),
-            relevance.getOrElse(true),
-            realLimit,
-            offset
-          )
-          .to[Vector]
+      val realLimit = limitOrDefault(limit, config.ore.projects.initLoad)
+      val getProjects = APIV2Queries
+        .projectQuery(
+          None,
+          categories.toList,
+          tags.toList,
+          q,
+          owner,
+          request.globalPermissions.has(Permission.SeeHidden),
+          request.user.map(_.id),
+          sort.getOrElse(ProjectSortingStrategy.Default),
+          relevance.getOrElse(true),
+          realLimit,
+          offset
+        )
+        .to[Vector]
 
-        val countProjects = APIV2Queries
-          .projectCountQuery(
-            None,
-            cats,
-            tags.toList,
-            q,
-            owner,
-            request.globalPermissions.has(Permission.SeeHidden),
-            request.user.map(_.id)
-          )
-          .unique
+      val countProjects = APIV2Queries
+        .projectCountQuery(
+          None,
+          categories.toList,
+          tags.toList,
+          q,
+          owner,
+          request.globalPermissions.has(Permission.SeeHidden),
+          request.user.map(_.id)
+        )
+        .unique
 
-        (service.runDbCon(getProjects), service.runDbCon(countProjects)).parMapN { (projects, count) =>
-          Ok(
-            PaginatedResult(
-              Pagination(realLimit, offset, count),
-              projects
-            )
+      (service.runDbCon(getProjects), service.runDbCon(countProjects)).parMapN { (projects, count) =>
+        Ok(
+          PaginatedProjectResult(
+            Pagination(realLimit, offset, count),
+            projects
           )
-        }
+        )
       }
-
-      res.leftMap(IO.pure).merge
     }
 
   def showProject(pluginId: String): Action[AnyContent] =
@@ -455,7 +440,7 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
 
       (service.runDbCon(getVersions), service.runDbCon(countVersions)).parMapN { (versions, count) =>
         Ok(
-          PaginatedResult(
+          PaginatedVersionResult(
             Pagination(realLimit, offset, count),
             versions
           )
@@ -529,7 +514,7 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
             .leftMap(s => BadRequest(UserError(s)))
             .map { v =>
               v.copy(
-                createForumPost = data.createForumPost.getOrElse(projectSettings.forumSync),
+                createForumPost = data.create_forum_post.getOrElse(projectSettings.forumSync),
                 channelName = data.tags.getOrElse("Channel", v.channelName),
                 description = data.description
               )
@@ -567,25 +552,51 @@ class ApiV2Controller @Inject()(factory: ProjectFactory, val errorHandler: HttpE
     apiOptDbAction(Permission.ViewPublicInfo, APIScope.GlobalScope)(_ => APIV2Queries.userQuery(user).option)
 }
 object ApiV2Controller {
+
   import APIV2.config
 
-  sealed trait APIScope
+  sealed abstract class APIScope(val tpe: APIScopeType)
   object APIScope {
-    case object GlobalScope                                extends APIScope
-    case class ProjectScope(pluginId: String)              extends APIScope
-    case class OrganizationScope(organizationName: String) extends APIScope
+    case object GlobalScope                                extends APIScope(APIScopeType.Global)
+    case class ProjectScope(pluginId: String)              extends APIScope(APIScopeType.Project)
+    case class OrganizationScope(organizationName: String) extends APIScope(APIScopeType.Organization)
+  }
+
+  sealed abstract class APIScopeType extends EnumEntry with EnumEntry.Snakecase
+  object APIScopeType extends Enum[APIScopeType] {
+    case object Global       extends APIScopeType
+    case object Project      extends APIScopeType
+    case object Organization extends APIScopeType
+
+    val values: immutable.IndexedSeq[APIScopeType] = findValues
+
+    implicit val encoder: Encoder[APIScopeType] = APIV2.enumEncoder(APIScopeType)(_.entryName)
+    implicit val decoder: Decoder[APIScopeType] = APIV2.enumDecoder(APIScopeType)(_.entryName)
+  }
+
+  sealed abstract class SessionType extends EnumEntry with EnumEntry.Snakecase
+  object SessionType extends Enum[SessionType] {
+    case object Key    extends SessionType
+    case object User   extends SessionType
+    case object Public extends SessionType
+    case object Dev    extends SessionType
+
+    val values: immutable.IndexedSeq[SessionType] = findValues
+
+    implicit val encoder: Encoder[SessionType] = APIV2.enumEncoder(SessionType)(_.entryName)
+    implicit val decoder: Decoder[SessionType] = APIV2.enumDecoder(SessionType)(_.entryName)
   }
 
   @ConfiguredJsonCodec case class ApiError(error: String)
   @ConfiguredJsonCodec case class ApiErrors(errors: NonEmptyList[String])
-  @ConfiguredJsonCodec case class UserError(userError: String)
+  @ConfiguredJsonCodec case class UserError(user_error: String)
 
   @ConfiguredJsonCodec case class KeyToCreate(name: String, permissions: Seq[String])
   @ConfiguredJsonCodec case class CreatedApiKey(key: String, perms: Seq[NamedPermission])
 
   @ConfiguredJsonCodec case class DeployVersionInfo(
       recommended: Option[Boolean],
-      createForumPost: Option[Boolean],
+      create_forum_post: Option[Boolean],
       description: Option[String],
       tags: Map[String, String]
   )
@@ -593,28 +604,18 @@ object ApiV2Controller {
   @ConfiguredJsonCodec case class ReturnedApiSession(
       session: String,
       expires: LocalDateTime,
-      @JsonKey("type") tpe: String
+      @JsonKey("type") tpe: SessionType
   )
 
-  case class PaginatedResult[A](
+  @ConfiguredJsonCodec case class PaginatedProjectResult(
       pagination: Pagination,
-      result: A
+      result: Seq[APIV2.Project]
   )
-  object PaginatedResult {
-    implicit def encodePaginatedResult[A: Encoder]: Encoder[PaginatedResult[A]] =
-      (a: PaginatedResult[A]) =>
-        Json.obj(
-          "pagination" -> a.pagination.asJson,
-          "result"     -> a.result.asJson
-      )
 
-    implicit def decodePaginatedResult[A: Decoder]: Decoder[PaginatedResult[A]] =
-      (c: HCursor) =>
-        for {
-          pagination <- c.get[Pagination]("pagination")
-          result     <- c.get[A]("result")
-        } yield PaginatedResult(pagination, result)
-  }
+  @ConfiguredJsonCodec case class PaginatedVersionResult(
+      pagination: Pagination,
+      result: Seq[APIV2.Version]
+  )
 
   @ConfiguredJsonCodec case class Pagination(
       limit: Long,
@@ -626,12 +627,12 @@ object ApiV2Controller {
   implicit val namedPermissionDecoder: Decoder[NamedPermission] = APIV2.enumDecoder(NamedPermission)(_.entryName)
 
   @ConfiguredJsonCodec case class KeyPermissions(
-      @JsonKey("type") tpe: String,
+      @JsonKey("type") tpe: APIScopeType,
       permissions: List[NamedPermission]
   )
 
   @ConfiguredJsonCodec case class PermissionCheck(
-      @JsonKey("type") tpe: String,
+      @JsonKey("type") tpe: APIScopeType,
       result: Boolean
   )
 }

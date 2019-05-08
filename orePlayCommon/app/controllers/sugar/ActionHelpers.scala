@@ -4,7 +4,7 @@ import scala.language.{higherKinds, implicitConversions}
 
 import play.api.data.{Form, FormError}
 import play.api.mvc.Results.Redirect
-import play.api.mvc.{Action, ActionBuilder, AnyContent, BodyParser, Call, Flash, Request, Result}
+import play.api.mvc._
 
 import controllers.sugar.Requests.OreRequest
 

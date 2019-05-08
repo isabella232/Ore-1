@@ -4,7 +4,6 @@ import scala.language.higherKinds
 
 import scala.concurrent.ExecutionContext
 
-import play.api.cache.AsyncCacheApi
 import play.api.i18n.I18nSupport
 import play.api.mvc._
 
@@ -32,8 +31,7 @@ abstract class OreBaseController(
     val service: ModelService[IO],
     val bakery: Bakery,
     val auth: SpongeAuthApi,
-    val sso: SingleSignOnConsumer,
-    val cache: AsyncCacheApi
+    val sso: SingleSignOnConsumer
 ) extends InjectedController
     with Actions
     with I18nSupport {

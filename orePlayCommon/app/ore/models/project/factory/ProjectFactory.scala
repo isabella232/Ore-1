@@ -21,7 +21,6 @@ import ore.models.user.{Notification, User}
 import ore.db.access.ModelView
 import ore.db.{DbRef, Model, ModelService}
 import ore.permission.role.Role
-import ore.models.project.NotifyWatchersTask
 import ore.models.project.io._
 import ore.util.StringUtils
 import ore.util.StringUtils._
@@ -153,7 +152,7 @@ trait ProjectFactory {
       slug = slugify(name),
       visibility = Visibility.New,
       file = plugin,
-      channelName = this.config.getSuggestedNameForVersion(metaData.version.get),
+      channelName = this.config.defaultChannelName,
       pendingVersion = null, // scalafix:ok
       cacheApi = this.cacheApi
     )

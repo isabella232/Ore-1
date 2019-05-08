@@ -10,7 +10,6 @@ import play.api.i18n.{Lang, Messages}
 import play.api.mvc.Results.{Redirect, Unauthorized}
 import play.api.mvc._
 
-import controllers.routes
 import controllers.sugar.Requests._
 import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
 import ore.db.impl.OrePostgresDriver.api._
@@ -60,7 +59,7 @@ trait Actions extends Calls with ActionHelpers {
     users.current.isEmpty
       .map { currentUserEmpty =>
         if (noRedirect.isEmpty && currentUserEmpty)
-          Redirect(routes.Users.logIn(None, None, Some(request.path)))
+          Redirect(controllers.routes.Users.logIn(None, None, Some(request.path)))
         else
           Redirect(ShowHome)
       }
