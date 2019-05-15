@@ -50,7 +50,7 @@ function loadStars(increment) {
             var end = Math.min(start + STARS_PER_PAGE, allStars.length + 1);
             var newStars = allStars.slice(start, end);
             var tbody = getStarsPanel().find('.panel-body').find('tbody');
-            var content = '';
+            var content = [];
             var count = 0;
 
             for (var i in newStars) {
@@ -71,23 +71,24 @@ function loadStars(increment) {
                         var slug = href.substr(href.lastIndexOf('/') + 1, href.length);
                         var category = projectData.category;
 
-                        // Append project contents to result
-                        content +=
-                            '<tr>'
-                            + '<td>'
-                            +   '<a href="' + href + '">' + projectData.owner + '/<strong>' + slug + '</strong></a>'
-                            +   '<div class="pull-right">'
-                            +     '<span class="minor">' + projectData.recommended.name + '</span> '
-                            +     '<i title="' + category.title + '" class="fas fa-fw ' + category.icon + '"></i>'
-                            +   '</div>'
-                            + '</td>';
+                        var link = $("<a>").attr("href", href).text(projectData.owner).append($("<strong>").text(slug));
+                        var versionDiv = $("<div class='pull-right'>");
+                        versionDiv.append($("<span class='minor'>").text(projectData.recommended.name));
+
+                        var versionIcon = $("<i>");
+                        versionIcon.attr("title", category.title);
+                        versionIcon.addClass('fas fa-fw').addClass(category.icon);
+                        versionDiv.append(versionIcon);
+
+                        content.push($("<tr>").append($("<td>").append(link, versionDiv)));
 
                         ++count
                     },
                     complete: function()  {
                         if (count == newStars.length) {
                             // Done loading, set the table to the result
-                            tbody.html(content);
+                            tbody.empty();
+                            tbody.append(content);
                             currentStarsPage += increment;
                             var footer = getStarsFooter();
                             var prev = footer.find('.prev');
