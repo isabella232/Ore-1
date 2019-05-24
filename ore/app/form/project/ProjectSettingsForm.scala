@@ -1,7 +1,7 @@
 package form.project
 
 import java.nio.file.Files
-import java.nio.file.Files.{createDirectories, delete, list, move, notExists}
+import java.nio.file.Files.{createDirectories, list, move, notExists}
 
 import ore.data.project.Category
 import ore.data.user.notification.NotificationType
@@ -10,7 +10,6 @@ import ore.db.{DbRef, Model, ModelService}
 import ore.db.impl.schema.{ProjectRoleTable, UserTable}
 import ore.db.impl.OrePostgresDriver.api._
 import ore.models.project.{Project, ProjectSettings}
-import ore.models.project.factory.PendingProject
 import ore.models.project.io.ProjectFiles
 import ore.permission.role.Role
 import ore.util.OreMDC
@@ -44,54 +43,6 @@ case class ProjectSettingsForm(
     ownerId: Option[DbRef[User]],
     forumSync: Boolean
 ) extends TProjectRoleSetBuilder {
-
-  def savePending(settings: ProjectSettings, project: PendingProject)(
-      implicit fileManager: ProjectFiles,
-      mdc: OreMDC,
-      service: ModelService[IO]
-  ): IO[(PendingProject, ProjectSettings)] = {
-    val queryOwnerName = for {
-      u <- TableQuery[UserTable] if this.ownerId.getOrElse(project.ownerId).bind === u.id
-    } yield u.name
-
-    val updateProject = service.runDBIO(queryOwnerName.result).map { ownerName =>
-      val newProj = project.copy(
-        category = Category.values.find(_.title == this.categoryName).get,
-        description = noneIfEmpty(this.description),
-        ownerId = this.ownerId.getOrElse(project.ownerId),
-        ownerName = ownerName.head
-      )(project.config)
-
-      newProj.pendingVersion = newProj.pendingVersion.copy(projectUrl = newProj.key)
-
-      newProj
-    }
-
-    val updatedSettings = settings.copy(
-      homepage = noneIfEmpty(this.homepage),
-      issues = noneIfEmpty(this.issues),
-      source = noneIfEmpty(this.source),
-      support = noneIfEmpty(this.support),
-      licenseUrl = noneIfEmpty(this.licenseUrl),
-      licenseName = if (this.licenseUrl.nonEmpty) Some(this.licenseName) else settings.licenseName,
-      forumSync = this.forumSync
-    )
-
-    updateProject.map { project =>
-      // Update icon
-      if (this.updateIcon) {
-        fileManager.getPendingIconPath(project.ownerName, project.name).foreach { pendingPath =>
-          val iconDir = fileManager.getIconDir(project.ownerName, project.name)
-          if (notExists(iconDir))
-            createDirectories(iconDir)
-          list(iconDir).forEach(delete(_))
-          move(pendingPath, iconDir.resolve(pendingPath.getFileName))
-        }
-      }
-
-      (project, updatedSettings)
-    }
-  }
 
   def save(settings: Model[ProjectSettings], project: Model[Project], logger: LoggerTakingImplicit[OreMDC])(
       implicit fileManager: ProjectFiles,
