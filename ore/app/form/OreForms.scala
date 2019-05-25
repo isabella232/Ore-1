@@ -125,7 +125,8 @@ class OreForms @Inject()(implicit config: OreConfig, factory: ProjectFactory, se
         "roleUps"      -> list(text),
         "update-icon"  -> boolean,
         "owner"        -> optional(longNumber).verifying(ownerIdInList(organisationUserCanUploadTo)),
-        "forum-sync"   -> boolean
+        "forum-sync"   -> boolean,
+        "keywords"     -> text,
       )(ProjectSettingsForm.apply)(ProjectSettingsForm.unapply)
     )
 
