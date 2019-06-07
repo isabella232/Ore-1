@@ -4,11 +4,11 @@ import java.time.LocalDateTime
 
 import play.api.mvc.RequestHeader
 
-import db.impl.access.ProjectBase
 import ore.models.project.{ReviewState, TagColor, Visibility}
 import models.protocols.APIV2
 import ore.OreConfig
 import ore.data.project.{Category, ProjectNamespace}
+import ore.models.project.io.ProjectFiles
 import ore.models.user.User
 import ore.permission.role.Role
 import ore.util.OreMDC
@@ -43,12 +43,12 @@ case class APIV2QueryProject(
 ) {
 
   def asProtocol(
-      implicit projectBase: ProjectBase,
+      implicit projectFiles: ProjectFiles,
       requestHeader: RequestHeader,
       mdc: OreMDC,
       config: OreConfig
   ): APIV2.Project = {
-    val iconPath = projectBase.fileManager.getIconPath(namespace.ownerName, name)
+    val iconPath = projectFiles.getIconPath(namespace.ownerName, name)
     val iconUrl =
       if (iconPath.isDefined)
         controllers.project.routes.Projects.showIcon(namespace.ownerName, namespace.slug).absoluteURL()

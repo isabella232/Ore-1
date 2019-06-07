@@ -4,37 +4,32 @@ import java.sql.Timestamp
 import java.time.temporal.ChronoUnit
 import java.time.{Instant, LocalDate}
 import java.util.Date
-import javax.inject.Inject
+import javax.inject.{Inject, Singleton}
 
-import scala.concurrent.ExecutionContext
 import scala.util.Try
 
-import play.api.cache.AsyncCacheApi
 import play.api.mvc.{Action, ActionBuilder, AnyContent}
 
-import controllers.sugar.Bakery
 import controllers.sugar.Requests.AuthRequest
-import ore.db.impl.OrePostgresDriver.api._
 import db.impl.query.AppQueries
-import ore.db.impl.schema.ProjectTableMain
 import form.OreForms
-import ore.models.project._
 import models.querymodels.{FlagActivity, ReviewActivity}
-import ore.models.user.role._
-import ore.models.user._
 import models.viewhelper.OrganizationData
 import ore.data.project.Category
 import ore.data.{Platform, PlatformCategory}
-import ore.db.access.ModelView
 import ore.db._
+import ore.db.access.ModelView
+import ore.db.impl.OrePostgresDriver.api._
+import ore.db.impl.schema.ProjectTableMain
 import ore.markdown.MarkdownRenderer
 import ore.member.MembershipDossier
 import ore.models.organization.Organization
+import ore.models.project.io.ProjectFiles
+import ore.models.project.{ProjectSortingStrategy, _}
+import ore.models.user._
+import ore.models.user.role._
 import ore.permission._
 import ore.permission.role.{Role, RoleCategory}
-import ore.models.project.ProjectSortingStrategy
-import ore.{OreConfig, OreEnv}
-import security.spauth.{SingleSignOnConsumer, SpongeAuthApi}
 import util.UserActionLogger
 import util.syntax._
 import views.{html => views}
@@ -48,15 +43,11 @@ import cats.syntax.all._
 /**
   * Main entry point for application.
   */
+@Singleton
 final class Application @Inject()(forms: OreForms)(
-    implicit val ec: ExecutionContext,
-    auth: SpongeAuthApi,
-    bakery: Bakery,
-    sso: SingleSignOnConsumer,
-    env: OreEnv,
-    config: OreConfig,
-    service: ModelService[IO],
-    renderer: MarkdownRenderer
+    implicit oreComponents: OreControllerComponents[IO],
+    renderer: MarkdownRenderer,
+    projectFiles: ProjectFiles
 ) extends OreBaseController {
 
   private def FlagAction = Authenticated.andThen(PermissionAction[AuthRequest](Permission.ModNotesAndFlags))

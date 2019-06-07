@@ -8,16 +8,16 @@ Collection of all projects.
 @import models.querymodels.{ProjectListEntry, ViewTag}
 @import util.syntax._
 @import views.html.utils
-@import db.impl.access.ProjectBase
+@import ore.models.project.io.ProjectFiles
 @import ore.util.OreMDC
-@(models: Seq[ProjectListEntry], page: Int, pageSize: Long, call: Int => Call)(implicit config: OreConfig, projectBase: ProjectBase, mdc: OreMDC)
+@(models: Seq[ProjectListEntry], page: Int, pageSize: Long, call: Int => Call)(implicit config: OreConfig, projectFiles: ProjectFiles, mdc: OreMDC)
 
 @projectRoutes = @{
     controllers.project.routes.Projects
 }
 
 @entryIcon(entry: ProjectListEntry) = @{
-    if(projectBase.fileManager.getIconPath(entry.namespace.ownerName, entry.name).isDefined) {
+    if(projectFiles.getIconPath(entry.namespace.ownerName, entry.name).isDefined) {
         projectRoutes.showIcon(entry.namespace.ownerName, entry.namespace.slug).url
     }
     else {

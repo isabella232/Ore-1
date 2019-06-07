@@ -12,12 +12,12 @@ Base template for Project overview.
 @import ore.permission.Permission
 @import ore.markdown.MarkdownRenderer
 @import ore.data.project.FlagReason
-@import db.impl.access.ProjectBase
+@import ore.models.project.io.ProjectFiles
 
 @import util.syntax._
 
 @(p: ProjectData, sp: ScopedProjectData, active: String, noButtons: Boolean = false, additionalScripts: Html = Html(""))(content: Html)(implicit messages: Messages,
-        request: OreRequest[_], flash: Flash, config: OreConfig, renderer: MarkdownRenderer, projectBase: ProjectBase)
+        request: OreRequest[_], flash: Flash, config: OreConfig, renderer: MarkdownRenderer, projectFiles: ProjectFiles)
 
 @appRoutes = @{controllers.routes.Application}
 

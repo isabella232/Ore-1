@@ -1,5 +1,7 @@
 package form.project
 
+import scala.language.higherKinds
+
 import java.nio.file.Files
 import java.nio.file.Files.{createDirectories, list, move, notExists}
 
@@ -16,8 +18,8 @@ import ore.util.OreMDC
 import ore.util.StringUtils.noneIfEmpty
 import util.syntax._
 
+import cats.{MonadError, Parallel}
 import cats.data.{EitherT, NonEmptyList}
-import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import cats.instances.either._
 import com.typesafe.scalalogging.LoggerTakingImplicit
@@ -46,12 +48,13 @@ case class ProjectSettingsForm(
     keywordsRaw: String
 ) extends TProjectRoleSetBuilder {
 
-  def save(settings: Model[ProjectSettings], project: Model[Project], logger: LoggerTakingImplicit[OreMDC])(
+  def save[F[_], G[_]](settings: Model[ProjectSettings], project: Model[Project], logger: LoggerTakingImplicit[OreMDC])(
       implicit fileManager: ProjectFiles,
       mdc: OreMDC,
-      service: ModelService[IO],
-      cs: ContextShift[IO]
-  ): EitherT[IO, String, (Model[Project], Model[ProjectSettings])] = {
+      service: ModelService[F],
+      F: MonadError[F, Throwable],
+      par: Parallel[F, G]
+  ): EitherT[F, String, (Model[Project], Model[ProjectSettings])] = {
     import cats.instances.vector._
     logger.debug("Saving project settings")
     logger.debug(this.toString)
@@ -61,7 +64,7 @@ case class ProjectSettingsForm(
 
     val keywords = keywordsRaw.split(" ").iterator.map(_.trim).filter(_.nonEmpty).toList
 
-    val checkedKeywordsF = EitherT.fromEither[IO] {
+    val checkedKeywordsF = EitherT.fromEither[F] {
       if (keywords.length > 5)
         Left("error.project.tooManyKeywords")
       else if (keywords.exists(_.length > 32))
@@ -141,7 +144,7 @@ case class ProjectSettingsForm(
               val roles = this.roleUps.traverse { role =>
                 Role.projectRoles
                   .find(_.value == role)
-                  .fold(IO.raiseError[Role](new RuntimeException("supplied invalid role type")))(IO.pure)
+                  .fold(F.raiseError[Role](new RuntimeException("supplied invalid role type")))(F.pure)
               }
 
               roles.map(xs => userIds.zip(xs))

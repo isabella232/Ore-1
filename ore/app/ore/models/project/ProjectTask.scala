@@ -43,18 +43,13 @@ class ProjectTask @Inject()(actorSystem: ActorSystem, config: OreConfig, lifecyc
   )
   private def deleteNewProjects = service.deleteWhere(Project)(newFilter && createdAtFilter)
 
-  /**
-    * Starts the task.
-    */
-  def start(): Unit = {
-    val task = this.actorSystem.scheduler.schedule(this.interval, this.interval, this)
-    lifecycle.addStopHook { () =>
-      Future {
-        task.cancel()
-      }
+  private val task = this.actorSystem.scheduler.schedule(this.interval, this.interval, this)
+  lifecycle.addStopHook { () =>
+    Future {
+      task.cancel()
     }
-    Logger.info(s"Initialized. First run in ${this.interval.toString}.")
   }
+  Logger.info(s"Initialized. First run in ${this.interval.toString}.")
 
   /**
     * Task runner
