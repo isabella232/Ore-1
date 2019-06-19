@@ -13,15 +13,16 @@ function apiV2Request(url, method = "GET", data = {}) {
     return getApiSession().then(function (session) {
         return new Promise(function (resolve, reject) {
             const isFormData = data instanceof FormData;
+            const isBodyRequest = (method === "POST" || method === "PUT" || method === "PATCH");
 
             $.ajax({
                 url: '/api/v2/' + url,
                 method: method,
                 dataType: 'json',
                 contentType: isFormData ? false : 'application/json',
-                data: data,
-                processData: isFormData ? false : undefined,
-                headers: {'Authorization': 'ApiSession ' + session}
+                data: isBodyRequest && !isFormData ? JSON.stringify(data) : data,
+                processData: !(isFormData || isBodyRequest),
+                headers: {'Authorization': 'OreApi session=' + session}
             }).done(function (data) {
                 resolve(data);
             }).fail(function (xhr) {
