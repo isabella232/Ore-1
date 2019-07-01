@@ -3,8 +3,6 @@ package db.impl.access
 import scala.language.higherKinds
 
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.Files._
 import java.time.Instant
 
 import db.impl.query.SharedQueries
@@ -16,21 +14,22 @@ import ore.db.{Model, ModelService}
 import ore.models.project._
 import ore.models.project.io.ProjectFiles
 import ore.util.{FileUtils, OreMDC}
-import ore.{OreConfig, OreEnv}
+import ore.OreConfig
 import ore.util.StringUtils._
 import util.syntax._
-import util.IOUtils
+import util.{FileIO, TaskUtils}
 
 import cats.Parallel
-import cats.data.OptionT
 import cats.effect.syntax.all._
 import cats.syntax.all._
 import cats.instances.vector._
 import cats.instances.option._
+import cats.tagless.autoFunctorK
 import com.google.common.base.Preconditions._
 import com.typesafe.scalalogging.LoggerTakingImplicit
 
-trait ProjectBase[F[_]] {
+@autoFunctorK
+trait ProjectBase[+F[_]] {
 
   def missingFile: F[Seq[Model[Version]]]
 
@@ -50,7 +49,7 @@ trait ProjectBase[F[_]] {
     * @param name   Project name
     * @return       Project with name
     */
-  def withName(owner: String, name: String): OptionT[F, Model[Project]]
+  def withName(owner: String, name: String): F[Option[Model[Project]]]
 
   /**
     * Returns the Project with the specified owner name and URL slug, if any.
@@ -59,7 +58,7 @@ trait ProjectBase[F[_]] {
     * @param slug   URL slug
     * @return       Project if found, None otherwise
     */
-  def withSlug(owner: String, slug: String): OptionT[F, Model[Project]]
+  def withSlug(owner: String, slug: String): F[Option[Model[Project]]]
 
   /**
     * Returns the Project with the specified plugin ID, if any.
@@ -67,7 +66,7 @@ trait ProjectBase[F[_]] {
     * @param pluginId Plugin ID
     * @return         Project if found, None otherwise
     */
-  def withPluginId(pluginId: String): OptionT[F, Model[Project]]
+  def withPluginId(pluginId: String): F[Option[Model[Project]]]
 
   /**
     * Returns true if the Project's desired slug is available.
@@ -131,7 +130,8 @@ object ProjectBase {
       implicit service: ModelService[F],
       config: OreConfig,
       forums: OreDiscourseApi[F],
-      fileManager: ProjectFiles,
+      fileManager: ProjectFiles[F],
+      fileIO: FileIO[F],
       F: cats.effect.Effect[F],
       par: Parallel[F, G]
   ) extends ProjectBase[F] {
@@ -143,27 +143,34 @@ object ProjectBase {
           p <- TableQuery[ProjectTableMain] if v.projectId === p.id
         } yield (p.ownerName, p.name, v)
 
-      service.runDBIO(allVersions.result).map { versions =>
-        versions
-          .filter {
-            case (ownerNamer, name, version) =>
-              try {
-                val versionDir = this.fileManager.getVersionDir(ownerNamer, name, version.name)
-                Files.notExists(versionDir.resolve(version.fileName))
-              } catch {
-                case _: IOException =>
-                  //Invalid file name
-                  false
-              }
+      service.runDBIO(allVersions.result).flatMap { versions =>
+        fileIO
+          .traverseLimited(versions.toVector) {
+            case t @ (ownerNamer, name, version) =>
+              val res = F
+                .bracket(F.delay(this.fileManager.getVersionDir(ownerNamer, name, version.name)))(
+                  versionDir => fileIO.notExists(versionDir.resolve(version.fileName))
+                )(_ => F.unit)
+                .recover {
+                  case _: IOException =>
+                    //Invalid file name
+                    false
+                }
+
+              res.tupleLeft(t)
           }
-          .map(_._3)
+          .map {
+            _.collect {
+              case ((_, _, v), true) => v
+            }
+          }
       }
     }
 
     def refreshHomePage(logger: LoggerTakingImplicit[OreMDC])(implicit mdc: OreMDC): F[Unit] =
       service
         .runDbCon(SharedQueries.refreshHomeView.run)
-        .runAsync(IOUtils.logCallback("Failed to refresh home page", logger))
+        .runAsync(TaskUtils.logCallback("Failed to refresh home page", logger))
         .to[F]
 
     def stale: F[Seq[Model[Project]]] =
@@ -174,34 +181,40 @@ object ProjectBase {
           .result
       )
 
-    def withName(owner: String, name: String): OptionT[F, Model[Project]] =
+    def withName(owner: String, name: String): F[Option[Model[Project]]] =
       ModelView
         .now(Project)
         .find(p => p.ownerName.toLowerCase === owner.toLowerCase && p.name.toLowerCase === name.toLowerCase)
+        .value
 
-    def withSlug(owner: String, slug: String): OptionT[F, Model[Project]] =
+    def withSlug(owner: String, slug: String): F[Option[Model[Project]]] =
       ModelView
         .now(Project)
         .find(p => p.ownerName.toLowerCase === owner.toLowerCase && p.slug.toLowerCase === slug.toLowerCase)
+        .value
 
-    def withPluginId(pluginId: String): OptionT[F, Model[Project]] =
-      ModelView.now(Project).find(equalsIgnoreCase(_.pluginId, pluginId))
+    def withPluginId(pluginId: String): F[Option[Model[Project]]] =
+      ModelView.now(Project).find(equalsIgnoreCase(_.pluginId, pluginId)).value
 
     def isNamespaceAvailable(owner: String, slug: String): F[Boolean] =
-      withSlug(owner, slug).isEmpty
+      withSlug(owner, slug).map(_.isEmpty)
 
     def exists(owner: String, name: String): F[Boolean] =
-      withName(owner, name).isDefined
+      withName(owner, name).map(_.isDefined)
 
-    def savePendingIcon(project: Project)(implicit mdc: OreMDC): F[Unit] = F.delay {
-      this.fileManager.getPendingIconPath(project).foreach { iconPath =>
-        val iconDir = this.fileManager.getIconDir(project.ownerName, project.name)
-        if (notExists(iconDir))
-          createDirectories(iconDir)
-        FileUtils.cleanDirectory(iconDir)
-        move(iconPath, iconDir.resolve(iconPath.getFileName))
+    def savePendingIcon(project: Project)(implicit mdc: OreMDC): F[Unit] =
+      this.fileManager.getPendingIconPath(project).flatMap { optIconPath =>
+        optIconPath.fold(F.unit) { iconPath =>
+          val iconDir = this.fileManager.getIconDir(project.ownerName, project.name)
+
+          val notExists  = fileIO.notExists(iconDir)
+          val createDirs = fileIO.createDirectories(iconDir)
+          val cleanDir   = fileIO.executeBlocking(FileUtils.cleanDirectory(iconDir))
+          val moveDir    = fileIO.move(iconPath, iconDir.resolve(iconPath.getFileName))
+
+          notExists.ifM(createDirs, F.unit) *> cleanDir *> moveDir.void
+        }
       }
-    }
 
     def rename(
         project: Model[Project],
@@ -283,8 +296,7 @@ object ProjectBase {
         noVersions <- channel.versions(ModelView.now(Version)).isEmpty
         _ <- {
           val versionDir = this.fileManager.getVersionDir(proj.ownerName, proj.name, version.name)
-          FileUtils.deleteDirectory(versionDir)
-          service.delete(version)
+          fileIO.executeBlocking(FileUtils.deleteDirectory(versionDir)) *> service.delete(version)
         }
         // Delete channel if now empty
         _ <- if (noVersions) this.deleteChannel(proj, channel) else F.unit
@@ -297,7 +309,9 @@ object ProjectBase {
       * @param project Project to delete
       */
     def delete(project: Model[Project])(implicit mdc: OreMDC): F[Int] = {
-      val fileEff = F.delay(FileUtils.deleteDirectory(this.fileManager.getProjectDir(project.ownerName, project.name)))
+      val fileEff = fileIO.executeBlocking(
+        FileUtils.deleteDirectory(this.fileManager.getProjectDir(project.ownerName, project.name))
+      )
       val eff =
         if (project.topicId.isDefined)
           forums.deleteProjectTopic(project).void

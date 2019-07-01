@@ -43,7 +43,7 @@ lazy val commonSettings = Seq(
     "-Ywarn-value-discard",
     "-Yrangepos"
   ),
-  addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.10"),
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.1"),
   addCompilerPlugin(("org.scalamacros" % "paradise" % "2.1.1").cross(CrossVersion.full)),
   addCompilerPlugin(scalafixSemanticdb("4.1.9")),
   // Disable generation of the API documentation for production builds
@@ -75,6 +75,8 @@ lazy val playTestDeps = Seq(
 )
 
 lazy val catsVersion         = "1.6.0"
+lazy val catsTaglessVersion  = "0.7"
+lazy val zioVersion          = "1.0.0-RC8-6"
 lazy val doobieVersion       = "0.6.0"
 lazy val flexmarkVersion     = "0.42.8"
 lazy val playSlickVersion    = "4.0.1"
@@ -84,14 +86,16 @@ lazy val akkaVersion         = "2.5.22"
 lazy val akkaHttpVersion     = "10.1.8"
 lazy val scalaLoggingVersion = "3.9.2"
 lazy val simulacrumVersion   = "0.16.0"
+lazy val macWireVersion      = "2.3.2"
 
 lazy val db = project.settings(
   commonSettings,
   name := "ore-db",
   libraryDependencies ++= Seq(
-    "com.typesafe.slick" %% "slick"       % "3.3.0",
-    "org.tpolecat"       %% "doobie-core" % doobieVersion,
-    "com.chuusai"        %% "shapeless"   % "2.3.3",
+    "com.typesafe.slick" %% "slick"               % "3.3.0",
+    "org.tpolecat"       %% "doobie-core"         % doobieVersion,
+    "org.typelevel"      %% "cats-tagless-macros" % catsTaglessVersion,
+    "com.chuusai"        %% "shapeless"           % "2.3.3",
   )
 )
 
@@ -101,6 +105,7 @@ lazy val externalCommon = project.settings(
   libraryDependencies ++= Seq(
     "org.typelevel"              %% "cats-core"            % catsVersion,
     "org.typelevel"              %% "cats-effect"          % "1.2.0",
+    "org.typelevel"              %% "cats-tagless-macros"  % catsTaglessVersion,
     "io.circe"                   %% "circe-core"           % circeVersion,
     "io.circe"                   %% "circe-generic-extras" % circeVersion,
     "io.circe"                   %% "circe-parser"         % circeVersion,
@@ -109,7 +114,7 @@ lazy val externalCommon = project.settings(
     "com.typesafe.akka"          %% "akka-stream"          % akkaVersion,
     "de.heikoseeberger"          %% "akka-http-circe"      % "1.25.2",
     "com.typesafe.scala-logging" %% "scala-logging"        % scalaLoggingVersion,
-    "com.github.mpilquist"       %% "simulacrum"           % simulacrumVersion
+    "com.github.mpilquist"       %% "simulacrum"           % simulacrumVersion,
   ),
 )
 
@@ -117,7 +122,7 @@ lazy val discourse = project
   .dependsOn(externalCommon)
   .settings(
     commonSettings,
-    name := "ore-discourse"
+    name := "ore-discourse",
   )
 
 lazy val auth = project
@@ -162,6 +167,10 @@ lazy val orePlayCommon: Project = project
       "org.spongepowered" % "plugin-meta" % "0.4.1",
       "com.typesafe.play" %% "play-slick" % playSlickVersion,
     ),
+    libraryDependencies ++= Seq(
+      "dev.zio" %% "zio"              % zioVersion,
+      "dev.zio" %% "zio-interop-cats" % zioVersion
+    ),
     aggregateReverseRoutes := Seq(ore)
   )
 
@@ -197,7 +206,6 @@ lazy val ore = project
     commonSettings,
     playCommonSettings,
     name := "ore",
-    libraryDependencies += guice,
     libraryDependencies ++= Seq(
       "com.typesafe.play"          %% "play-slick-evolutions" % playSlickVersion,
       "com.typesafe.scala-logging" %% "scala-logging"         % scalaLoggingVersion,
@@ -207,6 +215,8 @@ lazy val ore = project
       "io.circe"                   %% "circe-core"            % circeVersion,
       "io.circe"                   %% "circe-generic-extras"  % circeVersion,
       "io.circe"                   %% "circe-parser"          % circeVersion,
+      "com.softwaremill.macwire"   %% "macros"                % macWireVersion % "provided",
+      "com.softwaremill.macwire"   %% "macrosakka"            % macWireVersion % "provided"
     ),
     libraryDependencies ++= Seq(
       "",

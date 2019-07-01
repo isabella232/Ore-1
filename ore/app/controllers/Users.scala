@@ -10,7 +10,7 @@ import db.impl.query.UserPagesQueries
 import form.OreForms
 import mail.{EmailFactory, Mailer}
 import models.viewhelper.{OrganizationData, ScopedOrganizationData, UserData}
-import ore.OreEnv
+import ore.auth.URLWithNonce
 import ore.data.Prompt
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
@@ -19,19 +19,18 @@ import ore.db.impl.schema.{ApiKeyTable, UserTable}
 import ore.db.{DbRef, Model}
 import ore.models.project.ProjectSortingStrategy
 import ore.models.project.io.ProjectFiles
-import ore.models.user.{FakeUser, _}
 import ore.models.user.notification.{InviteFilter, NotificationFilter}
+import ore.models.user.{FakeUser, _}
 import ore.permission.Permission
 import ore.permission.role.Role
 import util.UserActionLogger
 import util.syntax._
 import views.{html => views}
 
-import cats.data.EitherT
-import cats.effect.{IO, Timer}
-import cats.instances.list._
-import cats.instances.option._
 import cats.syntax.all._
+import zio.blocking.Blocking
+import zio.{IO, Task, ZIO}
+import zio.interop.catz._
 
 /**
   * Controller for general user actions.
@@ -43,8 +42,7 @@ class Users @Inject()(
     mailer: Mailer,
     emails: EmailFactory
 )(
-    implicit oreComponents: OreControllerComponents[IO],
-    projectFiles: ProjectFiles,
+    implicit oreComponents: OreControllerComponents,
     messagesApi: MessagesApi,
 ) extends OreBaseController {
 
@@ -56,10 +54,7 @@ class Users @Inject()(
     * @return Logged in page
     */
   def signUp(): Action[AnyContent] = Action.asyncF {
-    val nonce = sso.nonce()
-    service.insert(SignOn(nonce = nonce)) *> redirectToSso(
-      this.sso.getSignupUrl(this.baseUrl + "/login", nonce)
-    )
+    redirectToSso(sso.getSignupUrl(s"$baseUrl/login"))
   }
 
   /**
@@ -69,8 +64,8 @@ class Users @Inject()(
     * @param sig  Incoming signature from auth
     * @return     Logged in home
     */
-  def logIn(sso: Option[String], sig: Option[String], returnPath: Option[String]): Action[AnyContent] = Action.asyncF {
-    implicit request =>
+  def logIn(sso: Option[String], sig: Option[String], returnPath: Option[String]): Action[AnyContent] =
+    Action.asyncF { implicit request =>
       if (this.fakeUser.isEnabled) {
         // Log in as fake user (debug only)
         this.config.checkDebug()
@@ -78,33 +73,30 @@ class Users @Inject()(
           .getOrCreate(
             this.fakeUser.username,
             this.fakeUser,
-            ifInsert = fakeUser => fakeUser.globalRoles.addAssoc(Role.OreAdmin.toDbRole.id).void
+            ifInsert = fakeUser => fakeUser.globalRoles.addAssoc(Role.OreAdmin.toDbRole.id).unit
           )
           .flatMap(fakeUser => this.redirectBack(returnPath.getOrElse(request.path), fakeUser))
       } else if (sso.isEmpty || sig.isEmpty) {
-        val nonce = this.sso.nonce()
-        service.insert(SignOn(nonce = nonce)) *> redirectToSso(
-          this.sso.getLoginUrl(this.baseUrl + "/login", nonce)
-        ).map(_.flashing("url" -> returnPath.getOrElse(request.path)))
+        redirectToSso(this.sso.getLoginUrl(s"$baseUrl/login"))
+          .map(_.flashing("url" -> returnPath.getOrElse(request.path)))
       } else {
-        // Redirected from SpongeSSO, decode SSO payload and convert to Ore user
-        this.sso
-          .authenticate(sso.get, sig.get)(isNonceValid)
-          .map(sponge => sponge.toUser -> sponge)
-          .semiflatMap {
-            case (fromSponge, sponge) =>
-              // Complete authentication
-              for {
-                user <- users.getOrCreate(sponge.username, fromSponge, _ => IO.unit)
-                _    <- user.globalRoles.deleteAllFromParent
-                _ <- sponge.newGlobalRoles
-                  .fold(IO.unit)(_.map(_.toDbRole.id).traverse_(user.globalRoles.addAssoc(_)))
-                result <- this.redirectBack(request.flash.get("url").getOrElse("/"), user)
-              } yield result
+        for {
+          // Redirected from SpongeSSO, decode SSO payload and convert to Ore user
+          sponge <- this.sso
+            .authenticate(sso.get, sig.get)(isNonceValid)
+            .get
+            .constError(Redirect(ShowHome).withError("error.loginFailed"))
+          fromSponge = sponge.toUser
+          // Complete authentication
+          user <- users.getOrCreate(sponge.username, fromSponge, _ => IO.unit)
+          _    <- user.globalRoles.deleteAllFromParent
+          _ <- sponge.newGlobalRoles.fold(IO.unit) { roles =>
+            ZIO.foreachPar_(roles.map(_.toDbRole.id))(user.globalRoles.addAssoc(_))
           }
-          .getOrElse(Redirect(ShowHome).withError("error.loginFailed"))
+          result <- this.redirectBack(request.flash.get("url").getOrElse("/"), user)
+        } yield result
       }
-  }
+    }
 
   /**
     * Redirects the user to the auth verification page to re-enter their
@@ -114,14 +106,17 @@ class Users @Inject()(
     * @return           Redirect to verification
     */
   def verify(returnPath: Option[String]): Action[AnyContent] = Authenticated.asyncF {
-    val nonce = sso.nonce()
-    service.insert(SignOn(nonce = nonce)) *> redirectToSso(
-      this.sso.getVerifyUrl(this.baseUrl + returnPath.getOrElse("/"), nonce)
-    )
+    redirectToSso(sso.getVerifyUrl(s"${this.baseUrl}${returnPath.getOrElse("/")}"))
   }
 
-  private def redirectToSso(url: String): IO[Result] =
-    this.sso.isAvailable.ifM(IO.pure(Redirect(url)), IO.pure(Redirect(ShowHome).withError("error.noLogin")))
+  private def redirectToSso(url: URLWithNonce): IO[Result, Result] = {
+    val available: IO[Result, Boolean] = sso.isAvailable
+
+    available.ifM(
+      service.insert(SignOn(url.nonce)).as(Redirect(url.url)),
+      IO.fail(Redirect(ShowHome).withError("error.noLogin"))
+    )
+  }
 
   private def redirectBack(url: String, user: User) =
     Redirect(this.baseUrl + url).authenticatedAs(user, this.config.play.sessionMaxAge.toSeconds.toInt)
@@ -151,45 +146,45 @@ class Users @Inject()(
 
     val canHideProjects = request.headerData.globalPerm(Permission.SeeHidden)
 
-    users
-      .withName(username)
-      .semiflatMap { user =>
-        for {
-          // TODO include orga projects?
-          t1 <- (
-            service.runDbCon(
-              UserPagesQueries
-                .getProjects(
-                  username,
-                  request.headerData.currentUser.map(_.id.value),
-                  canHideProjects,
-                  ProjectSortingStrategy.MostStars,
-                  pageSize,
-                  offset
-                )
-                .to[Vector]
-            ),
-            getOrga(username).value,
-            getUserData(request, username).value
-          ).parTupled
-          (projects, orga, userData) = t1
-          t2 <- (
-            OrganizationData.of(orga).value,
-            ScopedOrganizationData.of(request.currentUser, orga).value
-          ).parTupled
-          (orgaData, scopedOrgaData) = t2
-        } yield {
-          Ok(
-            views.users.projects(
-              userData.get,
-              orgaData.flatMap(a => scopedOrgaData.map(b => (a, b))),
-              projects,
-              pageNum
-            )
+    for {
+      u <- users
+        .withName(username)
+        .toZIOWithError(notFound)
+      // TODO include orga projects?
+      t1 <- (
+        service
+          .runDbCon(
+            UserPagesQueries
+              .getProjects(
+                username,
+                request.headerData.currentUser.map(_.id.value),
+                canHideProjects,
+                ProjectSortingStrategy.MostStars,
+                pageSize,
+                offset
+              )
+              .to[Vector]
           )
-        }
-      }
-      .getOrElse(notFound)
+          .flatMap(entries => ZIO.foreachParN(config.performance.nioBlockingFibers)(entries)(_.withIcon)),
+        getOrga(username).option,
+        UserData.of(request, u),
+      ).parTupled
+      (projects, orga, userData) = t1
+      t2 <- (
+        OrganizationData.of[Task, ParTask](orga).value.orDie,
+        ScopedOrganizationData.of(request.currentUser, orga).value
+      ).parTupled
+      (orgaData, scopedOrgaData) = t2
+    } yield {
+      Ok(
+        views.users.projects(
+          userData,
+          orgaData.flatMap(a => scopedOrgaData.map(b => (a, b))),
+          projects,
+          pageNum
+        )
+      )
+    }
   }
 
   /**
@@ -199,25 +194,26 @@ class Users @Inject()(
     * @return           View of user page
     */
   def saveTagline(username: String): Action[String] =
-    UserEditAction(username).asyncEitherT(parse.form(forms.UserTagline)) { implicit request =>
-      val maxLen = this.config.ore.users.maxTaglineLen
+    UserEditAction(username).asyncF(parse.form(forms.UserTagline)) { implicit request =>
+      val maxLen  = this.config.ore.users.maxTaglineLen
+      val tagline = request.body
 
       for {
-        user <- users.withName(username).toRight(NotFound)
-        res <- {
-          val tagline = request.body
+        user <- users.withName(username).toZIOWithError(NotFound)
+        _ <- {
           if (tagline.length > maxLen)
-            EitherT.rightT[IO, Result](
-              Redirect(ShowUser(user)).withError(request.messages.apply("error.tagline.tooLong", maxLen))
-            )
-          else {
-            val log = UserActionLogger
-              .log(request, LoggedAction.UserTaglineChanged, user.id, tagline, user.tagline.getOrElse("null"))
-            val insert = service.update(user)(_.copy(tagline = Some(tagline)))
-            EitherT.right[Result]((log *> insert).as(Redirect(ShowUser(user))))
-          }
+            IO.fail(Redirect(ShowUser(user)).withError(request.messages.apply("error.tagline.tooLong", maxLen)))
+          else ZIO.succeed(())
         }
-      } yield res
+        _ <- UserActionLogger.log(
+          request,
+          LoggedAction.UserTaglineChanged,
+          user.id,
+          tagline,
+          user.tagline.getOrElse("null")
+        )
+        _ <- service.update(user)(_.copy(tagline = Some(tagline)))
+      } yield Redirect(ShowUser(user))
     }
 
   /**
@@ -230,11 +226,14 @@ class Users @Inject()(
   def setLocked(username: String, locked: Boolean, sso: Option[String], sig: Option[String]): Action[AnyContent] = {
     VerifiedAction(username, sso, sig).asyncF { implicit request =>
       val user = request.user
-      if (!locked)
+
+      if (!locked) {
         this.mailer.push(this.emails.create(user, this.emails.AccountUnlocked))
+      }
+
       service
         .update(user)(_.copy(isLocked = locked))
-        .as(Redirect(ShowUser(username)))
+        .const(Redirect(ShowUser(username)))
     }
   }
 
@@ -289,9 +288,11 @@ class Users @Inject()(
           .on(_.originId === _.id)
           .result
       )
-      val invitesF = iFilter(user).flatMap(i => i.toVector.parTraverse(invite => invite.subject.tupleLeft(invite)))
+      val invitesF =
+        iFilter(user).flatMap(i => i.toVector.parTraverse(invite => invite.subject[Task].orDie.tupleLeft(invite)))
 
       (notificationsF, invitesF).parMapN { (notifications, invites) =>
+        import cats.instances.option._
         Ok(
           views.users.notifications(
             Model.unwrapNested[Seq[(Model[Notification], Option[User])]](notifications),
@@ -314,7 +315,7 @@ class Users @Inject()(
     request.user
       .notifications(ModelView.now(Notification))
       .get(id)
-      .semiflatMap(notification => service.update(notification)(_.copy(isRead = true)).as(Ok))
+      .semiflatMap(notification => service.update(notification)(_.copy(isRead = true)).const(Ok))
       .getOrElse(notFound)
   }
 
@@ -327,8 +328,8 @@ class Users @Inject()(
     */
   def markPromptRead(id: Int): Action[AnyContent] = Authenticated.asyncF { implicit request =>
     Prompt.values.find(_.value == id) match {
-      case None         => IO.pure(BadRequest)
-      case Some(prompt) => request.user.markPromptAsRead(prompt).as(Ok)
+      case None         => IO.fail(BadRequest)
+      case Some(prompt) => request.user.markPromptAsRead(prompt).const(Ok)
     }
   }
 
@@ -337,13 +338,13 @@ class Users @Inject()(
       if (request.user.name == username) {
         for {
           t1 <- (
-            getOrga(username).value,
+            getOrga(username).option,
             UserData.of(request, request.user),
             service.runDBIO(TableQuery[ApiKeyTable].filter(_.ownerId === request.user.id.value).result)
           ).parTupled
           (orga, userData, keys) = t1
           t2 <- (
-            OrganizationData.of(orga).value,
+            OrganizationData.of[Task, ParTask](orga).value.orDie,
             ScopedOrganizationData.of(request.currentUser, orga).value
           ).parTupled
           (orgaData, scopedOrgaData) = t2
@@ -351,15 +352,18 @@ class Users @Inject()(
             service.runDbCon(UserQueries.allPossibleProjectPermissions(request.user.id).unique),
             service.runDbCon(UserQueries.allPossibleOrgPermissions(request.user.id).unique)
           ).parMapN(_.add(_).add(userData.userPerm))
-        } yield
+        } yield {
+          import cats.instances.option._
+
           Ok(
             views.users.apiKeys(
               userData,
-              orgaData.flatMap(a => scopedOrgaData.map(b => (a, b))),
+              (orgaData, scopedOrgaData).tupled,
               Model.unwrapNested(keys),
               totalPerms.toNamedSeq
             )
           )
-      } else IO.pure(Forbidden)
+        }
+      } else IO.fail(Forbidden)
     }
 }

@@ -17,18 +17,20 @@ import ore.models.project.Version
 import ore.models.statistic.{ProjectView, StatEntry, VersionDownload}
 import ore.models.user.User
 import ore.util.OreMDC
-import _root_.util.IOUtils
+import _root_.util.TaskUtils
 
 import cats.Parallel
 import cats.data.OptionT
 import cats.syntax.all._
 import cats.effect.syntax.all._
+import cats.tagless.autoInvariantK
 import com.github.tminglei.slickpg.InetString
 import com.typesafe.scalalogging
 
 /**
   * Helper class for handling tracking of statistics.
   */
+@autoInvariantK
 trait StatTracker[F[_]] {
 
   /**
@@ -138,7 +140,7 @@ object StatTracker {
         }
 
         val doUpdateAsync =
-          stat.runAsync(IOUtils.logCallback(s"Failed to register $describe", MDCLogger)).to[F]
+          stat.runAsync(TaskUtils.logCallback(s"Failed to register $describe", MDCLogger)).to[F]
         val setCookie = result.map(_.withCookies(bakery.bake(COOKIE_NAME, statEntry.cookie, secure = true)))
 
         doUpdateAsync *> setCookie

@@ -11,7 +11,6 @@ import ore.external.AkkaClientApi
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model._
 import akka.stream.Materializer
-import cats.data.EitherT
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
@@ -26,7 +25,7 @@ class AkkaSpongeAuthApi[F[_]] private (
     implicit system: ActorSystem,
     mat: Materializer,
     F: Concurrent[F],
-) extends AkkaClientApi[F, List]("SpongeAuth", counter, settings)
+) extends AkkaClientApi[F, List, String]("SpongeAuth", counter, settings)
     with SpongeAuthApi[F] {
 
   protected val Logger = scalalogging.Logger("SpongeAuth")
@@ -39,7 +38,10 @@ class AkkaSpongeAuthApi[F[_]] private (
       json.as[A].leftMap(e => List(e.show))
   }
 
-  override def createDummyUser(username: String, email: String): EitherT[F, List[String], AuthUser] = {
+  override def createStatusError(statusCode: StatusCode, message: Option[String]): String =
+    s"SpongeAuth request failed. Response code $statusCode${message.fold("")(s => s": $s")}"
+
+  override def createDummyUser(username: String, email: String): F[Either[List[String], AuthUser]] = {
     val params = Seq(
       "api-key"  -> settings.apiKey,
       "username" -> username,
@@ -57,7 +59,7 @@ class AkkaSpongeAuthApi[F[_]] private (
     )
   }
 
-  override def getUser(username: String): EitherT[F, List[String], AuthUser] = {
+  override def getUser(username: String): F[Either[List[String], AuthUser]] = {
     makeUnmarshallRequestEither(
       HttpRequest(
         HttpMethods.GET,
@@ -66,10 +68,10 @@ class AkkaSpongeAuthApi[F[_]] private (
     )
   }
 
-  override def getChangeAvatarToken(
+  private def getChangeAvatarToken(
       requester: String,
       organization: String
-  ): EitherT[F, List[String], ChangeAvatarToken] = {
+  ): F[Either[List[String], ChangeAvatarToken]] = {
     val params = Seq(
       "api-key"          -> settings.apiKey,
       "request_username" -> requester,
@@ -84,8 +86,13 @@ class AkkaSpongeAuthApi[F[_]] private (
     )
   }
 
-  override def changeAvatarUri(organization: String, token: ChangeAvatarToken): Uri =
-    apiUri(_ / "accounts"/"user"/ organization / "change-avatar").withQuery(Uri.Query("key" -> token.signedData))
+  override def changeAvatarUri(requester: String, organization: String): F[Either[List[String], Uri]] =
+    getChangeAvatarToken(requester, organization).map {
+      _.map { token =>
+        apiUri(_ / "accounts" / "user" / organization / "change-avatar")
+          .withQuery(Uri.Query("key" -> token.signedData))
+      }
+    }
 }
 object AkkaSpongeAuthApi {
 

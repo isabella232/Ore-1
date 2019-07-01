@@ -2,9 +2,7 @@ package form.project
 
 import scala.language.higherKinds
 
-import java.nio.file.Files
-import java.nio.file.Files.{createDirectories, list, move, notExists}
-
+import ore.OreConfig
 import ore.data.project.Category
 import ore.data.user.notification.NotificationType
 import ore.models.user.{Notification, User}
@@ -16,10 +14,12 @@ import ore.models.project.io.ProjectFiles
 import ore.permission.role.Role
 import ore.util.OreMDC
 import ore.util.StringUtils.noneIfEmpty
+import util.FileIO
 import util.syntax._
 
-import cats.{MonadError, Parallel}
+import cats.Parallel
 import cats.data.{EitherT, NonEmptyList}
+import cats.effect.Async
 import cats.syntax.all._
 import cats.instances.either._
 import com.typesafe.scalalogging.LoggerTakingImplicit
@@ -49,10 +49,11 @@ case class ProjectSettingsForm(
 ) extends TProjectRoleSetBuilder {
 
   def save[F[_], G[_]](settings: Model[ProjectSettings], project: Model[Project], logger: LoggerTakingImplicit[OreMDC])(
-      implicit fileManager: ProjectFiles,
+      implicit fileManager: ProjectFiles[F],
+      fileIO: FileIO[F],
       mdc: OreMDC,
       service: ModelService[F],
-      F: MonadError[F, Throwable],
+      F: Async[F],
       par: Parallel[F, G]
   ): EitherT[F, String, (Model[Project], Model[ProjectSettings])] = {
     import cats.instances.vector._
@@ -103,19 +104,27 @@ case class ProjectSettingsForm(
 
     modelUpdates.semiflatMap { t =>
       // Update icon
-      if (this.updateIcon) {
-        fileManager.getPendingIconPath(project).foreach { pendingPath =>
-          val iconDir = fileManager.getIconDir(project.ownerName, project.name)
-          if (notExists(iconDir))
-            createDirectories(iconDir)
-          list(iconDir).forEach(Files.delete(_))
-          move(pendingPath, iconDir.resolve(pendingPath.getFileName))
+      val moveIcon = if (this.updateIcon) {
+        fileManager.getPendingIconPath(project).flatMap { pendingPathOpt =>
+          pendingPathOpt.fold(F.unit) { pendingPath =>
+            val iconDir = fileManager.getIconDir(project.ownerName, project.name)
+
+            val notExist   = fileIO.notExists(iconDir)
+            val createDirs = fileIO.createDirectories(iconDir)
+            val deleteFiles = fileIO.list(iconDir).flatMap { ps =>
+              import cats.instances.stream._
+              fileIO.traverseLimited(ps)(p => fileIO.delete(p))
+            }
+            val move = fileIO.move(pendingPath, iconDir.resolve(pendingPath.getFileName))
+
+            notExist.ifM(createDirs, F.unit) *> deleteFiles *> move.void
+          }
         }
-      }
+      } else F.unit
 
       // Add new roles
       val dossier = project.memberships
-      this
+      val addRoles = this
         .build()
         .toVector
         .parTraverse { role =>
@@ -133,29 +142,32 @@ case class ProjectSettingsForm(
 
           service.bulkInsert(notifications)
         }
-        .productR {
-          // Update existing roles
-          val usersTable = TableQuery[UserTable]
-          // Select member userIds
-          service
-            .runDBIO(usersTable.filter(_.name.inSetBind(this.userUps)).map(_.id).result)
-            .flatMap { userIds =>
-              import cats.instances.list._
-              val roles = this.roleUps.traverse { role =>
-                Role.projectRoles
-                  .find(_.value == role)
-                  .fold(F.raiseError[Role](new RuntimeException("supplied invalid role type")))(F.pure)
-              }
 
-              roles.map(xs => userIds.zip(xs))
+      val updateExistingRoles = {
+        // Update existing roles
+        val usersTable = TableQuery[UserTable]
+        // Select member userIds
+        service
+          .runDBIO(usersTable.filter(_.name.inSetBind(this.userUps)).map(_.id).result)
+          .flatMap { userIds =>
+            import cats.instances.list._
+            val roles = this.roleUps.traverse { role =>
+              Role.projectRoles
+                .find(_.value == role)
+                .fold(F.raiseError[Role](new RuntimeException("supplied invalid role type")))(F.pure)
             }
-            .map {
-              _.map {
-                case (userId, role) => updateMemberShip(userId).update(role)
-              }
+
+            roles.map(xs => userIds.zip(xs))
+          }
+          .map {
+            _.map {
+              case (userId, role) => updateMemberShip(userId).update(role)
             }
-            .flatMap(updates => service.runDBIO(DBIO.sequence(updates)).as(t))
-        }
+          }
+          .flatMap(updates => service.runDBIO(DBIO.sequence(updates)))
+      }
+
+      moveIcon *> addRoles *> updateExistingRoles.as(t)
     }
   }
 

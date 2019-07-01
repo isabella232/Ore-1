@@ -24,6 +24,7 @@ application {
 
 # Play configuration
 play {
+    application.loader                 =   "OreApplicationLoader"
     i18n.langs                         =   [ "en", "en-US" ]
     evolutions.autocommit              =   false
     evolutions.db.default.autoApply    =   true
@@ -156,6 +157,10 @@ ore {
             check-interval = 5m
         }
     }
+}
+
+performance {
+    vcpus = -1
 }
 
 mail {

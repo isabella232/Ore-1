@@ -2,30 +2,18 @@ package discourse
 
 import scala.language.higherKinds
 
-import java.nio.file.Path
-
-import scala.concurrent.ExecutionContext
-import scala.concurrent.duration.FiniteDuration
-
+import ore.db.Model
+import ore.discourse.{DiscourseError, DiscoursePost}
 import ore.models.project.{Project, Version}
 import ore.models.user.User
-import ore.OreConfig
-import ore.db.{Model, ModelService}
-import ore.discourse.{DiscourseApi, DiscoursePost}
-import ore.util.StringUtils._
-import util.syntax._
 
-import akka.actor.Scheduler
-import cats.{Applicative, Parallel}
-import cats.data.EitherT
-import cats.effect.Effect
-import cats.syntax.all._
-import com.typesafe.scalalogging
+import cats.tagless.autoFunctorK
 
 /**
   * Manages forum threads and posts for Ore models.
   */
-trait OreDiscourseApi[F[_]] {
+@autoFunctorK
+trait OreDiscourseApi[+F[_]] {
 
   /**
     * Creates a new topic for the specified [[Project]].
@@ -49,9 +37,9 @@ trait OreDiscourseApi[F[_]] {
     * @param project  Project to post to
     * @param user     User who is posting
     * @param content  Post content
-    * @return         List of errors Discourse returns
+    * @return         Error Discourse returns
     */
-  def postDiscussionReply(project: Project, user: User, content: String): EitherT[F, String, DiscoursePost]
+  def postDiscussionReply(project: Project, user: User, content: String): F[Either[String, DiscoursePost]]
 
   /**
     * Posts a new "Version release" to a [[Project]]'s forum topic.
