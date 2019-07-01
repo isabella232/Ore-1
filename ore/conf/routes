@@ -50,12 +50,13 @@ GET     /api                                                        @controllers
 
 # ---------- Application ----------
 
-GET     /                                                           @controllers.Application.showHome(categories: Seq[String], q: Option[String], sort: Option[String], page: Option[Int], platformCategory: Option[String], platform: Option[String], relevance: Option[Boolean])
+GET     /                                                           @controllers.Application.showHome()
 GET     /linkout                                                    @controllers.Application.linkOut(remoteUrl: String)
 GET     /signup                                                     @controllers.Users.signUp()
 GET     /login                                                      @controllers.Users.logIn(sso: Option[String], sig: Option[String], returnUrl: Option[String])
 GET     /logout                                                     @controllers.Users.logOut()
 POST    /verify                                                     @controllers.Users.verify(returnPath: Option[String])
+GET     /javascriptRoutes                                           @controllers.Application.javascriptRoutes
 
 # ---------- Projects ----------
 

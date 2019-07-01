@@ -199,8 +199,46 @@ def flexmarkDep(module: String) = {
   "com.vladsch.flexmark" % artifactId % flexmarkVersion
 }
 
+lazy val oreClient = project
+  .enablePlugins(ScalaJSBundlerPlugin)
+  .settings(
+    name := "ore-client",
+    commonSettings,
+    useYarn := true,
+    scalaJSUseMainModuleInitializer := false,
+    scalaJSModuleKind := ModuleKind.CommonJSModule,
+    webpackConfigFile in fastOptJS := Some(baseDirectory.value / "webpack.config.dev.js"),
+    webpackConfigFile in fullOptJS := Some(baseDirectory.value / "webpack.config.prod.js"),
+    webpackMonitoredDirectories += baseDirectory.value / "assets",
+    includeFilter in webpackMonitoredFiles := "*.vue" || "*.js",
+    webpackBundlingMode in fastOptJS := BundlingMode.LibraryOnly(),
+    version in startWebpackDevServer := "3.1.4",
+    version in webpack := "4.16.1",
+    npmDependencies in Compile ++= Seq(
+      "vue"          -> "2.6.10",
+      "lodash"       -> "4.17.11",
+      "query-string" -> "6.8.0",
+    ),
+    npmDevDependencies in Compile ++= Seq(
+      "webpack-merge"                      -> "4.1.0",
+      "vue-loader"                         -> "15.7.0",
+      "vue-template-compiler"              -> "2.6.10",
+      "css-loader"                         -> "2.1.1",
+      "vue-style-loader"                   -> "4.1.2",
+      "babel-loader"                       -> "8.0.6",
+      "@babel/core"                        -> "7.4.5",
+      "terser-webpack-plugin"              -> "1.3.0",
+      "mini-css-extract-plugin"            -> "0.7.0",
+      "optimize-css-assets-webpack-plugin" -> "5.0.1",
+      "sass-loader"                        -> "7.1.0",
+      "postcss-loader"                     -> "3.0.0",
+      "autoprefixer"                       -> "9.5.1",
+      "node-sass"                          -> "4.12.0",
+    )
+  )
+
 lazy val ore = project
-  .enablePlugins(PlayScala, SwaggerPlugin)
+  .enablePlugins(PlayScala, SwaggerPlugin, WebScalaJSBundlerPlugin)
   .dependsOn(orePlayCommon, apiV2)
   .settings(
     commonSettings,
@@ -244,8 +282,12 @@ lazy val ore = project
       "controllers.apiv2.ApiV2Controller",
     ),
     swaggerAPIVersion := "2.0",
-    swaggerV3 := true
+    swaggerV3 := true,
+    scalaJSProjects := Seq(oreClient),
+    pipelineStages in Assets += scalaJSPipeline,
+    WebKeys.exportedMappings in Assets := Seq(),
+    PlayKeys.playMonitoredFiles += (oreClient / baseDirectory).value / "assets"
   )
 
 lazy val oreAll =
-  project.in(file(".")).aggregate(db, externalCommon, discourse, auth, models, orePlayCommon, apiV2, ore)
+  project.in(file(".")).aggregate(db, externalCommon, discourse, auth, models, orePlayCommon, apiV2, ore, oreClient)
