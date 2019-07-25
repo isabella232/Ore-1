@@ -9,6 +9,7 @@ const resourcesDir = Path.resolve(rootDir, 'src', 'main', 'resources');
 module.exports = {
     entry: {
         home: Path.resolve(resourcesDir, 'assets', 'home.js'),
+        'font-awesome': Path.resolve(resourcesDir, 'assets', 'font-awesome.js'),
         "ore-client-fastopt": Path.resolve(resourcesDir, 'assets', 'dummy.js'),
         "ore-client-opt": Path.resolve(resourcesDir, 'assets', 'dummy.js')
     },
@@ -33,7 +34,8 @@ module.exports = {
             },
             {
                 test: /\.js$/,
-                loader: 'babel-loader'
+                loader: 'babel-loader',
+                exclude: /node_modules/,
             },
             {
                 test: /\.css$/,
@@ -46,7 +48,7 @@ module.exports = {
         ]
     },
     resolve: {
-        extensions: ['*', '.js', '.vue'],
+        extensions: ['.js', '.vue'],
         alias: {
             'vue$': 'vue/dist/vue.esm.js'
         },
