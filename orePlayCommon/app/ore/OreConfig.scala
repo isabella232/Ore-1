@@ -50,7 +50,7 @@ final class OreConfig @Inject()(config: Configuration) {
     val raw: Configuration = root.get[Configuration]("ore")
     val debug: Boolean     = raw.get[Boolean]("debug")
     val debugLevel: Int    = raw.get[Int]("debug-level")
-    var staging: Boolean   = raw.get[Boolean]("staging")
+    val staging: Boolean   = raw.get[Boolean]("staging")
 
     object homepage extends ConfigCategory {
       val raw: Configuration             = ore.raw.get[Configuration]("homepage")
@@ -199,11 +199,8 @@ final class OreConfig @Inject()(config: Configuration) {
   }
 
   object performance extends ConfigCategory {
-    val raw: Configuration = root.get[Configuration]("performance")
-    private val rawVcpus   = raw.get[Int]("vcpus")
-    def vcpus: Int         = if (rawVcpus == -1) Runtime.getRuntime.availableProcessors() else rawVcpus
-
-    val nioBlockingFibers: Long = vcpus.toLong - 2
+    val raw: Configuration      = root.get[Configuration]("performance")
+    val nioBlockingFibers: Long = raw.get[Long]("nio-blocking-fibers")
   }
 
   app.load()
