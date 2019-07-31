@@ -33,8 +33,46 @@ import shapeless._
 trait DoobieOreProtocol {
 
   //implicit val logger = createLogger("Database")
+  implicit val timingsLogger: doobie.LogHandler = createTimingsLogger
 
-  def createLogger(name: String): LogHandler = {
+  def createTimingsLogger: LogHandler = {
+    val timingsLogger = scalalogging.Logger("Timings")
+
+    LogHandler {
+      case util.log.Success(sql, _, exec, processing) =>
+        if ((exec + processing).toMillis > 500) {
+          timingsLogger.warn(
+            s"""|Successful Statement Execution:
+                |   ${sql.lines.dropWhile(_.trim.isEmpty).map(_.trim).mkString(" ")}
+                |   elapsed = ${exec.toMillis} ms exec + ${processing.toMillis} ms processing (${(exec + processing).toMillis} ms total)""".stripMargin
+          )
+        } else {
+          timingsLogger.info(
+            s"""|Successful Statement Execution:
+                |   ${sql.lines.dropWhile(_.trim.isEmpty).map(_.trim).mkString(" ")}
+                |   elapsed = ${exec.toMillis} ms exec + ${processing.toMillis} ms processing (${(exec + processing).toMillis} ms total)""".stripMargin
+          )
+        }
+      case util.log.ProcessingFailure(sql, _, exec, processing, failure) =>
+        timingsLogger.error(
+          s"""|Failed Resultset Processing:
+              |   ${sql.lines.dropWhile(_.trim.isEmpty).mkString("\n  ")}
+              |   elapsed = ${exec.toMillis} ms exec + ${processing.toMillis} ms processing (failed) (${(exec + processing).toMillis} ms total)
+              |   failure = ${failure.getMessage}""".stripMargin,
+          failure
+        )
+      case util.log.ExecFailure(sql, _, exec, failure) =>
+        timingsLogger.error(
+          s"""Failed Statement Execution:
+             |   ${sql.lines.dropWhile(_.trim.isEmpty).mkString("\n  ")}
+             |   elapsed = ${exec.toMillis} ms exec (failed)
+             |   failure = ${failure.getMessage}""".stripMargin,
+          failure
+        )
+    }
+  }
+
+  def createDebugLogger(name: String): LogHandler = {
     val logger = scalalogging.Logger(name)
 
     LogHandler {

@@ -32,6 +32,7 @@ import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
 import db.impl.service.OreModelService
 import db.impl.service.OreModelService.F
 import discourse.{OreDiscourseApi, OreDiscourseApiDisabled, OreDiscourseApiEnabled}
+import filters.LoggingFilter
 import form.OreForms
 import mail.{EmailFactory, Mailer, SpongeMailer}
 import ore.auth.{AkkaSSOApi, AkkaSpongeAuthApi, SSOApi, SpongeAuthApi}
@@ -108,11 +109,12 @@ class OreComponents(context: ApplicationLoader.Context)
       new CSPFilter(new DefaultCSPResultProcessor(new DefaultCSPProcessor(CSPConfig.fromConfiguration(configuration))))
     )
 
-    val gzipFilter = Seq(new GzipFilter(GzipFilterConfig.fromConfiguration(configuration)))
+    val devFilters = Seq(new GzipFilter(GzipFilterConfig.fromConfiguration(configuration)))
 
     val filterSeq = Seq(
       true                         -> baseFilters,
-      context.devContext.isDefined -> gzipFilter
+      context.devContext.isDefined -> devFilters,
+      config.ore.logTimings        -> Seq(new LoggingFilter())
     )
 
     filterSeq.collect {

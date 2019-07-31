@@ -222,7 +222,7 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
     val lastModifiedHash = MessageDigest.getInstance("MD5").digest(lastModified)
     val hashString       = Base64.getEncoder.encodeToString(lastModifiedHash)
     Ok.sendPath(path)
-      .withHeaders(ETAG -> s""""$hashString"""", CACHE_CONTROL -> s"max-age=${1.hour.toSeconds.toString}")
+      .withHeaders(ETAG -> s""""$hashString"""", CACHE_CONTROL -> s"max-age=${1.hour.toSeconds}")
   }
 
   /**

@@ -48,6 +48,7 @@
     <logger name="akka.io.InetAddressDnsResolver" level="ERROR" />
 
     <!-- Ore loggers -->
+    <logger name="Timings" level="WARN" />
     <logger name="Bootstrap" level="INFO" />
     <logger name="Discourse" level="INFO" />
     <logger name="DiscourseApi" level="INFO" />
