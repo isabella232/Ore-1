@@ -161,6 +161,10 @@ ore {
     }
 }
 
+tasks {
+    enabled = true
+}
+
 performance {
     nio-blocking-fibers = 32
 }

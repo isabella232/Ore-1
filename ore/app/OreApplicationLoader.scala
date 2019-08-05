@@ -3,6 +3,8 @@ import scala.language.higherKinds
 import java.sql.Connection
 import javax.inject.Provider
 
+import scala.util.control.NonFatal
+
 import play.api.cache.caffeine.CaffeineCacheComponents
 import play.api.cache.{DefaultSyncCacheApi, SyncCacheApi}
 import play.api.db.evolutions.EvolutionsComponents
@@ -31,7 +33,7 @@ import db.impl.DbUpdateTask
 import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
 import db.impl.service.OreModelService
 import db.impl.service.OreModelService.F
-import discourse.{OreDiscourseApi, OreDiscourseApiDisabled, OreDiscourseApiEnabled}
+import discourse.{OreDiscourseApi, OreDiscourseApiDisabled, OreDiscourseApiEnabled, RecoveryTask}
 import filters.LoggingFilter
 import form.OreForms
 import mail.{EmailFactory, Mailer, SpongeMailer}
@@ -61,9 +63,10 @@ import doobie.util.transactor.Strategy
 import slick.basic.{BasicProfile, DatabaseConfig}
 import slick.jdbc.{JdbcDataSource, JdbcProfile}
 import zio.blocking.Blocking
+import zio.clock.Clock
 import zio.interop.catz._
 import zio.interop.catz.implicits._
-import zio.{DefaultRuntime, Task, UIO, ZIO}
+import zio.{DefaultRuntime, Reservation, Task, UIO, ZIO, ZManaged}
 
 class OreApplicationLoader extends ApplicationLoader {
   override def load(context: ApplicationLoader.Context): PlayApplication = {
@@ -176,14 +179,12 @@ class OreComponents(context: ApplicationLoader.Context)
     }
   }
 
-  lazy val oreRestfulAPIV1: OreRestfulApiV1                          = wire[OreRestfulServerV1]
-  implicit lazy val projectFactory: ProjectFactory                   = wire[OreProjectFactory]
-  implicit lazy val modelService: ModelService[UIO]                  = wire[OreModelService].mapK(taskToUIO)
-  lazy val emailFactory: EmailFactory                                = wire[EmailFactory]
-  lazy val mailer: Mailer                                            = wire[SpongeMailer]
-  lazy val projectTask: ProjectTask                                  = wire[ProjectTask]
-  lazy val userTask: UserTask                                        = wire[UserTask]
-  lazy val dbUpdateTask: DbUpdateTask                                = wire[DbUpdateTask]
+  lazy val oreRestfulAPIV1: OreRestfulApiV1         = wire[OreRestfulServerV1]
+  implicit lazy val projectFactory: ProjectFactory  = wire[OreProjectFactory]
+  implicit lazy val modelService: ModelService[UIO] = wire[OreModelService].mapK(taskToUIO)
+  lazy val emailFactory: EmailFactory               = wire[EmailFactory]
+  lazy val mailer: Mailer                           = wire[SpongeMailer]
+
   implicit lazy val oreControllerComponents: OreControllerComponents = wire[DefaultOreControllerComponents]
   lazy val uioOreControllerEffects: OreControllerEffects[UIO]        = wire[DefaultOreControllerEffects[UIO]]
 
@@ -227,21 +228,15 @@ class OreComponents(context: ApplicationLoader.Context)
         )
       )
 
-      val forumsApi = new OreDiscourseApiEnabled(
+      new OreDiscourseApiEnabled(
         discourseApi,
         forums.categoryDefault,
         forums.categoryDeleted,
         env.conf.resolve("discourse/project_topic.md"),
         env.conf.resolve("discourse/version_post.md"),
-        forums.retryRate,
-        actorSystem.scheduler,
         forums.baseUrl,
         api.admin
       )
-
-      forumsApi.start()
-
-      forumsApi
     } else {
       new OreDiscourseApiDisabled[Task]
     }
@@ -295,9 +290,12 @@ class OreComponents(context: ApplicationLoader.Context)
   lazy val channelsProvider: Provider[Channels]                 = () => channels
   lazy val reviewsProvider: Provider[Reviews]                   = () => reviews
 
-  eager(projectTask)
-  eager(userTask)
-  eager(dbUpdateTask)
+  if (config.tasks.enabled) {
+    applicationManaged(ProjectTask.program(config))
+    applicationManaged(UserTask.program(config))
+    applicationManaged(DbUpdateTask.program(config))
+    applicationManaged(RecoveryTask.program(config, oreDiscourseApiTask))
+  }
 
   def eager[A](module: A): Unit = use(module)
 
@@ -307,13 +305,29 @@ class OreComponents(context: ApplicationLoader.Context)
   }
 
   def applicationResource[A](resource: Resource[Task, A]): A = {
-    val (a, finalize) = runtime.unsafeRunSync(resource.allocated).toEither.toTry.get
+    val (a, finalize) = runtime.unsafeRun(resource.allocated)
 
     applicationLifecycle.addStopHook { () =>
       runtime.unsafeRunToFuture(finalize)
     }
 
     a
+  }
+
+  def applicationManaged[A](managed: ZManaged[Clock with Blocking, Throwable, A]): A = {
+    val Reservation(aF, finalize) = runtime.unsafeRun(managed.reserve)
+
+    try {
+      val a = runtime.unsafeRun(aF)
+      applicationLifecycle.addStopHook { () =>
+        runtime.unsafeRunToFuture(finalize)
+      }
+      a
+    } catch {
+      case NonFatal(e) =>
+        runtime.unsafeRun(finalize)
+        throw e
+    }
   }
 }
 object OreComponents {

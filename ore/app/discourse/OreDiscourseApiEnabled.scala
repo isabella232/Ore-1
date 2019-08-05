@@ -4,7 +4,6 @@ import scala.language.higherKinds
 
 import java.nio.file.Path
 
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 import ore.OreConfig
@@ -33,8 +32,6 @@ import com.typesafe.scalalogging
   * @param categoryDeleted The category where deleted project topics are moved to
   * @param topicTemplatePath Path to project topic template
   * @param versionReleasePostTemplatePath Path to version release template
-  * @param retryRate Rate at which to retry failed attempts
-  * @param scheduler Scheduler for maintaining synchronization when requests fail
   * @param baseUrl The base URL for this instance
   * @param admin An admin account to fall back to if no user is specified as poster
   */
@@ -44,15 +41,12 @@ class OreDiscourseApiEnabled[F[_], G[_]](
     categoryDeleted: Int,
     topicTemplatePath: Path,
     versionReleasePostTemplatePath: Path,
-    retryRate: FiniteDuration,
-    scheduler: Scheduler,
     baseUrl: String,
     admin: String
 )(
     implicit service: ModelService[F],
     config: OreConfig,
-    F: Effect[F],
-    par: Parallel[F, G]
+    F: Effect[F]
 ) extends OreDiscourseApi[F] {
 
   private val MDCLogger           = scalalogging.Logger.takingImplicit[DiscourseMDC]("Discourse")
@@ -62,14 +56,6 @@ class OreDiscourseApiEnabled[F[_], G[_]](
   private def errToString(err: DiscourseError): String = err match {
     case DiscourseError.NotAvailable => "Could not connect to forums, please try again later."
     case _                           => err.toString
-  }
-
-  /**
-    * Initializes and starts this API instance.
-    */
-  def start()(implicit ec: ExecutionContext): Unit = {
-    new RecoveryTask(this.scheduler, this.retryRate, this).start()
-    Logger.info("Discourse API initialized.")
   }
 
   /**

@@ -124,6 +124,11 @@ final class OreConfig @Inject()(config: Configuration) {
     }
   }
 
+  object tasks extends ConfigCategory {
+    val raw: Configuration = root.get[Configuration]("tasks")
+    val enabled: Boolean   = raw.get[Boolean]("enabled")
+  }
+
   object forums extends ConfigCategory {
     val raw: Configuration        = root.get[Configuration]("discourse")
     val baseUrl: String           = raw.get[String]("baseUrl")
