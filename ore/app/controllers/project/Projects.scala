@@ -196,8 +196,8 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
               .either
               .map(_.merge)
           }
-          errors <- this.forums.postDiscussionReply(request.project, poster, formData.content).map(_.swap.toOption)
-        } yield Redirect(self.showDiscussion(author, slug)).withErrors(errors.toList)
+          _ <- this.forums.postDiscussionReply(request.project, poster, formData.content)
+        } yield Redirect(self.showDiscussion(author, slug))
       }
     }
 

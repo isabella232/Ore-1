@@ -7,6 +7,7 @@ import ore.data.project.{Category, FlagReason}
 import ore.data.user.notification.NotificationType
 import ore.data.{Color, DownloadType, Prompt}
 import ore.db.OreProfile
+import ore.models.discourse.DiscourseJob
 import ore.models.project.{ReviewState, TagColor, Visibility}
 import ore.models.user.{LoggedAction, LoggedActionContext}
 import ore.permission.Permission
@@ -60,6 +61,9 @@ trait OrePostgresDriver
       mappedColumnTypeForValueEnum(LoggedActionContext)
         .asInstanceOf[BaseColumnType[LoggedActionContext[Ctx]]] // scalafix:ok
     implicit val reviewStateTypeMapper: BaseColumnType[ReviewState] = mappedColumnTypeForValueEnum(ReviewState)
+    implicit val discourseJobTypeTypeMapper: BaseColumnType[DiscourseJob.JobType] = mappedColumnTypeForValueEnum(
+      DiscourseJob.JobType
+    )
 
     implicit val langTypeMapper: BaseColumnType[Locale] =
       MappedJdbcType.base[Locale, String](_.toLanguageTag, Locale.forLanguageTag)

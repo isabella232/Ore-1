@@ -33,7 +33,13 @@ import db.impl.DbUpdateTask
 import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
 import db.impl.service.OreModelService
 import db.impl.service.OreModelService.F
-import discourse.{OreDiscourseApi, OreDiscourseApiDisabled, OreDiscourseApiEnabled, RecoveryTask}
+import discourse.{
+  DeferredOreDiscourseApi,
+  OreDiscourseApi,
+  OreDiscourseApiDisabled,
+  OreDiscourseApiEnabled,
+  RecoveryTask
+}
 import filters.LoggingFilter
 import form.OreForms
 import mail.{EmailFactory, Mailer, SpongeMailer}
@@ -241,9 +247,15 @@ class OreComponents(context: ApplicationLoader.Context)
       new OreDiscourseApiDisabled[Task]
     }
   }
-  implicit lazy val oreDiscourseApi: OreDiscourseApi[UIO] = oreDiscourseApiTask.mapK(taskToUIO)
-  implicit lazy val userBaseTask: UserBase[Task]          = wire[UserBase.UserBaseF[Task]]
-  implicit lazy val userBaseUIO: UserBase[UIO]            = wire[UserBase.UserBaseF[UIO]]
+  implicit lazy val oreDiscourseApi: OreDiscourseApi[UIO] = {
+    val uioDiscourseApi = oreDiscourseApiTask.mapK(taskToUIO)
+
+    if (config.forums.api.enabled) {
+      new DeferredOreDiscourseApi[UIO](uioDiscourseApi)
+    } else uioDiscourseApi
+  }
+  implicit lazy val userBaseTask: UserBase[Task] = wire[UserBase.UserBaseF[Task]]
+  implicit lazy val userBaseUIO: UserBase[UIO]   = wire[UserBase.UserBaseF[UIO]]
   implicit lazy val projectBase: ProjectBase[UIO] = {
     implicit val providedProjectFiles: ProjectFiles[Task] =
       projectFiles.mapK(OreComponents.provideFnK[Blocking, Nothing](runtime.Environment))
@@ -294,7 +306,7 @@ class OreComponents(context: ApplicationLoader.Context)
     applicationManaged(ProjectTask.program(config))
     applicationManaged(UserTask.program(config))
     applicationManaged(DbUpdateTask.program(config))
-    applicationManaged(RecoveryTask.program(config, oreDiscourseApiTask))
+    applicationManaged(RecoveryTask.program(config, oreDiscourseApiTask.mapK(taskToUIO)))
   }
 
   def eager[A](module: A): Unit = use(module)

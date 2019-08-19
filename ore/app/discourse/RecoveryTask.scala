@@ -2,76 +2,77 @@ package discourse
 
 import scala.language.higherKinds
 
+import java.time.{Instant, LocalDateTime, ZoneId}
+import java.util.concurrent.TimeUnit
+
 import ore.OreConfig
 import ore.db.ModelService
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.schema.{ProjectTableMain, VersionTable}
-import ore.models.project.{Project, Version, Visibility}
+import ore.db.impl.schema.DiscourseJobTable
+import ore.models.discourse.DiscourseJob
+import ore.models.discourse.DiscourseJob.JobType
+import ore.models.project.{Project, Version}
+import util.syntax._
 
 import com.typesafe.scalalogging
 import zio.clock.Clock
-import zio.{Task, UIO, ZIO, ZManaged, ZSchedule}
+import zio.{UIO, ZIO, ZManaged, ZSchedule}
 
 /**
   * Task to periodically retry failed Discourse requests.
   */
 object RecoveryTask {
 
-  def program(config: OreConfig, api: OreDiscourseApi[Task])(
-      implicit service: ModelService[Task]
+  def program(config: OreConfig, api: OreDiscourseApi[UIO])(
+      implicit service: ModelService[UIO]
   ): ZManaged[Clock, Nothing, Unit] = {
     val Logger: scalalogging.Logger = scalalogging.Logger("Discourse")
 
-    val projectTopicFilter = ModelFilter(Project)(_.topicId.isEmpty)
-    val projectDirtyFilter = ModelFilter(Project)(_.isTopicDirty)
-    val visibleFilter      = Visibility.isPublicFilter[ProjectTableMain]
+    val nextJobs = ZIO
+      .accessM[Clock](_.clock.currentTime(TimeUnit.MILLISECONDS))
+      .map(Instant.ofEpochMilli)
+      .map(LocalDateTime.ofInstant(_, ZoneId.of("UTC")))
+      .flatMap(now => service.runDBIO(TableQuery[DiscourseJobTable].filter(j => j.retryIn < now).take(10).result))
 
-    val toCreateProjects   = ModelView.raw(Project).filter(projectTopicFilter && visibleFilter).to[Vector]
-    val dirtyTopicProjects = ModelView.raw(Project).filter(projectDirtyFilter && visibleFilter).to[Vector]
-
-    val versionsQueryBase = for {
-      (version, project) <- TableQuery[VersionTable].join(TableQuery[ProjectTableMain]).on(_.projectId === _.id)
-      if version.createForumPost
-      if visibleFilter(project)
-    } yield (project, version)
-
-    val versionTopicFilter = ModelFilter(Version)(_.postId.isEmpty)
-    val versionDirtyFilter = ModelFilter(Version)(_.isPostDirty)
-
-    val toCreateVersions  = versionsQueryBase.filter(v => versionTopicFilter(v._2)).to[Vector]
-    val dirtyPostVersions = versionsQueryBase.filter(v => versionDirtyFilter(v._2)).to[Vector]
-
-    val taskContent: Task[Unit] = {
+    val taskContent: ZIO[Clock, Nothing, Unit] = {
       val logStart = UIO(Logger.debug("Running Discourse recovery task..."))
 
-      def runUpdates[T, M, A](query: Query[T, M, Vector], error: String)(
-          logSize: Int => String
-      )(use: Vector[M] => Task[A]): Task[A] =
-        service
-          .runDBIO(query.result)
-          .flatMap(models => UIO(Logger.debug(logSize(models.size))) *> use(models))
+      val doWork: ZIO[Clock, Nothing, Unit] = nextJobs
+        .flatMap { seq =>
+          ZIO.foreachPar(seq) { job =>
+            val jobProject = ZIO.fromOption(job.projectId).flatMap(ModelView.now(Project).get(_).toZIO)
+            val jobVersion = ZIO.fromOption(job.versionId).flatMap(ModelView.now(Version).get(_).toZIO)
 
-      val createProjects = runUpdates(toCreateProjects, "Failed to create project topic")(
-        size => s"Creating $size topics..."
-      )(toCreate => ZIO.foreach_(toCreate)(api.createProjectTopic).option)
+            val jobProjectVersion = jobProject <*> jobVersion
 
-      val updateProjects = runUpdates(dirtyTopicProjects, "Failed to update dirty project")(
-        size => s"Updating $size topics..."
-      )(toUpdate => ZIO.foreach_(toUpdate)(api.updateProjectTopic).option)
+            val objId = job.jobType match {
+              case JobType.CreateTopic => jobProject.flatMap(api.createProjectTopic).const(job.id)
+              case JobType.UpdateTopic => jobProject.flatMap(api.updateProjectTopic).const(job.id)
+              case JobType.CreateVersionPost =>
+                jobProjectVersion.flatMap(Function.tupled(api.createVersionPost)).const(job.id)
+              case JobType.UpdateVersionPost =>
+                jobProjectVersion.flatMap(Function.tupled(api.updateVersionPost)).const(job.id)
+              case JobType.SetVisibility =>
+                (jobProject.map(_.obj) <*> ZIO.fromOption(job.visibility))
+                  .map(Function.tupled(api.changeTopicVisibility))
+                  .const(job.id)
+              case JobType.DeleteTopic => jobProject.flatMap(api.deleteProjectTopic).const(job.id)
+            }
 
-      val createVersions = runUpdates(toCreateVersions, "Failed to create version post")(
-        size => s"Creating $size posts..."
-      )(toCreate => ZIO.foreach_(toCreate)(t => api.createVersionPost(t._1, t._2).option))
-
-      val updateVersions = runUpdates(dirtyPostVersions, "Failed to update dirty version")(
-        size => s"Updating $size posts..."
-      )(toUpdate => ZIO.foreach_(toUpdate)(t => api.updateVersionPost(t._1, t._2).option))
+            objId.option.flatMap {
+              case Some(id) => ZIO.succeed(id.value)
+              case None =>
+                ZIO
+                  .effectTotal(Logger.warn(s"Found discourse job with missing values, ignoring: $job"))
+                  .const(job.id.value)
+            }
+          }
+        }
+        .flatMap(doneJobs => service.deleteWhere(DiscourseJob)(_.id.inSetBind(doneJobs)))
+        .unit
 
       val logDone = UIO(Logger.debug("Done"))
-      // TODO: We need to keep deleted projects in case the topic cannot be deleted
-
-      val doWork: Task[Unit] = createProjects &> updateProjects &> createVersions &> updateVersions
 
       logStart *> doWork *> logDone
     }

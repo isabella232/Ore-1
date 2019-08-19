@@ -4,8 +4,6 @@ import scala.language.higherKinds
 
 import java.nio.file.Path
 
-import scala.concurrent.duration.FiniteDuration
-
 import ore.OreConfig
 import ore.db.{Model, ModelService}
 import ore.discourse.{DiscourseApi, DiscourseError, DiscoursePost}
@@ -14,8 +12,6 @@ import ore.models.user.User
 import ore.util.StringUtils.readAndFormatFile
 import util.syntax._
 
-import akka.actor.Scheduler
-import cats.Parallel
 import cats.data.EitherT
 import cats.effect.Effect
 import cats.syntax.all._
@@ -170,12 +166,14 @@ class OreDiscourseApiEnabled[F[_], G[_]](
     * @param content  Post content
     * @return         List of errors Discourse returns
     */
-  def postDiscussionReply(project: Project, user: User, content: String): F[Either[String, DiscoursePost]] = {
+  def postDiscussionReply(project: Project, user: User, content: String): F[DiscoursePost] = {
     require(project.topicId.isDefined, "undefined topic id")
     api
       .createPost(poster = user.name, topicId = project.topicId.get, content = content)
-      .map(_.leftMap(errToString))
-      .orElse(F.pure(Left("Could not connect to forums, please try again later.")))
+      .flatMap {
+        case Left(value)  => F.raiseError(new Exception(errToString(value)))
+        case Right(value) => F.pure(value)
+      }
   }
 
   /**
@@ -187,18 +185,15 @@ class OreDiscourseApiEnabled[F[_], G[_]](
     */
   def createVersionPost(project: Model[Project], version: Model[Version]): F[Model[Version]] = {
     require(version.projectId == project.id.value, "invalid version project pair")
-    EitherT
-      .liftF(project.user)
-      .flatMapF { user =>
+    project.user
+      .flatMap { user =>
         postDiscussionReply(
           project,
           user,
           content = Templates.versionRelease(project, version, version.description)
         )
       }
-      .leftSemiflatMap(_ => F.pure(version))
-      .semiflatMap(post => service.update(version)(_.copy(postId = Some(post.postId))))
-      .merge
+      .flatMap(post => service.update(version)(_.copy(postId = Some(post.postId))))
   }
 
   def updateVersionPost(project: Model[Project], version: Model[Version]): F[Boolean] = {

@@ -39,7 +39,7 @@ trait OreDiscourseApi[+F[_]] {
     * @param content  Post content
     * @return         Error Discourse returns
     */
-  def postDiscussionReply(project: Project, user: User, content: String): F[Either[String, DiscoursePost]]
+  def postDiscussionReply(project: Project, user: User, content: String): F[DiscoursePost]
 
   /**
     * Posts a new "Version release" to a [[Project]]'s forum topic.
