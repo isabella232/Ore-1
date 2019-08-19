@@ -10,6 +10,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
+import ore.external.AvailabilityState
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.{HttpMethods, HttpRequest, Uri}
@@ -28,7 +30,7 @@ class AkkaSSOApi[F[_]](
     secret: String,
     timeout: FiniteDuration,
     reset: FiniteDuration,
-    cachedAvailable: Ref[F, Option[Boolean]]
+    cachedAvailable: Ref[F, Option[AvailabilityState]]
 )(implicit F: Concurrent[F], cs: ContextShift[F], timer: Timer[F], system: ActorSystem, mat: Materializer)
     extends SSOApi[F] {
 
@@ -44,15 +46,22 @@ class AkkaSSOApi[F[_]](
     }
   }
 
-  override def isAvailable: F[Boolean] = {
+  override def isAvailable: F[AvailabilityState] = {
     cachedAvailable.access.flatMap {
       case (Some(available), _) => available.pure
       case (None, setter) =>
         val ssoTestRequest =
           futureToF(Http().singleRequest(HttpRequest(HttpMethods.HEAD, loginUrl)))
             .flatTap(r => F.delay(r.discardEntityBytes()))
-            .map(_.status.isSuccess())
-            .timeoutTo(timeout, false.pure)
+            .map { response =>
+              if (response.status.isSuccess()) AvailabilityState.Available
+              else if (response.status.isFailure()) AvailabilityState.Unavailable
+              else {
+                Logger.info("Not sure if SSO is available or unavailable")
+                AvailabilityState.MaybeAvailable
+              }
+            }
+            .timeoutTo(timeout, (AvailabilityState.TimedOut: AvailabilityState).pure)
 
         ssoTestRequest.flatMap { result =>
           val scheduleReset = cs.shift *> timer.sleep(reset) *> cachedAvailable.set(None)
@@ -165,6 +174,6 @@ object AkkaSSOApi {
       mat: Materializer
   ): F[AkkaSSOApi[F]] =
     Ref
-      .of[F, Option[Boolean]](None)
+      .of[F, Option[AvailabilityState]](None)
       .map(ref => new AkkaSSOApi[F](loginUrl, signupUrl, verifyUrl, secret, timeout, reset, ref))
 }

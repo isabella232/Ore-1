@@ -2,6 +2,8 @@ package ore.discourse
 
 import scala.language.higherKinds
 
+import ore.external.AvailabilityState
+
 import cats.Applicative
 import cats.syntax.all._
 
@@ -30,5 +32,5 @@ class DisabledDiscourseApi[F[_]](implicit F: Applicative[F]) extends DiscourseAp
 
   override def deleteTopic(poster: String, topicId: Int): F[Either[DiscourseError, Unit]] = notEnabled
 
-  override def isAvailable: F[Boolean] = false.pure
+  override def isAvailable: F[AvailabilityState] = (AvailabilityState.Unavailable: AvailabilityState).pure
 }

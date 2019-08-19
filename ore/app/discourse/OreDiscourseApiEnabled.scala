@@ -10,6 +10,7 @@ import scala.concurrent.duration.FiniteDuration
 import ore.OreConfig
 import ore.db.{Model, ModelService}
 import ore.discourse.{DiscourseApi, DiscourseError, DiscoursePost}
+import ore.external.AvailabilityState
 import ore.models.project.{Project, Version}
 import ore.models.user.User
 import ore.util.StringUtils.readAndFormatFile
@@ -315,5 +316,5 @@ class OreDiscourseApiEnabled[F[_], G[_]](
 
   }
 
-  override def isAvailable: F[Boolean] = api.isAvailable
+  override def isAvailable: F[AvailabilityState] = api.isAvailable
 }

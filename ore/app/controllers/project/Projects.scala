@@ -23,6 +23,7 @@ import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.UserTable
 import ore.db.{DbRef, Model}
+import ore.external.AvailabilityState
 import ore.markdown.MarkdownRenderer
 import ore.member.MembershipDossier
 import ore.models.api.ProjectApiKey
@@ -165,7 +166,9 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
   def showDiscussion(author: String, slug: String): Action[AnyContent] = ProjectAction(author, slug).asyncF {
     implicit request =>
       forums.isAvailable.flatMap { isAvailable =>
-        this.stats.projectViewed(UIO.succeed(Ok(views.discuss(request.data, request.scoped, isAvailable))))
+        this.stats.projectViewed(
+          UIO.succeed(Ok(views.discuss(request.data, request.scoped, isAvailable == AvailabilityState.Available)))
+        )
       }
   }
 

@@ -4,6 +4,7 @@ import scala.language.higherKinds
 
 import ore.db.Model
 import ore.discourse.DiscoursePost
+import ore.external.AvailabilityState
 import ore.models.project.{Project, Version}
 import ore.models.user.User
 
@@ -26,5 +27,5 @@ class OreDiscourseApiDisabled[F[_]](implicit F: Applicative[F]) extends OreDisco
 
   override def deleteProjectTopic(project: Model[Project]): F[Model[Project]] = F.pure(project)
 
-  override def isAvailable: F[Boolean] = F.pure(false)
+  override def isAvailable: F[AvailabilityState] = F.pure(AvailabilityState.Unavailable)
 }

@@ -2,6 +2,8 @@ package ore.auth
 
 import scala.language.higherKinds
 
+import ore.external.AvailabilityState
+
 import cats.tagless.InvariantK
 import cats.~>
 
@@ -15,7 +17,7 @@ trait SSOApi[F[_]] {
     *
     * @return True if available
     */
-  def isAvailable: F[Boolean]
+  def isAvailable: F[AvailabilityState]
 
   /**
     * Returns the login URL with a generated SSO payload to the SSO instance.
@@ -58,7 +60,7 @@ object SSOApi {
 
   implicit val ssoInvariantK: InvariantK[SSOApi] = new InvariantK[SSOApi] {
     override def imapK[F[_], G[_]](af: SSOApi[F])(fk: F ~> G)(gK: G ~> F): SSOApi[G] = new SSOApi[G] {
-      override def isAvailable: G[Boolean] = fk(af.isAvailable)
+      override def isAvailable: G[AvailabilityState] = fk(af.isAvailable)
 
       override def getLoginUrl(returnUrl: String): URLWithNonce = af.getLoginUrl(returnUrl)
 

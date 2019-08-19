@@ -2,6 +2,8 @@ package ore.discourse
 
 import scala.language.higherKinds
 
+import ore.external.AvailabilityState
+
 trait DiscourseApi[F[_]] {
 
   /**
@@ -71,6 +73,6 @@ trait DiscourseApi[F[_]] {
     *
     * @return True if available
     */
-  def isAvailable: F[Boolean]
+  def isAvailable: F[AvailabilityState]
 
 }

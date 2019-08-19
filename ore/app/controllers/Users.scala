@@ -17,6 +17,7 @@ import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.query.UserQueries
 import ore.db.impl.schema.{ApiKeyTable, UserTable}
 import ore.db.{DbRef, Model}
+import ore.external.AvailabilityState
 import ore.models.project.ProjectSortingStrategy
 import ore.models.user.notification.{InviteFilter, NotificationFilter}
 import ore.models.user.{FakeUser, _}
@@ -108,7 +109,7 @@ class Users @Inject()(
   }
 
   private def redirectToSso(url: URLWithNonce): IO[Result, Result] = {
-    val available: IO[Result, Boolean] = sso.isAvailable
+    val available: IO[Result, Boolean] = sso.isAvailable.map(_ == AvailabilityState.Available)
 
     available.ifM(
       service.insert(SignOn(url.nonce)).as(Redirect(url.url)),

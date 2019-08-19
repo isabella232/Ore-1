@@ -233,6 +233,11 @@ discourse {
     }
 }
 
+health {
+    enabled = false
+    interval = 1m
+}
+
 # Sponge stuff
 sponge {
     logo = "https://www.spongepowered.org/assets/img/icons/spongie-mark.svg"

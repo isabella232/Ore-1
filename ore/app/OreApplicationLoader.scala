@@ -3,6 +3,8 @@ import scala.language.higherKinds
 import java.sql.Connection
 import javax.inject.Provider
 
+import scala.util.control.NonFatal
+
 import play.api.cache.caffeine.CaffeineCacheComponents
 import play.api.cache.{DefaultSyncCacheApi, SyncCacheApi}
 import play.api.db.evolutions.EvolutionsComponents
@@ -58,12 +60,14 @@ import com.softwaremill.macwire._
 import com.typesafe.scalalogging.Logger
 import doobie.{ExecutionContexts, KleisliInterpreter, Transactor}
 import doobie.util.transactor.Strategy
+import health.OreHealthTask
 import slick.basic.{BasicProfile, DatabaseConfig}
 import slick.jdbc.{JdbcDataSource, JdbcProfile}
 import zio.blocking.Blocking
+import zio.clock.Clock
 import zio.interop.catz._
 import zio.interop.catz.implicits._
-import zio.{DefaultRuntime, Task, UIO, ZIO}
+import zio.{DefaultRuntime, Reservation, Task, UIO, ZIO, ZManaged}
 
 class OreApplicationLoader extends ApplicationLoader {
   override def load(context: ApplicationLoader.Context): PlayApplication = {
@@ -204,7 +208,7 @@ class OreComponents(context: ApplicationLoader.Context)
     )
   }
   implicit lazy val spongeAuthApi: SpongeAuthApi[UIO] = spongeAuthApiTask.mapK(taskToUIO)
-  lazy val ssoApiTask: SSOApi[Task] = {
+  implicit lazy val ssoApiTask: SSOApi[Task] = {
     val sso = config.security.sso
     runtime.unsafeRun(AkkaSSOApi[Task](sso.loginUrl, sso.signupUrl, sso.verifyUrl, sso.secret, sso.timeout, sso.reset))
   }
@@ -299,6 +303,10 @@ class OreComponents(context: ApplicationLoader.Context)
   eager(userTask)
   eager(dbUpdateTask)
 
+  if (config.health.enabled) {
+    applicationManaged(OreHealthTask.program)
+  }
+
   def eager[A](module: A): Unit = use(module)
 
   def use[A](value: A): Unit = {
@@ -314,6 +322,22 @@ class OreComponents(context: ApplicationLoader.Context)
     }
 
     a
+  }
+
+  def applicationManaged[A](managed: ZManaged[Clock with Blocking, Throwable, A]): A = {
+    val Reservation(aF, finalize) = runtime.unsafeRun(managed.reserve)
+
+    try {
+      val a = runtime.unsafeRun(aF)
+      applicationLifecycle.addStopHook { () =>
+        runtime.unsafeRunToFuture(finalize)
+      }
+      a
+    } catch {
+      case NonFatal(e) =>
+        runtime.unsafeRun(finalize)
+        throw e
+    }
   }
 }
 object OreComponents {

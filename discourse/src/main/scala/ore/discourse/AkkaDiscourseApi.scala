@@ -5,7 +5,7 @@ import scala.language.higherKinds
 import scala.concurrent.duration._
 
 import ore.discourse.AkkaDiscourseApi.AkkaDiscourseSettings
-import ore.external.AkkaClientApi
+import ore.external.{AkkaClientApi, AvailabilityState}
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model._
@@ -170,7 +170,15 @@ class AkkaDiscourseApi[F[_]] private (
       .void
       .value
 
-  override def isAvailable: F[Boolean] = breaker.isClosed.pure[F]
+  override def isAvailable: F[AvailabilityState] = F.delay {
+    if (breaker.isClosed) AvailabilityState.Available
+    else if (breaker.isOpen) AvailabilityState.Unavailable
+    else if (breaker.isHalfOpen) AvailabilityState.MaybeAvailable
+    else {
+      Logger.info("Availability state changed while checking. Returning Maybe")
+      AvailabilityState.MaybeAvailable
+    }
+  }
 }
 object AkkaDiscourseApi {
   def apply[F[_]: Concurrent](

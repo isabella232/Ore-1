@@ -4,6 +4,7 @@ import scala.language.higherKinds
 
 import ore.db.Model
 import ore.discourse.DiscoursePost
+import ore.external.AvailabilityState
 import ore.models.project.{Project, Version}
 import ore.models.user.User
 
@@ -73,5 +74,5 @@ trait OreDiscourseApi[+F[_]] {
     *
     * @return True if available
     */
-  def isAvailable: F[Boolean]
+  def isAvailable: F[AvailabilityState]
 }
