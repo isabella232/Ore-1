@@ -62,9 +62,7 @@ lazy val playCommonSettings = Seq(
     "ore.data.project.Category"
   ).map(s => s"_root_.$s"),
   unmanagedResourceDirectories in Test += (baseDirectory.value / "target/web/public/test"),
-  pipelineStages := Seq(digest, gzip),
-  pipelineStages in Assets := Seq(autoprefixer),
-  autoPrefixerBrowsers in Assets := JS.Array("> 1%", "last 4 versions", "Firefox ESR")
+  pipelineStages := Seq(digest, gzip)
 )
 
 lazy val playTestDeps = Seq(
