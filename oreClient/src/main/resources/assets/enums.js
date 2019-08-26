@@ -1,5 +1,3 @@
-import Vue from 'vue'
-
 export class Category {
     static get values() {
         return [
@@ -24,12 +22,12 @@ export class Category {
 export class Platform {
     static get values() {
         return [
-            {id: "Sponge", name: "Sponge Plugins", parent: true},
-            {id: "SpongeForge", name: "SpongeForge"},
-            {id: "SpongeVanilla", name: "SpongeVanilla"},
-            {id: "SpongeCommon", name: "SpongeCommon"},
-            {id: "Lantern", name: "Lantern"},
-            {id: "Forge",  name: "Forge Mods", parent: true}
+            {id: "Sponge", name: "Sponge Plugins", parent: true, color: { primary: "#F7Cf0D", secondary: "#333333" }},
+            {id: "SpongeForge", name: "SpongeForge", color: { primary: "#910020", secondary: "#FFFFFF" }},
+            {id: "SpongeVanilla", name: "SpongeVanilla", color: { primary: "#50C888", secondary: "#FFFFFF" }},
+            {id: "SpongeCommon", name: "SpongeCommon", color: { primary: "#5D5DFF", secondary: "#FFFFFF" }},
+            {id: "Lantern", name: "Lantern", color: { primary: "#4EC1B4", secondary: "#FFFFFF" }},
+            {id: "Forge",  name: "Forge Mods", parent: true, color: { primary: "#DFA86A", secondary: "#FFFFFF" }}
         ];
     }
 
@@ -37,8 +35,8 @@ export class Platform {
         return this.values.map(platform => platform.id)
     }
 
-    static filterTags(tags) {
-        return tags.filter(tag => this.keys.includes(tag.name));
+    static isPlatformTag(tag) {
+        return this.keys.includes(tag.name);
     }
 }
 
@@ -66,9 +64,3 @@ export class Visibility {
         return this.values.filter(visibility => visibility.name === name)[0];
     }
 }
-
-const root = require('./Home.vue').default;
-const app = new Vue({
-    el: '#home',
-    render: createElement => createElement(root),
-});

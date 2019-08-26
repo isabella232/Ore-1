@@ -45,9 +45,9 @@
                                         <div class="col-sm-7 description-column">
                                             <div class="description">{{ project.description }}</div>
                                         </div>
-                                        <div class="col-xs-12 col-sm-5 tags-line" v-if="project.recommended_version">
-                                            <Tag v-bind="tag"
-                                                 v-bind:key="project.name + '-' + tag.name" v-for="tag in filterTags(project.recommended_version.tags)"></Tag>
+                                        <div class="col-xs-12 col-sm-5 tags-line" v-if="project.promoted_versions">
+                                            <Tag v-bind:name="tag.name" v-bind:data="tag.versions.join(' | ')" v-bind:color="tag.color"
+                                                 v-bind:key="project.name + '-' + tag.name" v-for="tag in tagsFromPromoted(project.promoted_versions)"></Tag>
                                         </div>
                                     </div>
                                 </div>
@@ -60,7 +60,7 @@
             </div>
             <div v-else class="list-group-item empty-project-list">
                 <i class="far fa-2x fa-sad-tear"></i>
-                <span>Oops! No projects found matching your filters...</span>
+                <span>Oops! No projects found...</span>
             </div>
         </div>
     </div>
@@ -69,7 +69,7 @@
 <script>
     import Tag from "./Tag"
     import {clearFromEmpty} from "./../utils"
-    import {Category, Platform, Visibility} from "../home";
+    import {Category, Platform, Visibility} from "../enums";
     import Pagination from "./Pagination";
     import Icon from "./Icon"
     import debounce from "lodash/debounce"
@@ -141,8 +141,30 @@
             visibilityFromName: function(name) {
                 return Visibility.fromName(name);
             },
-            filterTags: function (tags) {
-                return Platform.filterTags(tags);
+            tagsFromPromoted: function (promotedVersions) {
+                let tagsArray = [];
+                promotedVersions
+                    .map(version => version.tags)
+                    .forEach(tags => tagsArray = tags.filter(tag => Platform.isPlatformTag(tag)).concat(tagsArray));
+
+                const reducedTags = [];
+
+                Platform.values.forEach(platform => {
+                    let versions = [];
+                    tagsArray.filter(tag => tag.name === platform.id).reverse().forEach(tag => {
+                        versions.push(tag.display_data || tag.data);
+                    });
+
+                    if(versions.length > 0) {
+                        reducedTags.push({
+                            name: platform.id,
+                            versions: versions,
+                            color: platform.color
+                        });
+                    }
+                });
+
+                return reducedTags;
             }
         }
     }
@@ -178,8 +200,8 @@
             padding: 10px 0;
             margin-bottom: 0.25rem;
 
-            &:first-child {
-                margin-top: 0.25rem;
+            &:last-child {
+                margin-bottom: 0;
             }
         }
 
