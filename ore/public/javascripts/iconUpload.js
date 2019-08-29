@@ -34,7 +34,7 @@ $(function() {
             contentType: false,
             processData: false,
             success: function() {
-                preview.attr('src', url + '/pending');
+                preview.attr('src', url + '/pending?' + performance.now());
                 toggleSpinner($('#form-icon .btn-upload').find('[data-fa-i2svg]').toggleClass('fa-upload'));
                 $('#update-icon').val('true');
                 input.val('');
@@ -58,7 +58,7 @@ $(function() {
                 reset.empty().text('Reset');
             },
             success: function() {
-                preview.css('background-image', 'url(' + url + ')');
+                preview.attr('src', url);
                 input.val('');
                 updateButton();
                 $('.setting-icon .alert').detach();
