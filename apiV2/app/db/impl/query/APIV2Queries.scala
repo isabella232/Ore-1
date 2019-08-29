@@ -231,7 +231,9 @@ object APIV2Queries extends WebDoobieOreProtocol {
   def versionSelectFrag(
       pluginId: String,
       versionName: Option[String],
-      tags: List[String]
+      tags: List[String],
+      canSeeHidden: Boolean,
+      currentUserId: Option[DbRef[User]]
   ): Fragment = {
     val base =
       sql"""|SELECT pv.created_at,
@@ -245,14 +247,23 @@ object APIV2Queries extends WebDoobieOreProtocol {
             |       pv.file_name,
             |       u.name,
             |       pv.review_state,
-            |       array_append(array_agg(pvt.name) FILTER ( WHERE pvt.name IS NOT NULL ), 'Channel')  AS tag_names,
-            |       array_append(array_agg(pvt.data) FILTER ( WHERE pvt.name IS NOT NULL ), pc.name)    AS tag_datas,
-            |       array_append(array_agg(pvt.color) FILTER ( WHERE pvt.name IS NOT NULL ), pc.color + 9) AS tag_colors
+            |       array_append(array_agg(pvt.name ORDER BY (pvt.name)) FILTER ( WHERE pvt.name IS NOT NULL ), 'Channel')  AS tag_names,
+            |       array_append(array_agg(pvt.data ORDER BY (pvt.name)) FILTER ( WHERE pvt.name IS NOT NULL ), pc.name)    AS tag_datas,
+            |       array_append(array_agg(pvt.color ORDER BY (pvt.name)) FILTER ( WHERE pvt.name IS NOT NULL ), pc.color + 9) AS tag_colors
             |    FROM projects p
             |             JOIN project_versions pv ON p.id = pv.project_id
             |             LEFT JOIN users u ON pv.author_id = u.id
             |             LEFT JOIN project_version_tags pvt ON pv.id = pvt.version_id
             |             LEFT JOIN project_channels pc ON pv.channel_id = pc.id """.stripMargin
+
+    val visibilityFrag =
+      if (canSeeHidden) None
+      else
+        currentUserId.fold(Some(fr"(pv.visibility = 1)")) { id =>
+          Some(
+            fr"(pv.visibility = 1 OR ($id IN (SELECT pm.user_id FROM project_members_all pm WHERE pm.id = p.id) AND pv.visibility != 5))"
+          )
+        }
 
     val filters = Fragments.whereAndOpt(
       Some(fr"p.plugin_id = $pluginId"),
@@ -266,7 +277,8 @@ object APIV2Queries extends WebDoobieOreProtocol {
             Fragments.in(fr"'Channel:' || pc.name", t),
             Fragments.in(fr"'Channel'", t)
           )
-        }
+        },
+      visibilityFrag
     )
 
     base ++ filters ++ fr"GROUP BY pv.id, u.id, pc.id"
@@ -276,15 +288,24 @@ object APIV2Queries extends WebDoobieOreProtocol {
       pluginId: String,
       versionName: Option[String],
       tags: List[String],
+      canSeeHidden: Boolean,
+      currentUserId: Option[DbRef[User]],
       limit: Long,
       offset: Long
   ): Query0[APIV2.Version] =
-    (versionSelectFrag(pluginId, versionName, tags) ++ fr"ORDER BY pv.created_at DESC LIMIT $limit OFFSET $offset")
+    (versionSelectFrag(pluginId, versionName, tags, canSeeHidden, currentUserId) ++ fr"ORDER BY pv.created_at DESC LIMIT $limit OFFSET $offset")
       .query[APIV2QueryVersion]
       .map(_.asProtocol)
 
-  def versionCountQuery(pluginId: String, tags: List[String]): Query0[Long] =
-    (sql"SELECT COUNT(*) FROM " ++ Fragments.parentheses(versionSelectFrag(pluginId, None, tags)) ++ fr"sq").query[Long]
+  def versionCountQuery(
+      pluginId: String,
+      tags: List[String],
+      canSeeHidden: Boolean,
+      currentUserId: Option[DbRef[User]]
+  ): Query0[Long] =
+    (sql"SELECT COUNT(*) FROM " ++ Fragments.parentheses(
+      versionSelectFrag(pluginId, None, tags, canSeeHidden, currentUserId)
+    ) ++ fr"sq").query[Long]
 
   def userQuery(name: String): Query0[APIV2.User] =
     sql"""|SELECT u.created_at, u.name, u.tagline, u.join_date, array_agg(r.name)
