@@ -17,7 +17,6 @@ import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.query.UserQueries
 import ore.db.impl.schema.{ApiKeyTable, PageTable, ProjectTableMain, UserTable, VersionTable}
 import ore.db.{DbRef, Model}
-import ore.models.project.ProjectSortingStrategy
 import ore.models.user.notification.{InviteFilter, NotificationFilter}
 import ore.models.user.{FakeUser, _}
 import ore.permission.Permission
@@ -137,9 +136,7 @@ class Users @Inject()(
     * @param username   Username to lookup
     * @return           View of user projects page
     */
-  def showProjects(username: String, page: Option[Int]): Action[AnyContent] = OreAction.asyncF { implicit request =>
-    val pageNum = page.getOrElse(1)
-
+  def showProjects(username: String): Action[AnyContent] = OreAction.asyncF { implicit request =>
     for {
       u <- users
         .withName(username)
@@ -159,8 +156,7 @@ class Users @Inject()(
       Ok(
         views.users.projects(
           userData,
-          orgaData.flatMap(a => scopedOrgaData.map(b => (a, b))),
-          pageNum
+          orgaData.flatMap(a => scopedOrgaData.map(b => (a, b)))
         )
       )
     }
@@ -349,9 +345,15 @@ class Users @Inject()(
   import controllers.project.{routes => projectRoutes}
 
   def userSitemap(user: String): Action[AnyContent] = Action.asyncF { implicit request =>
+    def use[A](a: A): Unit = {
+      if (false) println(a)
+      ()
+    }
+
     val projectsQuery = for {
       u <- TableQuery[UserTable]
       p <- TableQuery[ProjectTableMain] if u.id === p.userId
+      _ = use(p)
       if u.name === user
     } yield p.slug
 
@@ -359,6 +361,7 @@ class Users @Inject()(
       u  <- TableQuery[UserTable]
       p  <- TableQuery[ProjectTableMain] if u.id === p.userId
       pv <- TableQuery[VersionTable] if p.id === pv.projectId
+      _ = use(pv)
       if u.name === user
     } yield (p.slug, pv.versionString)
 
@@ -366,6 +369,7 @@ class Users @Inject()(
       u  <- TableQuery[UserTable]
       p  <- TableQuery[ProjectTableMain] if u.id === p.userId
       pp <- TableQuery[PageTable] if p.id === pp.projectId
+      _ = use(pp)
       if u.name === user
     } yield (p.slug, pp.name)
 
@@ -410,7 +414,7 @@ class Users @Inject()(
           projectEntries ++
             versionEntries ++
             pageEntries :+ Sitemap.Entry(
-            routes.Users.showProjects(user, None),
+            routes.Users.showProjects(user),
             changeFreq = Some(Sitemap.ChangeFreq.Weekly)
           ): _*
         )

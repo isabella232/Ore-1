@@ -19,7 +19,6 @@ import util.syntax._
 import views.{html => views}
 
 import cats.data.OptionT
-import cats.syntax.all._
 import zio.interop.catz._
 import zio.{IO, Task, UIO}
 
@@ -81,7 +80,7 @@ class Organizations @Inject()(forms: OreForms)(
                 .absolve
                 .bimap(
                   error => Redirect(failCall).withErrors(error),
-                  organization => Redirect(routes.Users.showProjects(organization.name, None))
+                  organization => Redirect(routes.Users.showProjects(organization.name))
                 )
             }
           }
@@ -128,7 +127,7 @@ class Organizations @Inject()(forms: OreForms)(
 
         auth.changeAvatarUri(request.user.name, organization).map {
           case Left(_) =>
-            Redirect(routes.Users.showProjects(organization, None)).withError(messagesApi("organization.avatarFailed"))
+            Redirect(routes.Users.showProjects(organization)).withError(messagesApi("organization.avatarFailed"))
           case Right(uri) => Redirect(uri.toString())
         }
       }

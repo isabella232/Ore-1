@@ -7,10 +7,10 @@ import java.time.{Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
 import javax.inject.{Inject, Singleton}
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 import play.api.http.{HttpErrorHandler, Writeable}
 import play.api.i18n.Lang
@@ -42,9 +42,9 @@ import akka.http.scaladsl.model.headers.{Authorization, HttpCredentials}
 import cats.data.NonEmptyList
 import cats.syntax.all._
 import enumeratum._
-import io.circe._
 import io.circe.generic.extras._
 import io.circe.syntax._
+import io.circe.{Codec => CirceCodec, _}
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.{IO, Task, UIO, ZIO}
@@ -60,8 +60,8 @@ class ApiV2Controller @Inject()(
 ) extends OreBaseController
     with CircePlayController {
 
-  implicit def zioMode[R]: scalacache.Mode[ZIO[R, Throwable, ?]] =
-    scalacache.CatsEffect.modes.async[ZIO[R, Throwable, ?]]
+  implicit def zioMode[R]: scalacache.Mode[ZIO[R, Throwable, *]] =
+    scalacache.CatsEffect.modes.async[ZIO[R, Throwable, *]]
 
   private val resultCache = scalacache.caffeine.CaffeineCache[IO[Result, Result]]
 
@@ -154,7 +154,7 @@ class ApiV2Controller @Inject()(
       //Techically we could make this faster by first checking if the global perms have the needed perms,
       //but then we wouldn't get the 404 on a non existent scope.
       val scopePerms: IO[Unit, Permission] =
-        apiScopeToRealScope(scope).flatMap(request.permissionIn[Scope, IO[Unit, ?]](_))
+        apiScopeToRealScope(scope).flatMap(request.permissionIn[Scope, IO[Unit, *]](_))
       val res = scopePerms.asError(NotFound).ensure(Forbidden)(_.has(perms))
 
       zioToFuture(res.either.map(_.swap.toOption))
@@ -742,8 +742,7 @@ object ApiV2Controller {
 
     val values: immutable.IndexedSeq[APIScopeType] = findValues
 
-    implicit val encoder: Encoder[APIScopeType] = APIV2.enumEncoder(APIScopeType)(_.entryName)
-    implicit val decoder: Decoder[APIScopeType] = APIV2.enumDecoder(APIScopeType)(_.entryName)
+    implicit val codec: CirceCodec[APIScopeType] = APIV2.enumCodec(APIScopeType)(_.entryName)
   }
 
   sealed abstract class SessionType extends EnumEntry with EnumEntry.Snakecase
@@ -755,8 +754,7 @@ object ApiV2Controller {
 
     val values: immutable.IndexedSeq[SessionType] = findValues
 
-    implicit val encoder: Encoder[SessionType] = APIV2.enumEncoder(SessionType)(_.entryName)
-    implicit val decoder: Decoder[SessionType] = APIV2.enumDecoder(SessionType)(_.entryName)
+    implicit val codec: CirceCodec[SessionType] = APIV2.enumCodec(SessionType)(_.entryName)
   }
 
   @ConfiguredJsonCodec case class ApiError(error: String)
@@ -800,8 +798,7 @@ object ApiV2Controller {
       count: Long
   )
 
-  implicit val namedPermissionEncoder: Encoder[NamedPermission] = APIV2.enumEncoder(NamedPermission)(_.entryName)
-  implicit val namedPermissionDecoder: Decoder[NamedPermission] = APIV2.enumDecoder(NamedPermission)(_.entryName)
+  implicit val namedPermissionCodec: CirceCodec[NamedPermission] = APIV2.enumCodec(NamedPermission)(_.entryName)
 
   @ConfiguredJsonCodec case class KeyPermissions(
       @JsonKey("type") tpe: APIScopeType,

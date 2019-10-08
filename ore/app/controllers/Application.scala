@@ -7,8 +7,8 @@ import java.time.{Instant, LocalDate}
 import java.util.Date
 import javax.inject.{Inject, Singleton}
 
-import scala.util.Try
 import scala.concurrent.duration._
+import scala.util.Try
 
 import play.api.mvc.{Action, ActionBuilder, AnyContent}
 import play.api.routing.JavaScriptReverseRouter
@@ -99,11 +99,7 @@ final class Application @Inject()(forms: OreForms)(
     */
   def showFlags(): Action[AnyContent] = FlagAction.asyncF { implicit request =>
     service
-      .runDbCon(
-        AppQueries
-          .flags(request.user.id)
-          .to[Vector]
-      )
+      .runDbCon(AppQueries.flags.to[Vector])
       .map(flagSeq => Ok(views.users.admin.flags(flagSeq)))
   }
 

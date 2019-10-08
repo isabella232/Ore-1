@@ -5,13 +5,11 @@ import java.time.LocalDate
 import scala.concurrent.duration.FiniteDuration
 
 import models.querymodels._
-import ore.data.project.Category
 import ore.db.{DbRef, Model}
 import ore.models.admin.LoggedActionViewModel
 import ore.models.project._
 import ore.models.user.User
 
-import cats.syntax.all._
 import doobie._
 import doobie.implicits._
 
@@ -60,7 +58,7 @@ object AppQueries extends WebDoobieOreProtocol {
           |  ORDER BY sq.project_name DESC, sq.version_string DESC""".stripMargin.query[UnsortedQueueEntry]
   }
 
-  def flags(userId: DbRef[User]): Query0[ShownFlag] = {
+  val flags: Query0[ShownFlag] = {
     sql"""|SELECT pf.id        AS flag_id,
           |       pf.created_at AS flag_creation_date,
           |       pf.reason    AS flag_reason,

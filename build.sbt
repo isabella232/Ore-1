@@ -1,18 +1,16 @@
 lazy val commonSettings = Seq(
   version := "1.8.2",
-  scalaVersion := "2.12.10",
+  scalaVersion := "2.13.1",
   scalacOptions ++= Seq(
     "-deprecation",
     "-encoding",
     "utf-8",
-    "-Ypartial-unification",
     "-explaintypes",
     "-feature",
     "-unchecked",
     "-Xcheckinit",
-    //"-Xfatal-warnings",
+    //"-Werror",
     "-Xlint:adapted-args",
-    "-Xlint:by-name-right-associative",
     "-Xlint:constant",
     "-Xlint:delayedinit-select",
     "-Xlint:doc-detached",
@@ -27,22 +25,20 @@ lazy val commonSettings = Seq(
     "-Xlint:private-shadow",
     "-Xlint:stars-align",
     "-Xlint:type-parameter-shadow",
-    "-Xlint:unsound-match",
-    "-Yno-adapted-args",
-    "-Ywarn-dead-code",
-    "-Ywarn-infer-any",
-    "-Ywarn-numeric-widen",
-    "-Ywarn-nullary-override",
-    "-Ywarn-nullary-unit",
-    "-Ywarn-unused:implicits",
-    "-Ywarn-unused:locals",
-    "-Ywarn-unused:patvars",
-    "-Ywarn-unused:privates",
-    "-Ywarn-value-discard",
-    "-Yrangepos"
+    "-Xlint:infer-any",
+    "-Wdead-code",
+    "-Wnumeric-widen",
+    "-Wunused:params",
+    "-Wunused:locals",
+    "-Wunused:patvars",
+    "-Wunused:privates",
+    "-Wvalue-discard",
+    "-Yrangepos",
+    "-Ymacro-annotations",
+    "-Ybackend-parallelism",
+    "6"
   ),
-  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
-  addCompilerPlugin(("org.scalamacros" % "paradise" % "2.1.1").cross(CrossVersion.full)),
+  addCompilerPlugin(("org.typelevel" %% "kind-projector" % "0.11.0").cross(CrossVersion.full)),
   // Disable generation of the API documentation for production builds
   sources in (Compile, doc) := Seq.empty,
   publishArtifact in (Compile, packageDoc) := false
@@ -50,7 +46,7 @@ lazy val commonSettings = Seq(
 
 ThisBuild / turbo := true
 
-ThisBuild / semanticdbEnabled := true
+//ThisBuild / semanticdbEnabled := true
 Global / semanticdbVersion := "4.2.3"
 
 lazy val playCommonSettings = Seq(
@@ -75,16 +71,17 @@ lazy val playTestDeps = Seq(
 )
 
 lazy val catsVersion         = "2.0.0"
-lazy val catsTaglessVersion  = "0.9"
-lazy val zioVersion          = "1.0.0-RC12-1"
-lazy val zioCatsVersion      = "2.0.0.0-RC3"
-lazy val doobieVersion       = "0.7.0"
+lazy val catsEffectVersion   = "2.0.0"
+lazy val catsTaglessVersion  = "0.10"
+lazy val zioVersion          = "1.0.0-RC14"
+lazy val zioCatsVersion      = "2.0.0.0-RC5"
+lazy val doobieVersion       = "0.8.4"
 lazy val flexmarkVersion     = "0.50.40"
 lazy val playSlickVersion    = "4.0.2"
 lazy val slickPgVersion      = "0.18.0"
-lazy val circeVersion        = "0.12.1"
+lazy val circeVersion        = "0.12.2"
 lazy val akkaVersion         = "2.5.23"
-lazy val akkaHttpVersion     = "10.1.9"
+lazy val akkaHttpVersion     = "10.1.10"
 lazy val scalaLoggingVersion = "3.9.2"
 lazy val simulacrumVersion   = "0.19.0"
 lazy val macWireVersion      = "2.3.3"
@@ -106,7 +103,7 @@ lazy val externalCommon = project.settings(
   name := "ore-external",
   libraryDependencies ++= Seq(
     "org.typelevel"              %% "cats-core"            % catsVersion,
-    "org.typelevel"              %% "cats-effect"          % "1.3.1",
+    "org.typelevel"              %% "cats-effect"          % catsEffectVersion,
     "org.typelevel"              %% "cats-tagless-macros"  % catsTaglessVersion,
     "io.circe"                   %% "circe-core"           % circeVersion,
     "io.circe"                   %% "circe-generic-extras" % circeVersion,
@@ -114,7 +111,6 @@ lazy val externalCommon = project.settings(
     "com.typesafe.akka"          %% "akka-http"            % akkaHttpVersion,
     "com.typesafe.akka"          %% "akka-http-core"       % akkaHttpVersion,
     "com.typesafe.akka"          %% "akka-stream"          % akkaVersion,
-    "de.heikoseeberger"          %% "akka-http-circe"      % "1.27.0",
     "com.typesafe.scala-logging" %% "scala-logging"        % scalaLoggingVersion,
     "com.github.mpilquist"       %% "simulacrum"           % simulacrumVersion
   )
@@ -140,7 +136,7 @@ lazy val models = project
     commonSettings,
     name := "ore-models",
     libraryDependencies ++= Seq(
-      "org.postgresql"             % "postgresql"             % "42.2.7",
+      "org.postgresql"             % "postgresql"             % "42.2.8",
       "com.github.tminglei"        %% "slick-pg"              % slickPgVersion,
       "com.github.tminglei"        %% "slick-pg_circe-json"   % slickPgVersion,
       "org.tpolecat"               %% "doobie-postgres"       % doobieVersion,
