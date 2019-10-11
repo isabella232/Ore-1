@@ -1,6 +1,6 @@
 package controllers.sugar
 
-import java.time.Instant
+import java.time.OffsetDateTime
 
 import play.api.mvc.{Request, WrappedRequest}
 
@@ -27,7 +27,7 @@ object Requests {
       user: Option[Model[User]],
       key: Option[ApiKey],
       session: Option[String],
-      expires: Instant,
+      expires: OffsetDateTime,
       globalPerms: Permission
   )
 

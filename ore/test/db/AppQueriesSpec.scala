@@ -6,7 +6,7 @@ import scala.concurrent.duration._
 
 import play.api.Configuration
 
-import db.impl.query.AppQueries
+import db.impl.query.{AppQueries, SharedQueries}
 import ore.OreConfig
 
 import org.junit.runner.RunWith
@@ -35,6 +35,12 @@ class AppQueriesSpec extends DbSpec {
           orderWithRelevance = true
         )
     )
+  }
+   */
+
+  /* Wrong nullness reported
+  test("WatcherStartProject") {
+    check(SharedQueries.watcherStartProject(0L))
   }
    */
 

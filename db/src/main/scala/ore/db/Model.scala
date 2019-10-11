@@ -10,7 +10,7 @@ import shapeless._
 
 case class Model[+A](
     id: ObjId[A],
-    createdAt: ObjInstant,
+    createdAt: ObjOffsetDateTime,
     obj: A
 )
 object Model {

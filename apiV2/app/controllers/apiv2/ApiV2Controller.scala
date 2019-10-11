@@ -1,7 +1,7 @@
 package controllers.apiv2
 
 import java.nio.file.Path
-import java.time.{Instant, LocalDateTime, ZoneOffset}
+import java.time.OffsetDateTime
 import java.util.UUID
 import javax.inject.{Inject, Singleton}
 
@@ -25,7 +25,7 @@ import models.protocols.APIV2
 import models.querymodels.{APIV2QueryVersion, APIV2QueryVersionTag}
 import ore.data.project.Category
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.schema.{ApiKeyTable, OrganizationTable, ProjectTableMain}
+import ore.db.impl.schema.{ApiKeyTable, OrganizationTable, ProjectTable, UserTable}
 import ore.db.{DbRef, Model}
 import ore.models.api.ApiSession
 import ore.models.project.factory.ProjectFactory
@@ -109,7 +109,7 @@ class ApiV2Controller @Inject()(
           .get
           .asError(unAuth("Invalid session"))
         res <- {
-          if (info.expires.isBefore(Instant.now())) {
+          if (info.expires.isBefore(OffsetDateTime.now())) {
             service.deleteWhere(ApiSession)(_.token === token) *> IO.fail(unAuth("Api session expired"))
           } else ZIO.succeed(ApiRequest(info, request))
         }
@@ -124,7 +124,7 @@ class ApiV2Controller @Inject()(
     case APIScope.ProjectScope(pluginId) =>
       service
         .runDBIO(
-          TableQuery[ProjectTableMain]
+          TableQuery[ProjectTable]
             .filter(_.pluginId === pluginId)
             .map(_.id)
             .result
@@ -133,14 +133,14 @@ class ApiV2Controller @Inject()(
         .get
         .map(ProjectScope)
     case APIScope.OrganizationScope(organizationName) =>
+      val q = for {
+        u <- TableQuery[UserTable]
+        if u.name === organizationName
+        o <- TableQuery[OrganizationTable] if u.id === o.id
+      } yield o.id
+
       service
-        .runDBIO(
-          TableQuery[OrganizationTable]
-            .filter(_.name === organizationName)
-            .map(_.id)
-            .result
-            .headOption
-        )
+        .runDBIO(q.result.headOption)
         .get
         .map(OrganizationScope)
   }
@@ -167,7 +167,7 @@ class ApiV2Controller @Inject()(
 
     userChoice
       .fold[Option[Long]](Some(durationSeconds))(d => if (d > durationSeconds) None else Some(d))
-      .map(Instant.now().plusSeconds)
+      .map(OffsetDateTime.now().plusSeconds)
   }
 
   def authenticateUser(): Action[AnyContent] = Authenticated.asyncF { implicit request =>
@@ -179,7 +179,7 @@ class ApiV2Controller @Inject()(
       Ok(
         ReturnedApiSession(
           key.token,
-          LocalDateTime.ofInstant(key.expires, ZoneOffset.UTC),
+          key.expires,
           SessionType.User
         )
       )
@@ -235,7 +235,7 @@ class ApiV2Controller @Inject()(
           Ok(
             ReturnedApiSession(
               key.token,
-              LocalDateTime.ofInstant(key.expires, ZoneOffset.UTC),
+              key.expires,
               tpe
             )
           )
@@ -254,7 +254,7 @@ class ApiV2Controller @Inject()(
         Ok(
           ReturnedApiSession(
             key.token,
-            LocalDateTime.ofInstant(key.expires, ZoneOffset.UTC),
+            key.expires,
             SessionType.Dev
           )
         )
@@ -618,12 +618,11 @@ class ApiV2Controller @Inject()(
         }
 
         for {
-          user            <- ZIO.fromOption(request.user).asError(BadRequest(ApiError("No user found for session")))
-          _               <- uploadErrors(user)
-          project         <- projects.withPluginId(pluginId).get.asError(NotFound)
-          projectSettings <- project.settings[Task].orDie
-          data            <- dataF
-          file            <- fileF
+          user    <- ZIO.fromOption(request.user).asError(BadRequest(ApiError("No user found for session")))
+          _       <- uploadErrors(user)
+          project <- projects.withPluginId(pluginId).get.asError(NotFound)
+          data    <- dataF
+          file    <- fileF
           pendingVersion <- factory
             .processSubsequentPluginUpload(PluginUpload(file.ref, file.filename), user, project)
             .leftMap { s =>
@@ -632,7 +631,7 @@ class ApiV2Controller @Inject()(
             }
             .map { v =>
               v.copy(
-                createForumPost = data.create_forum_post.getOrElse(projectSettings.forumSync),
+                createForumPost = data.create_forum_post.getOrElse(project.settings.forumSync),
                 channelName = data.tags.getOrElse("Channel", v.channelName),
                 description = data.description
               )
@@ -649,7 +648,7 @@ class ApiV2Controller @Inject()(
           )
           val apiTags = channelApiTag :: normalApiTags
           val apiVersion = APIV2QueryVersion(
-            LocalDateTime.ofInstant(version.createdAt, ZoneOffset.UTC),
+            version.createdAt,
             version.versionString,
             version.dependencyIds,
             version.visibility,
@@ -803,7 +802,7 @@ object ApiV2Controller {
 
   @ConfiguredJsonCodec case class ReturnedApiSession(
       session: String,
-      expires: LocalDateTime,
+      expires: OffsetDateTime,
       @JsonKey("type") tpe: SessionType
   )
 

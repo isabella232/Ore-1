@@ -1,6 +1,6 @@
 package controllers
 
-import java.time.Instant
+import java.time.OffsetDateTime
 import javax.inject.{Inject, Singleton}
 
 import play.api.mvc.{Action, AnyContent}
@@ -15,7 +15,7 @@ import ore.db.{DbRef, Model}
 import ore.markdown.MarkdownRenderer
 import ore.models.admin.{Message, Review}
 import ore.models.project.{Project, ReviewState, Version}
-import ore.models.user.{LoggedAction, Notification, User}
+import ore.models.user.{LoggedActionType, LoggedActionVersion, Notification, User}
 import ore.permission.Permission
 import ore.permission.role.Role
 import util.UserActionLogger
@@ -97,7 +97,7 @@ final class Reviews @Inject()(forms: OreForms)(
         for {
           version   <- getProjectVersion(author, slug, versionString)
           review    <- version.mostRecentUnfinishedReview(ModelView.now(Review)).toZIOWithError(notFound)
-          newReview <- service.update(review)(_.copy(endedAt = Some(Instant.now())))
+          newReview <- service.update(review)(_.copy(endedAt = Some(OffsetDateTime.now())))
           _         <- newReview.addMessage(Message(request.body.trim, System.currentTimeMillis(), "stop"))
         } yield Redirect(routes.Reviews.showReviews(author, slug, versionString))
       }
@@ -110,7 +110,7 @@ final class Reviews @Inject()(forms: OreForms)(
         version <- getVersion(project, versionString)
         review  <- version.mostRecentUnfinishedReview(ModelView.now(Review)).toZIOWithError(notFound)
         _ <- (
-          service.update(review)(_.copy(endedAt = Some(Instant.now()))),
+          service.update(review)(_.copy(endedAt = Some(OffsetDateTime.now()))),
           // send notification that review happened
           sendReviewNotification(project, version)
         ).parTupled
@@ -120,7 +120,7 @@ final class Reviews @Inject()(forms: OreForms)(
 
   private def queryNotificationUsers(
       projectId: Rep[DbRef[Project]],
-      userId: Rep[DbRef[User]]
+      userId: Rep[Option[DbRef[User]]]
   ): Query[(Rep[DbRef[User]], Rep[Option[Role]]), (DbRef[User], Option[Role]), Seq] = {
     // Query Orga Members
     val q1 = for {
@@ -179,7 +179,7 @@ final class Reviews @Inject()(forms: OreForms)(
               .flatMap { oldreview =>
                 (
                   oldreview.addMessage(Message(request.body.trim, System.currentTimeMillis(), "takeover")),
-                  service.update(oldreview)(_.copy(endedAt = Some(Instant.now())))
+                  service.update(oldreview)(_.copy(endedAt = Some(OffsetDateTime.now())))
                 ).parTupled.unit
               }
               .either
@@ -250,11 +250,11 @@ final class Reviews @Inject()(forms: OreForms)(
         }
         _ <- UserActionLogger.log(
           request,
-          LoggedAction.VersionReviewStateChanged,
+          LoggedActionType.VersionReviewStateChanged,
           version.id,
           newState.toString,
           oldState.toString
-        )
+        )(LoggedActionVersion(_, Some(version.projectId)))
         _ <- service.update(version)(_.copy(reviewState = newState))
       } yield Redirect(routes.Reviews.showReviews(author, slug, versionString))
     }

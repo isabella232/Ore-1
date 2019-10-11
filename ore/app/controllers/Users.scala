@@ -2,6 +2,8 @@ package controllers
 
 import javax.inject.{Inject, Singleton}
 
+import scala.annotation.unused
+
 import play.api.i18n.MessagesApi
 import play.api.mvc._
 
@@ -15,7 +17,7 @@ import ore.data.Prompt
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.query.UserQueries
-import ore.db.impl.schema.{ApiKeyTable, PageTable, ProjectTableMain, UserTable, VersionTable}
+import ore.db.impl.schema.{ApiKeyTable, PageTable, ProjectTable, UserTable, VersionTable}
 import ore.db.{DbRef, Model}
 import ore.models.user.notification.{InviteFilter, NotificationFilter}
 import ore.models.user.{FakeUser, _}
@@ -115,7 +117,7 @@ class Users @Inject()(
     )
   }
 
-  private def redirectBack(url: String, user: User) =
+  private def redirectBack(url: String, user: Model[User]) =
     Redirect(this.baseUrl + url).authenticatedAs(user, this.config.play.sessionMaxAge.toSeconds.toInt)
 
   /**
@@ -182,11 +184,11 @@ class Users @Inject()(
         }
         _ <- UserActionLogger.log(
           request,
-          LoggedAction.UserTaglineChanged,
+          LoggedActionType.UserTaglineChanged,
           user.id,
           tagline,
           user.tagline.getOrElse("null")
-        )
+        )(LoggedActionUser.apply)
         _ <- service.update(user)(_.copy(tagline = Some(tagline)))
       } yield Redirect(ShowUser(user))
     }
@@ -345,21 +347,19 @@ class Users @Inject()(
   import controllers.project.{routes => projectRoutes}
 
   def userSitemap(user: String): Action[AnyContent] = Action.asyncF { implicit request =>
-    def use[A](a: A): Unit = {
-      if (false) println(a)
-      ()
-    }
+    def use[A](@unused a: A): Unit = ()
 
     val projectsQuery = for {
       u <- TableQuery[UserTable]
-      p <- TableQuery[ProjectTableMain] if u.id === p.userId
+
+      p <- TableQuery[ProjectTable] if u.id === p.ownerId
       _ = use(p)
       if u.name === user
     } yield p.slug
 
     val versionQuery = for {
       u  <- TableQuery[UserTable]
-      p  <- TableQuery[ProjectTableMain] if u.id === p.userId
+      p  <- TableQuery[ProjectTable] if u.id === p.ownerId
       pv <- TableQuery[VersionTable] if p.id === pv.projectId
       _ = use(pv)
       if u.name === user
@@ -367,7 +367,7 @@ class Users @Inject()(
 
     val pageQuery = for {
       u  <- TableQuery[UserTable]
-      p  <- TableQuery[ProjectTableMain] if u.id === p.userId
+      p  <- TableQuery[ProjectTable] if u.id === p.ownerId
       pp <- TableQuery[PageTable] if p.id === pp.projectId
       _ = use(pp)
       if u.name === user
