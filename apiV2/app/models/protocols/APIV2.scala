@@ -43,7 +43,7 @@ object APIV2 {
       name: String,
       namespace: ProjectNamespace,
       promotedVersions: Seq[PromotedVersion],
-      stats: ProjectStats,
+      stats: ProjectStatsAll,
       category: Category,
       description: Option[String],
       lastUpdated: OffsetDateTime,
@@ -58,7 +58,7 @@ object APIV2 {
       name: String,
       namespace: ProjectNamespace,
       promotedVersions: Seq[PromotedVersion],
-      stats: ProjectStats,
+      stats: ProjectStatsAll,
       category: Category,
       visibility: Visibility
   )
@@ -74,7 +74,14 @@ object APIV2 {
   )
   @ConfiguredJsonCodec case class VersionTag(name: String, data: Option[String], color: VersionTagColor)
   @ConfiguredJsonCodec case class VersionTagColor(foreground: String, background: String)
-  @ConfiguredJsonCodec case class ProjectStats(views: Long, downloads: Long, stars: Long)
+  @ConfiguredJsonCodec case class ProjectStatsAll(
+      views: Long,
+      downloads: Long,
+      recent_views: Long,
+      recent_downloads: Long,
+      stars: Long,
+      watchers: Long
+  )
   @ConfiguredJsonCodec case class UserActions(starred: Boolean, watching: Boolean)
   @ConfiguredJsonCodec case class ProjectSettings(
       homepage: Option[String],
@@ -105,7 +112,7 @@ object APIV2 {
       dependencies: List[VersionDependency],
       visibility: Visibility,
       description: Option[String],
-      stats: VersionStats,
+      stats: VersionStatsAll,
       fileInfo: FileInfo,
       author: Option[String],
       reviewState: ReviewState,
@@ -113,7 +120,7 @@ object APIV2 {
   )
 
   @ConfiguredJsonCodec case class VersionDependency(plugin_id: String, version: Option[String])
-  @ConfiguredJsonCodec case class VersionStats(downloads: Long)
+  @ConfiguredJsonCodec case class VersionStatsAll(downloads: Long)
   @ConfiguredJsonCodec case class FileInfo(name: String, sizeBytes: Long, md5Hash: String)
 
   //User
@@ -123,5 +130,14 @@ object APIV2 {
       tagline: Option[String],
       joinDate: Option[OffsetDateTime],
       roles: List[Role]
+  )
+
+  @ConfiguredJsonCodec case class ProjectStatsDay(
+      downloads: Long,
+      views: Long
+  )
+
+  @ConfiguredJsonCodec case class VersionStatsDay(
+      downloads: Long
   )
 }

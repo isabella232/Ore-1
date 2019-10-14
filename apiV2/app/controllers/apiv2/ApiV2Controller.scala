@@ -1,7 +1,8 @@
 package controllers.apiv2
 
 import java.nio.file.Path
-import java.time.OffsetDateTime
+import java.time.format.DateTimeParseException
+import java.time.{LocalDate, OffsetDateTime}
 import java.util.UUID
 import javax.inject.{Inject, Singleton}
 
@@ -22,7 +23,7 @@ import controllers.sugar.Requests.ApiRequest
 import controllers.{OreBaseController, OreControllerComponents}
 import db.impl.query.APIV2Queries
 import models.protocols.APIV2
-import models.querymodels.{APIV2QueryVersion, APIV2QueryVersionTag}
+import models.querymodels.{APIV2ProjectStatsQuery, APIV2QueryVersion, APIV2QueryVersionTag, APIV2VersionStatsQuery}
 import ore.data.project.Category
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.{ApiKeyTable, OrganizationTable, ProjectTable, UserTable}
@@ -37,7 +38,8 @@ import ore.permission.{NamedPermission, Permission}
 import _root_.util.syntax._
 
 import akka.http.scaladsl.model.headers.{Authorization, HttpCredentials}
-import cats.data.NonEmptyList
+import cats.data.{NonEmptyList, Validated}
+import cats.kernel.Semigroup
 import cats.syntax.all._
 import enumeratum._
 import io.circe.generic.extras._
@@ -506,6 +508,29 @@ class ApiV2Controller @Inject()(
       }
     }
 
+  def showProjectStats(pluginId: String, fromDateString: String, toDateString: String): Action[AnyContent] =
+    ApiAction(Permission.IsProjectMember, APIScope.ProjectScope(pluginId)).asyncF { implicit request =>
+      cachingF("projectStats")(pluginId, fromDateString, toDateString) {
+        import Ordering.Implicits._
+
+        def parseDate(dateStr: String) =
+          Validated
+            .catchOnly[DateTimeParseException](LocalDate.parse(dateStr))
+            .leftMap(_ => ApiErrors(NonEmptyList.one(s"Badly formatted date $dateStr")))
+
+        for {
+          t <- ZIO
+            .fromEither(parseDate(fromDateString).product(parseDate(toDateString)).toEither)
+            .mapError(BadRequest(_))
+          (fromDate, toDate) = t
+          _ <- ZIO.unit.filterOrFail(_ => fromDate < toDate)(BadRequest(ApiError("From date is after to date")))
+          res <- service.runDbCon(
+            APIV2Queries.projectStats(pluginId, fromDate, toDate).to[Vector].map(APIV2ProjectStatsQuery.asProtocol)
+          )
+        } yield Ok(res.asJson)
+      }
+    }
+
   def listVersions(
       pluginId: String,
       tags: Seq[String],
@@ -566,6 +591,37 @@ class ApiV2Controller @Inject()(
               .option
           )
           .map(_.fold(NotFound: Result)(a => Ok(a.asJson)))
+      }
+    }
+
+  def showVersionStats(
+      pluginId: String,
+      version: String,
+      fromDateString: String,
+      toDateString: String
+  ): Action[AnyContent] =
+    ApiAction(Permission.IsProjectMember, APIScope.ProjectScope(pluginId)).asyncF { implicit request =>
+      cachingF("versionStats")(pluginId, version, fromDateString, toDateString) {
+        import Ordering.Implicits._
+
+        def parseDate(dateStr: String) =
+          Validated
+            .catchOnly[DateTimeParseException](LocalDate.parse(dateStr))
+            .leftMap(_ => ApiErrors(NonEmptyList.one(s"Badly formatted date $dateStr")))
+
+        for {
+          t <- ZIO
+            .fromEither(parseDate(fromDateString).product(parseDate(toDateString)).toEither)
+            .mapError(BadRequest(_))
+          (fromDate, toDate) = t
+          _ <- ZIO.unit.filterOrFail(_ => fromDate < toDate)(BadRequest(ApiError("From date is after to date")))
+          res <- service.runDbCon(
+            APIV2Queries
+              .versionStats(pluginId, version, fromDate, toDate)
+              .to[Vector]
+              .map(APIV2VersionStatsQuery.asProtocol)
+          )
+        } yield Ok(res.asJson)
       }
     }
 
@@ -650,7 +706,7 @@ class ApiV2Controller @Inject()(
             version.dependencyIds,
             version.visibility,
             version.description,
-            version.downloadCount,
+            0,
             version.fileSize,
             version.hash,
             version.fileName,
@@ -781,6 +837,10 @@ object ApiV2Controller {
 
   @ConfiguredJsonCodec case class ApiError(error: String)
   @ConfiguredJsonCodec case class ApiErrors(errors: NonEmptyList[String])
+  object ApiErrors {
+    implicit val semigroup: Semigroup[ApiErrors] = (x: ApiErrors, y: ApiErrors) =>
+      ApiErrors(x.errors.concatNel(y.errors))
+  }
   @ConfiguredJsonCodec case class UserError(userError: String)
 
   @ConfiguredJsonCodec case class KeyToCreate(name: String, permissions: Seq[String])

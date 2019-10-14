@@ -252,6 +252,10 @@ $(function() {
                 });
                 $(".promoted-list").html(html);
             }
-        })
+            $(".stats #view-count").html(numberWithCommas(response.stats.views));
+            $(".stats #star-count").html(numberWithCommas(response.stats.stars));
+            $(".stats #watcher-count").html(numberWithCommas(response.stats.watchers));
+            $(".stats #download-count").html(numberWithCommas(response.stats.downloads));
+        });
     }
 });

@@ -3,7 +3,7 @@ package db.impl.query
 import scala.language.higherKinds
 
 import java.sql.Timestamp
-import java.time.LocalDateTime
+import java.time.{LocalDate, LocalDateTime}
 
 import play.api.mvc.RequestHeader
 
@@ -120,7 +120,10 @@ object APIV2Queries extends WebDoobieOreProtocol {
             |       p.promoted_versions,
             |       p.views,
             |       p.downloads,
+            |       p.recent_views,
+            |       p.recent_downloads,
             |       p.stars,
+            |       p.watchers,
             |       p.category,
             |       p.description,
             |       COALESCE(p.last_updated, p.created_at) AS last_updated,
@@ -198,6 +201,8 @@ object APIV2Queries extends WebDoobieOreProtocol {
         case ProjectSortingStrategy.Newest          => fr"extract(EPOCH from p.created_at) *" ++ relevance
         case ProjectSortingStrategy.RecentlyUpdated => fr"extract(EPOCH from p.last_updated) *" ++ relevance
         case ProjectSortingStrategy.OnlyRelevance   => relevance
+        case ProjectSortingStrategy.RecentViews     => fr"p.recent_views *" ++ relevance
+        case ProjectSortingStrategy.RecentDownloads => fr"p.recent_downloads*" ++ relevance
       }
     } else order.fragment
 
@@ -242,7 +247,7 @@ object APIV2Queries extends WebDoobieOreProtocol {
             |       pv.dependencies,
             |       pv.visibility,
             |       pv.description,
-            |       pv.downloads,
+            |       (SELECT sum(pvd.downloads) FROM project_versions_downloads pvd WHERE p.id = pvd.project_id AND pv.id = pvd.version_id),
             |       pv.file_size,
             |       pv.hash,
             |       pv.file_name,
@@ -282,7 +287,7 @@ object APIV2Queries extends WebDoobieOreProtocol {
       visibilityFrag
     )
 
-    base ++ filters ++ fr"GROUP BY pv.id, u.id, pc.id"
+    base ++ filters ++ fr"GROUP BY p.id, pv.id, u.id, pc.id"
   }
 
   def versionQuery(
@@ -330,7 +335,10 @@ object APIV2Queries extends WebDoobieOreProtocol {
             |       p.promoted_versions,
             |       p.views,
             |       p.downloads,
+            |       p.recent_views,
+            |       p.recent_downloads,
             |       p.stars,
+            |       p.watchers,
             |       p.category,
             |       p.visibility
             |    FROM users u JOIN """.stripMargin ++ table ++
@@ -410,4 +418,30 @@ object APIV2Queries extends WebDoobieOreProtocol {
       canSeeHidden: Boolean,
       currentUserId: Option[DbRef[User]]
   ): Query0[Long] = actionCountQuery(Fragment.const("project_watchers"), user, canSeeHidden, currentUserId)
+
+  def projectStats(pluginId: String, startDate: LocalDate, endDate: LocalDate): Query0[APIV2ProjectStatsQuery] =
+    sql"""|SELECT CAST(dates.day as DATE), coalesce(sum(pvd.downloads), 0) AS downloads, coalesce(pv.views, 0) AS views
+          |    FROM projects p,
+          |         (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates
+          |             LEFT JOIN project_versions_downloads pvd ON dates.day = pvd.day
+          |             LEFT JOIN project_views pv ON dates.day = pv.day AND pvd.project_id = pv.project_id
+          |    WHERE p.plugin_id = $pluginId
+          |      AND (pvd IS NULL OR pvd.project_id = p.id)
+          |    GROUP BY pv.views, dates.day;""".stripMargin.query[APIV2ProjectStatsQuery]
+
+  def versionStats(
+      pluginId: String,
+      versionString: String,
+      startDate: LocalDate,
+      endDate: LocalDate
+  ): Query0[APIV2VersionStatsQuery] =
+    sql"""|SELECT CAST(dates.day as DATE), coalesce(pvd.downloads, 0) AS downloads
+          |    FROM projects p,
+          |         project_versions pv,
+          |         (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates
+          |             LEFT JOIN project_versions_downloads pvd ON dates.day = pvd.day
+          |    WHERE p.plugin_id = $pluginId
+          |      AND pv.version_string = $versionString
+          |      AND (pvd IS NULL OR (pvd.project_id = p.id AND pvd.version_id = pv.id));""".stripMargin
+      .query[APIV2VersionStatsQuery]
 }

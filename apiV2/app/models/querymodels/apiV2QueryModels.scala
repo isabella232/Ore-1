@@ -1,7 +1,8 @@
 package models.querymodels
 
-import java.time.OffsetDateTime
+import java.time.{LocalDate, OffsetDateTime}
 
+import scala.collection.immutable.TreeMap
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
@@ -33,7 +34,10 @@ case class APIV2QueryProject(
     promotedVersions: Json,
     views: Long,
     downloads: Long,
+    recentViews: Long,
+    recentDownloads: Long,
     stars: Long,
+    watchers: Long,
     category: Category,
     description: Option[String],
     lastUpdated: OffsetDateTime,
@@ -73,10 +77,13 @@ case class APIV2QueryProject(
           namespace.slug
         ),
         promotedVersionDecoded,
-        APIV2.ProjectStats(
+        APIV2.ProjectStatsAll(
           views,
           downloads,
-          stars
+          recentViews,
+          recentDownloads,
+          stars,
+          watchers
         ),
         category,
         description,
@@ -202,7 +209,10 @@ case class APIV2QueryCompactProject(
     promotedVersions: Json,
     views: Long,
     downloads: Long,
+    recentViews: Long,
+    recentDownloads: Long,
     stars: Long,
+    watchers: Long,
     category: Category,
     visibility: Visibility
 ) {
@@ -216,10 +226,13 @@ case class APIV2QueryCompactProject(
           namespace.slug
         ),
         decodedPromotedVersions,
-        APIV2.ProjectStats(
+        APIV2.ProjectStatsAll(
           views,
           downloads,
-          stars
+          recentViews,
+          recentDownloads,
+          stars,
+          watchers
         ),
         category,
         visibility
@@ -271,7 +284,7 @@ case class APIV2QueryVersion(
     },
     visibility,
     description,
-    APIV2.VersionStats(downloads),
+    APIV2.VersionStatsAll(downloads),
     APIV2.FileInfo(name, fileSize, md5Hash),
     authorName,
     reviewState,
@@ -316,4 +329,35 @@ case class APIV2QueryUser(
       )
     }
   )
+}
+
+case class APIV2ProjectStatsQuery(
+    day: LocalDate,
+    downloads: Long,
+    views: Int
+)
+object APIV2ProjectStatsQuery {
+
+  def asProtocol(stats: Seq[APIV2ProjectStatsQuery]): Map[String, APIV2.ProjectStatsDay] =
+    //We use a TreeMap to keep stuff sorted. Technically it shouldn't make a difference for JSON, but it's easier to work with when debugging.
+    stats
+      .groupMapReduce(_.day.toString)(d => APIV2.ProjectStatsDay(d.downloads, d.views.toLong))(
+        (v1, v2) => APIV2.ProjectStatsDay(v1.downloads + v2.downloads, v1.views + v2.views)
+      )
+      .to(TreeMap)
+}
+
+case class APIV2VersionStatsQuery(
+    day: LocalDate,
+    downloads: Int
+)
+object APIV2VersionStatsQuery {
+
+  def asProtocol(stats: Seq[APIV2VersionStatsQuery]): Map[String, APIV2.VersionStatsDay] =
+    //We use a TreeMap to keep stuff sorted. Technically it shouldn't make a difference for JSON, but it's easier to work with when debugging.
+    stats
+      .groupMapReduce(_.day.toString)(d => APIV2.VersionStatsDay(d.downloads.toLong))(
+        (v1, v2) => APIV2.VersionStatsDay(v1.downloads + v2.downloads)
+      )
+      .to(TreeMap)
 }
