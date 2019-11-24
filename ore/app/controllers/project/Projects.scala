@@ -14,7 +14,6 @@ import play.api.mvc._
 
 import controllers.sugar.Requests.AuthRequest
 import controllers.{OreBaseController, OreControllerComponents}
-import discourse.OreDiscourseApi
 import form.OreForms
 import form.project.{DiscussionReplyForm, FlagForm}
 import models.viewhelper.ScopedOrganizationData
@@ -25,6 +24,7 @@ import ore.db.impl.schema.UserTable
 import ore.db.{DbRef, Model}
 import ore.markdown.MarkdownRenderer
 import ore.member.MembershipDossier
+import ore.models.{Job, JobInfo}
 import ore.models.api.ProjectApiKey
 import ore.models.organization.Organization
 import ore.models.project._
@@ -51,7 +51,6 @@ import zio.{IO, Task, UIO, ZIO}
 @Singleton
 class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory)(
     implicit oreComponents: OreControllerComponents,
-    forums: OreDiscourseApi[UIO],
     fileIO: FileIO[ZIO[Blocking, Throwable, *]],
     messagesApi: MessagesApi,
     renderer: MarkdownRenderer
@@ -164,9 +163,7 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
     */
   def showDiscussion(author: String, slug: String): Action[AnyContent] = ProjectAction(author, slug).asyncF {
     implicit request =>
-      forums.isAvailable.flatMap { isAvailable =>
-        this.stats.projectViewed(UIO.succeed(Ok(views.discuss(request.data, request.scoped, isAvailable))))
-      }
+      this.stats.projectViewed(UIO.succeed(Ok(views.discuss(request.data, request.scoped))))
   }
 
   /**
@@ -196,8 +193,9 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
               .either
               .map(_.merge)
           }
-          errors <- this.forums.postDiscussionReply(request.project, poster, formData.content).map(_.swap.toOption)
-        } yield Redirect(self.showDiscussion(author, slug)).withErrors(errors.toList)
+          topicId <- ZIO.fromOption(request.project.topicId).asError(BadRequest)
+          _       <- service.insert(Job.PostDiscourseReply.newJob(topicId, poster.name, formData.content).toJob)
+        } yield Redirect(self.showDiscussion(author, slug))
       }
     }
 
@@ -608,11 +606,12 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
       .andThen(ProjectPermissionAction(Permission.Reviewer))
       .asyncF { implicit request =>
         val newVisibility = Visibility.withValue(visibility)
+
+        val addForumJob = service.insert(Job.UpdateDiscourseProjectTopic.newJob(request.project.id).toJob).unit
+
         val forumVisbility =
-          if (!Visibility.isPublic(newVisibility) && Visibility.isPublic(request.project.visibility)) {
-            this.forums.changeTopicVisibility(request.project, isVisible = false).unit
-          } else if (Visibility.isPublic(newVisibility) && !Visibility.isPublic(request.project.visibility)) {
-            this.forums.changeTopicVisibility(request.project, isVisible = true).unit
+          if (Visibility.isPublic(newVisibility) != Visibility.isPublic(request.project.visibility)) {
+            addForumJob
           } else IO.unit
 
         val projectVisibility = if (newVisibility.showModal) {
@@ -704,8 +703,9 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
         val ret = if (oldProject.visibility == Visibility.New) {
           hardDeleteProject(oldProject)(request.request)
         } else {
-          val oreVisibility   = oldProject.setVisibility(Visibility.SoftDelete, comment, request.user.id)
-          val forumVisibility = this.forums.changeTopicVisibility(oldProject, isVisible = false)
+          val oreVisibility = oldProject.setVisibility(Visibility.SoftDelete, comment, request.user.id)
+
+          val forumVisibility = service.insert(Job.UpdateDiscourseProjectTopic.newJob(oldProject.id).toJob)
           val log = UserActionLogger.log(
             request.request,
             LoggedActionType.ProjectVisibilityChange,
