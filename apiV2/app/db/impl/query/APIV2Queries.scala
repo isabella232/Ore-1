@@ -27,7 +27,6 @@ import cats.kernel.Monoid
 import cats.syntax.all._
 import squeal.category._
 import squeal.category.syntax.all._
-import squeal.macros.Derive
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
