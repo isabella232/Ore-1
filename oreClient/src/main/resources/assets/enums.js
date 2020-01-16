@@ -66,3 +66,33 @@ export class Visibility {
         return this.values.filter(visibility => visibility.name === name)[0];
     }
 }
+
+export class Permission {}
+Permission.ViewPublicInfo = "view_public_info";
+Permission.EditOwnUserSettings = "edit_own_user_settings";
+Permission.EditApiKeys = "edit_api_keys";
+Permission.EditSubjectSettings = "edit_subject_settings";
+Permission.ManageSubjectMembers = "manage_subject_members";
+Permission.IsSubjectOwner = "is_subject_owner";
+Permission.IsSubjectMember = "is_subject_member";
+Permission.CreateProject = "create_project";
+Permission.EditPage = "edit_page";
+Permission.DeleteProject = "delete_project";
+Permission.CreateVersion = "create_version";
+Permission.EditVersion = "edit_version";
+Permission.DeleteVersion = "delete_version";
+Permission.EditChannel = "edit_channel";
+Permission.CreateOrganization = "create_organization";
+Permission.PostAsOrganization = "post_as_organization";
+Permission.ModNotesAndFlags = "mod_notes_and_flags";
+Permission.SeeHidden = "see_hidden";
+Permission.IsStaff = "is_staff";
+Permission.Reviewer = "reviewer";
+Permission.ViewHealth = "view_health";
+Permission.ViewIp = "view_ip";
+Permission.ViewStats = "view_stats";
+Permission.ViewLogs = "view_logs";
+Permission.ManualValueChanges = "manual_value_changes";
+Permission.HardDeleteProject = "hard_delete_project";
+Permission.HardDeleteVersion = "hard_delete_version";
+Permission.EditAllUserSettings = "edit_all_user_settings";
