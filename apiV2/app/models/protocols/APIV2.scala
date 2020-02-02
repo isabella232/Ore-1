@@ -108,25 +108,25 @@ object APIV2 {
       tags: VersionTags
   )
 
-  @ConfiguredJsonCodec case class VersionTags(
+  @SnakeCaseJsonCodec case class VersionTags(
       mixin: Boolean,
       stability: Stability,
       releaseType: Option[ReleaseType],
       platforms: Seq[VersionPlatform]
   )
 
-  @ConfiguredJsonCodec case class VersionPlatform(
+  @SnakeCaseJsonCodec case class VersionPlatform(
       platform: String,
       platformVersion: Option[String],
       displayPlatformVersion: Option[String],
       minecraftVersion: Option[String]
   )
 
-  @ConfiguredJsonCodec case class VersionDescription(description: String)
+  @SnakeCaseJsonCodec case class VersionChangelog(changelog: String)
 
-  @ConfiguredJsonCodec case class VersionDependency(pluginId: String, version: Option[String])
-  @ConfiguredJsonCodec case class VersionStatsAll(downloads: Long)
-  @ConfiguredJsonCodec case class FileInfo(name: String, sizeBytes: Long, md5Hash: String)
+  @SnakeCaseJsonCodec case class VersionDependency(pluginId: String, version: Option[String])
+  @SnakeCaseJsonCodec case class VersionStatsAll(downloads: Long)
+  @SnakeCaseJsonCodec case class FileInfo(name: String, sizeBytes: Long, md5Hash: String)
 
   //User
   @SnakeCaseJsonCodec case class User(
@@ -146,8 +146,17 @@ object APIV2 {
       downloads: Long
   )
 
-  @ConfiguredJsonCodec case class Page(
+  @SnakeCaseJsonCodec case class Page(
       name: String,
       content: String
+  )
+
+  @SnakeCaseJsonCodec case class PageList(
+      pages: Seq[PageListEntry]
+  )
+
+  @SnakeCaseJsonCodec case class PageListEntry(
+      name: Seq[String],
+      slug: Seq[String]
   )
 }
