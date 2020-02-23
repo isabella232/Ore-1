@@ -92,8 +92,10 @@ object APIV2Queries extends DoobieOreProtocol {
   def array[F[_]: Reducible, A: Put](fs: F[A]): Fragment =
     fs.toList.map(a => fr0"$a").foldSmash1(fr0"ARRAY[", fr",", fr0"]")
 
-  def array2Text[F[_]: Reducible, A: Put, B: Put](fs: F[(A, B)]): Fragment =
-    fs.toList.map { case (a, b) => fr0"($a, $b)::TEXT" }.foldSmash1(fr0"ARRAY[", fr",", fr0"]")
+  def array2Text[F[_]: Reducible, A: Put, B: Put](t1: String, t2: String)(fs: F[(A, B)]): Fragment =
+    fs.toList
+      .map { case (a, b) => fr0"($a::" ++ Fragment.const(t1) ++ fr0", $b::" ++ Fragment.const(t2) ++ fr0")::TEXT" }
+      .foldSmash1(fr0"ARRAY[", fr",", fr0"]")
 
   def projectSelectFrag(
       pluginId: Option[String],
@@ -157,7 +159,8 @@ object APIV2Queries extends DoobieOreProtocol {
         val jsSelect =
           sql"""|SELECT promoted.platform
                 |    FROM (SELECT unnest(platforms)                AS platform,
-                |                 unnest(platform_coarse_versions) AS platform_coarse_version
+                |                 unnest(platform_coarse_versions) AS platform_coarse_version,
+                |                 stability
                 |              FROM jsonb_to_recordset(p.promoted_versions) AS promoted(platforms TEXT[], platform_coarse_versions TEXT[], stability STABILITY)) AS promoted """.stripMargin ++
             Fragments.whereAndOpt(
               NonEmptyList
@@ -393,7 +396,7 @@ object APIV2Queries extends DoobieOreProtocol {
       NonEmptyList
         .fromList(platformsWithVersion)
         .map { t =>
-          array2Text(t) ++
+          array2Text("TEXT", "TEXT")(t) ++
             fr"&& ARRAY(SELECT (platform, coarse_version)::TEXT FROM unnest(pv.platforms, pv.platform_coarse_versions) as plat(platform, coarse_version))"
         },
       NonEmptyList.fromList(stability).map(Fragments.in(fr"pv.stability", _)),
