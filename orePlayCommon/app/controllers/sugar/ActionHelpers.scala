@@ -178,7 +178,7 @@ object ActionHelpers {
 
   class FormBindOps[A](private val form: Form[A]) extends AnyVal {
     def bindZIO[B](error: Form[A] => B)(implicit request: Request[_]): IO[B, A] =
-      form.bindFromRequest().fold(error.andThen(ZIO.fail), ZIO.succeed)
+      form.bindFromRequest().fold(f => ZIO.fail(error(f)), ZIO.succeed[A](_))
 
     def bindEitherT[F[_]] = new BindFormEitherTPartiallyApplied[F, A](form)
 

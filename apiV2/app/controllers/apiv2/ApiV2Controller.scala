@@ -103,11 +103,11 @@ class ApiV2Controller @Inject()(
           .mapError(_.leftMap(_ => unAuth("No authorization specified")).merge)
         token <- ZIO
           .fromOption(creds.params.get("session"))
-          .asError(unAuth("No session specified"))
+          .orElseFail(unAuth("No session specified"))
         info <- service
           .runDbCon(APIV2Queries.getApiAuthInfo(token).option)
           .get
-          .asError(unAuth("Invalid session"))
+          .orElseFail(unAuth("Invalid session"))
         res <- {
           if (info.expires.isBefore(OffsetDateTime.now())) {
             service.deleteWhere(ApiSession)(_.token === token) *> IO.fail(unAuth("Api session expired"))
@@ -153,7 +153,7 @@ class ApiV2Controller @Inject()(
       //but then we wouldn't get the 404 on a non existent scope.
       val scopePerms: IO[Unit, Permission] =
         apiScopeToRealScope(scope).flatMap(request.permissionIn[Scope, IO[Unit, *]](_))
-      val res = scopePerms.asError(NotFound).ensure(Forbidden)(_.has(perms))
+      val res = scopePerms.orElseFail(NotFound).ensure(Forbidden)(_.has(perms))
 
       zioToFuture(res.either.map(_.swap.toOption))
     }
@@ -206,11 +206,11 @@ class ApiV2Controller @Inject()(
               expiration <- ZIO
                 .succeed(sessionExpiration)
                 .get
-                .asError(Right(BadRequest("The requested expiration can't be used")))
+                .orElseFail(Right(BadRequest("The requested expiration can't be used")))
               t <- service
                 .runDbCon(APIV2Queries.findApiKey(identifier, token).option)
                 .get
-                .asError(Right(unAuth("Invalid api key")))
+                .orElseFail(Right(unAuth("Invalid api key")))
               (keyId, keyOwnerId) = t
             } yield SessionType.Key -> ApiSession(uuidToken, Some(keyId), Some(keyOwnerId), expiration)
           case _ =>
@@ -222,7 +222,7 @@ class ApiV2Controller @Inject()(
           ZIO
             .succeed(publicSessionExpiration)
             .get
-            .asError(BadRequest("The requested expiration can't be used"))
+            .orElseFail(BadRequest("The requested expiration can't be used"))
             .map(expiration => SessionType.Public -> ApiSession(uuidToken, None, None, expiration))
         case Right(e) => ZIO.fail(e)
       }
@@ -279,7 +279,7 @@ class ApiV2Controller @Inject()(
       ZIO
         .succeed(request.apiInfo.session)
         .get
-        .asError(BadRequest("This request was not made with a session"))
+        .orElseFail(BadRequest("This request was not made with a session"))
         .flatMap(session => service.deleteWhere(ApiSession)(_.token === session))
         .as(NoContent)
   }
@@ -325,7 +325,7 @@ class ApiV2Controller @Inject()(
       for {
         user <- ZIO
           .fromOption(request.user)
-          .asError(BadRequest(ApiError("Public keys can't be used to delete")))
+          .orElseFail(BadRequest(ApiError("Public keys can't be used to delete")))
         rowsAffected <- service.runDbCon(APIV2Queries.deleteApiKey(name, user.id.value).run)
       } yield if (rowsAffected == 0) NotFound else NoContent
     }
@@ -344,7 +344,7 @@ class ApiV2Controller @Inject()(
   ): IO[Result, (APIScope, Permission)] =
     for {
       apiScope <- ZIO.fromEither(createApiScope(pluginId, organizationName))
-      scope    <- apiScopeToRealScope(apiScope).asError(NotFound)
+      scope    <- apiScopeToRealScope(apiScope).orElseFail(NotFound)
       perms    <- request.permissionIn(scope)
     } yield (apiScope, perms)
 
@@ -361,7 +361,7 @@ class ApiV2Controller @Inject()(
       )(
         Some(1.minute)
       )(fa.memoize)
-      .asError(InternalServerError)
+      .orElseFail(InternalServerError)
       .flatten
 
   def showPermissions(pluginId: Option[String], organizationName: Option[String]): Action[AnyContent] =
@@ -671,9 +671,9 @@ class ApiV2Controller @Inject()(
         }
 
         for {
-          user    <- ZIO.fromOption(request.user).asError(BadRequest(ApiError("No user found for session")))
+          user    <- ZIO.fromOption(request.user).orElseFail(BadRequest(ApiError("No user found for session")))
           _       <- uploadErrors(user)
-          project <- projects.withPluginId(pluginId).get.asError(NotFound)
+          project <- projects.withPluginId(pluginId).get.orElseFail(NotFound)
           data    <- dataF
           file    <- fileF
           pendingVersion <- factory
