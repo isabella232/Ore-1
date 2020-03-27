@@ -56,7 +56,7 @@
                 </ul>
             </div>
 
-            <member-list :permissions="permissions" :members="members" role-category="project"></member-list>
+            <member-list :permissions="permissions" :members="members" role-category="project" :settings-route="{name: 'settings'}"></member-list>
         </div>
     </div>
 </template>

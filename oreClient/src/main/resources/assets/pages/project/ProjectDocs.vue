@@ -130,7 +130,7 @@
             </div>
 
 
-            <member-list :members="members" :permissions="permissions" role-category="project"/>
+            <member-list :members="members" :permissions="permissions" role-category="project" :settings-route="{name: 'settings'}" />
         </div>
     </div>
 </template>
