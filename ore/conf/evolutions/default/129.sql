@@ -25,7 +25,7 @@ FROM project_version_downloads pvd
          JOIN project_versions pv ON pvd.version_id = pv.id;
 
 ALTER TABLE project_version_download_warnings
-    ADD COLUMN download_warning_2 BIGINT REFERENCES project_versions_downloads_individual ON DELETE CASCADE;
+    ADD COLUMN download_warning_2 BIGINT;
 
 UPDATE project_version_download_warnings
 SET download_warning_2 = pvdi.id
@@ -41,6 +41,9 @@ ALTER TABLE project_version_download_warnings
 
 ALTER TABLE project_version_download_warnings
     RENAME COLUMN download_warning_2 TO download_id;
+
+ALTER TABLE project_version_download_warnings
+    ADD CONSTRAINT project_version_download_warnings_download_id_fkey FOREIGN KEY (download_id) REFERENCES project_versions_downloads_individual ON DELETE CASCADE;
 
 DROP TABLE project_version_downloads;
 
@@ -466,7 +469,7 @@ CREATE TRIGGER clean_old_project_version_downloads
 EXECUTE PROCEDURE delete_old_project_version_downloads();
 
 ALTER TABLE project_version_download_warnings
-    ADD COLUMN download_warning_2 BIGINT REFERENCES project_version_downloads ON DELETE CASCADE;
+    ADD COLUMN download_warning_2 BIGINT;
 
 UPDATE project_version_download_warnings
 SET download_warning_2 = pvd.id
@@ -482,6 +485,9 @@ ALTER TABLE project_version_download_warnings
 
 ALTER TABLE project_version_download_warnings
     RENAME COLUMN download_warning_2 TO download_id;
+
+ALTER TABLE project_version_download_warnings
+    ADD CONSTRAINT project_version_download_warnings_download_id_fkey FOREIGN KEY (download_id) REFERENCES project_version_downloads ON DELETE CASCADE;
 
 DROP TABLE project_versions_downloads_individual;
 
