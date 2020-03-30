@@ -189,11 +189,11 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
               .flatMap { posterName =>
                 users.requestPermission(request.user, posterName, Permission.PostAsOrganization).toZIO
               }
-              .asError(request.user)
+              .orElseFail(request.user)
               .either
               .map(_.merge)
           }
-          topicId <- ZIO.fromOption(request.project.topicId).asError(BadRequest)
+          topicId <- ZIO.fromOption(request.project.topicId).orElseFail(BadRequest)
           _       <- service.insert(Job.PostDiscourseReply.newJob(topicId, poster.name, formData.content).toJob)
         } yield Redirect(self.showDiscussion(author, slug))
       }
@@ -211,7 +211,7 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
     projects
       .withSlug(author, slug)
       .get
-      .asError(NotFound)
+      .orElseFail(NotFound)
       .flatMap(project => project.obj.iconUrlOrPath.map(_.fold(Redirect(_), showImage)))
   }
 
@@ -394,7 +394,7 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms, factory: Proj
         }
       } yield res
 
-      res.asError(NotFound)
+      res.orElseFail(NotFound)
     }
 
   /**

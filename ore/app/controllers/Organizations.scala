@@ -100,7 +100,7 @@ class Organizations @Inject()(forms: OreForms)(
         .organizationRoles(ModelView.now(OrganizationUserRole))
         .get(id)
         .toZIO
-        .asError(notFound)
+        .orElseFail(notFound)
         .flatMap { role =>
           import MembershipDossier._
           status match {

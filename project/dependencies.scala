@@ -51,9 +51,10 @@ object Deps {
   val circeDerivation = "io.circe" %% "circe-derivation-annotations" % Version.circeDerivation
   val circeParser     = "io.circe" %% "circe-parser"                 % Version.circe
 
-  val akkaHttp     = "com.typesafe.akka" %% "akka-http"      % Version.akkaHttp
-  val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core" % Version.akkaHttp
-  val akkaStream   = "com.typesafe.akka" %% "akka-stream"    % Version.akka
+  val akkaHttp     = "com.typesafe.akka" %% "akka-http"        % Version.akkaHttp
+  val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core"   % Version.akkaHttp
+  val akkaStream   = "com.typesafe.akka" %% "akka-stream"      % Version.akka
+  val akkaTyped    = "com.typesafe.akka" %% "akka-actor-typed" % Version.akka
 
   val scalaLogging = "com.typesafe.scala-logging" %% "scala-logging" % Version.scalaLogging
 

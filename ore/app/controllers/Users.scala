@@ -84,7 +84,7 @@ class Users @Inject()(
           sponge <- this.sso
             .authenticate(sso.get, sig.get)(isNonceValid)
             .get
-            .asError(Redirect(ShowHome).withError("error.loginFailed"))
+            .orElseFail(Redirect(ShowHome).withError("error.loginFailed"))
           fromSponge = sponge.toUser
           // Complete authentication
           user <- users.getOrCreate(sponge.username, fromSponge, _ => IO.unit)

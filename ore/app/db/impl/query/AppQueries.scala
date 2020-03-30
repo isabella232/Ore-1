@@ -18,6 +18,8 @@ import cats.syntax.all._
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
+import doobie.implicits.javatime._
+import doobie.implicits.javasql._
 
 object AppQueries extends WebDoobieOreProtocol {
 

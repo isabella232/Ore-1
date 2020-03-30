@@ -191,14 +191,11 @@ object ActionHelpers {
       form.bindFromRequest().fold(left.andThen(EitherT.leftT[F, B](_)), EitherT.rightT[F, A](_))
   }
 
-  //This gets us around a warning about this being unreachable. Yes, we know
-  private def impossible[A](@unused a: A): Throwable = new Exception(s"Got impossible nothing")
-
   private[sugar] def zioToFuture[A](
       io: ZIO[Blocking with Clock, Nothing, A]
   )(implicit runtime: zio.Runtime[Blocking with Clock]): Future[A] =
     //TODO: If Sentry can't differentiate different errors here, log the error, and throw an exception ignored by Sentry instead
-    runtime.unsafeRun(io.toFutureWith(impossible))
+    runtime.unsafeRunToFuture(io)
 
   class OreActionBuilderOps[R[_], B](private val action: ActionBuilder[R, B]) extends AnyVal {
 

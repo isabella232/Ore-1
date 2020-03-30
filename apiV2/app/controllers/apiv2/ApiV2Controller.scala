@@ -63,7 +63,7 @@ class ApiV2Controller @Inject()(
   implicit def zioMode[R]: scalacache.Mode[ZIO[R, Throwable, *]] =
     scalacache.CatsEffect.modes.async[ZIO[R, Throwable, *]]
 
-  private val resultCache = scalacache.caffeine.CaffeineCache[IO[Result, Result]]
+  private val resultCache = scalacache.caffeine.CaffeineCache[ZIO[Blocking, Result, Result]]
 
   lifecycle.addStopHook(() => zioRuntime.unsafeRunToFuture(resultCache.close[Task]()))
 
@@ -316,7 +316,7 @@ class ApiV2Controller @Inject()(
               (service.runDBIO(nameTaken): IO[Result, Boolean]).ifM(ifTaken, ifFree)
             }
           }
-          .leftMap((ApiErrors.apply _).andThen(BadRequest.apply(_)).andThen(IO.fail))
+          .leftMap((ApiErrors.apply _).andThen(BadRequest.apply(_)).andThen(IO.fail(_)))
           .merge
     }
 
@@ -348,19 +348,14 @@ class ApiV2Controller @Inject()(
       perms    <- request.permissionIn(scope)
     } yield (apiScope, perms)
 
-  def cachingF[R, A, B](
+  def cachingF[A, B](
       cacheKey: String
-  )(parts: Any*)(fa: ZIO[R, Result, Result])(implicit request: ApiRequest[B]): ZIO[R, Result, Result] =
+  )(parts: Any*)(fa: ZIO[Blocking, Result, Result])(implicit request: ApiRequest[B]): ZIO[Blocking, Result, Result] =
     resultCache
-      .cachingF[ZIO[R, Throwable, *]](
-        cacheKey +: parts :+
-          request.apiInfo.key.map(_.tokenIdentifier) :+
-          //We do both the user and the token for authentication methods that don't use a token
-          request.apiInfo.user.map(_.id) :+
-          request.body
-      )(
-        Some(1.minute)
-      )(fa.memoize)
+      .cachingF[ZIO[Blocking, Throwable, *]](
+        cacheKey +: parts :+ request.apiInfo.key.map(_.tokenIdentifier) :+ request.apiInfo.user
+          .map(_.id) :+ request.body: _*
+      )(Some(1.minute))(fa.memoize)
       .orElseFail(InternalServerError)
       .flatten
 

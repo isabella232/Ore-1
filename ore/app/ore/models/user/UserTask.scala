@@ -30,8 +30,8 @@ class UserTask @Inject()(config: OreConfig, lifecycle: ApplicationLifecycle, run
 
   val interval: Duration = zio.duration.Duration.fromScala(config.ore.api.session.checkInterval)
 
-  private val action = ZIO
-    .accessM[Clock](_.clock.currentTime(TimeUnit.MILLISECONDS))
+  private val action = zio.clock
+    .currentTime(TimeUnit.MILLISECONDS)
     .map(Instant.ofEpochMilli)
     .map(OffsetDateTime.ofInstant(_, ZoneOffset.UTC))
     .flatMap(now => service.deleteWhere(ApiSession)(_.expires < now))
