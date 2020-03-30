@@ -11,12 +11,12 @@ object Version {
   val zioCats = "2.0.0.0-RC12"
 
   val slick     = "3.3.2"
-  val slickPg   = "0.18.1"
+  val slickPg   = "0.19.0"
   val playSlick = "5.0.0"
   val doobie    = "0.8.8"
 
   val circe           = "0.13.0"
-  val circeDerivation = "0.13.0-M3"
+  val circeDerivation = "0.13.0-M4"
 
   val akka         = "2.6.4"
   val akkaHttp     = "10.1.11"
