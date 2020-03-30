@@ -23,6 +23,20 @@ DROP FUNCTION add_version_download;
 
 # --- !Downs
 
+DELETE
+FROM project_views_individual a
+    USING project_views_individual b
+WHERE a.id > b.id
+  AND a.project_id = b.project_id
+  AND (a.address = b.address OR a.cookie = b.cookie OR a.user_id = b.user_id);
+
+DELETE
+FROM project_versions_downloads_individual a
+    USING project_versions_downloads_individual b
+WHERE a.id > b.id
+  AND a.project_id = b.project_id
+  AND (a.address = b.address OR a.cookie = b.cookie OR a.user_id = b.user_id);
+
 ALTER TABLE project_versions_downloads_individual
     ADD CONSTRAINT project_versions_downloads_individual_version_id_address_key UNIQUE (version_id, address),
     ADD CONSTRAINT project_versions_downloads_individual_version_id_cookie_key UNIQUE (version_id, cookie),
