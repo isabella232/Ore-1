@@ -8,7 +8,6 @@ import ore.permission.role.Role
 
 import doobie._
 import doobie.implicits._
-import doobie.implicits.javatime._
 
 object UserPagesQueries extends WebDoobieOreProtocol {
 

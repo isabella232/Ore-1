@@ -27,7 +27,7 @@ import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
 import doobie.implicits.javasql._
-import doobie.implicits.javatime._
+import doobie.implicits.javatime.JavaTimeLocalDateMeta
 import doobie.postgres.circe.jsonb.implicits._
 import doobie.util.Put
 import io.circe.DecodingFailure
@@ -35,8 +35,6 @@ import zio.ZIO
 import zio.blocking.Blocking
 
 object APIV2Queries extends WebDoobieOreProtocol {
-
-  Put[LocalDate]
 
   implicit val apiV2TagRead: Read[List[APIV2QueryVersionTag]] =
     viewTagListRead.map(_.map(t => APIV2QueryVersionTag(t.name, t.data, t.color)))

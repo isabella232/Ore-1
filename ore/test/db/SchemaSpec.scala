@@ -12,7 +12,6 @@ import ore.models.user.role.{DbRole, OrganizationUserRole, ProjectUserRole}
 
 import doobie.implicits._
 import doobie.implicits.javasql._
-import doobie.implicits.javatime._
 import doobie.postgres.implicits._
 import doobie.postgres.circe.jsonb.implicits._
 import org.junit.runner._

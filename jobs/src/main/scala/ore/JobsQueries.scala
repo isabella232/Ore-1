@@ -6,7 +6,6 @@ import ore.models.Job
 
 import doobie._
 import doobie.implicits._
-import doobie.implicits.javatime._
 import doobie.postgres.implicits._
 
 object JobsQueries {
