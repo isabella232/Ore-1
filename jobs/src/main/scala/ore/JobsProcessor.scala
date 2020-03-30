@@ -9,7 +9,7 @@ import ore.db.access.ModelView
 import ore.db.impl.schema.{ProjectTable, VersionTable}
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.{Model, ObjId}
-import ore.discourse.{Discourse, DiscourseError}
+import ore.discourse.DiscourseError
 import ore.models.{Job, JobInfo}
 import ore.models.project.{Project, Version}
 
@@ -38,7 +38,7 @@ object JobsProcessor {
   }
 
   private def tryGetJob: URIO[Db, Option[Model[Job]]] =
-    ZIO.accessM(_.service.runDbCon(JobsQueries.tryGetjob.option))
+    ZIO.accessM(_.get.runDbCon(JobsQueries.tryGetjob.option))
 
   private def logJob(job: Model[Job]): UIO[Unit] =
     ZIO.descriptorWith(desc => UIO(Logger.debug(s"Starting on fiber ${desc.id} job $job")))
@@ -61,7 +61,7 @@ object JobsProcessor {
     job.toTyped.map(r => Model[Job.TypedJob](ObjId(job.id.value), job.createdAt, r)) match {
       case Left(e) =>
         ZIO
-          .accessM[Db](_.service.update(job)(asFatalFailure(_, e, "decode_failed")))
+          .accessM[Db](_.get.update(job)(asFatalFailure(_, e, "decode_failed")))
           .andThen(ZIO.fail(s"Failed to decode job\nJob: $job\nError: $e"))
 
       case Right(typedJob) => ZIO.succeed(typedJob)
@@ -72,7 +72,7 @@ object JobsProcessor {
     f(ctx, Model(ObjId(typed.id), typed.createdAt, typed.toJob))
 
   private def updateJob(job: Model[Job.TypedJob], update: JobInfo => JobInfo): URIO[Db, Model[Job]] =
-    ZIO.accessM[Db](convertJob(job, _)(_.service.update(_)(updateJobInfo(_)(update))))
+    ZIO.accessM[Db](convertJob(job, _)(_.get.update(_)(updateJobInfo(_)(update))))
 
   private def setLastUpdated(job: Model[Job.TypedJob]): URIO[Db, Unit] =
     updateJob(job, identity).unit
@@ -89,14 +89,14 @@ object JobsProcessor {
     case Some(value) => ZIO.succeed(value)
     case None =>
       ZIO
-        .accessM[Db](convertJob(job, _)(_.service.update(_)(asFatalFailure(_, error, errorDescriptor))))
+        .accessM[Db](convertJob(job, _)(_.get.update(_)(asFatalFailure(_, error, errorDescriptor))))
         .andThen(ZIO.fail(Right(error)))
   }
 
   private def processJob(
       job: Model[Job.TypedJob]
   ): ZIO[Db with Discourse with Config, Either[Unit, String], Model[Job.TypedJob]] =
-    setLastUpdated(job) *> ZIO.access[Db](_.service).flatMap { implicit service =>
+    setLastUpdated(job) *> ZIO.access[Db](_.get).flatMap { implicit service =>
       job.obj match {
         case Job.UpdateDiscourseProjectTopic(_, projectId) =>
           getDataOrFatal(
@@ -148,7 +148,7 @@ object JobsProcessor {
     def retryInConfig(error: Option[String], errorDescriptor: Option[String])(
         duration: OreJobsConfig => FiniteDuration
     ) =
-      ZIO.access[Config](env => duration(env.config)) >>= retryIn(error, errorDescriptor)
+      ZIO.access[Config](env => duration(env.get)) >>= retryIn(error, errorDescriptor)
 
     ZIO
       .accessM[Discourse](program)
@@ -156,7 +156,7 @@ object JobsProcessor {
         case _: TimeoutException =>
           ZIO.succeed(Left(()))
 
-        case e: CircuitBreakerOpenException => retryIn(None, None)(e.remainingDuration).catchAll(ZIO.succeed)
+        case e: CircuitBreakerOpenException => retryIn(None, None)(e.remainingDuration).catchAll(ZIO.succeed(_))
       }
       .orDie
       .absolve
@@ -185,20 +185,20 @@ object JobsProcessor {
 
   private def updateProjectTopic(job: Model[Job.TypedJob], project: Model[Project]) =
     handleDiscourseErrors(job) { env =>
-      if (project.topicId.isDefined) env.discourse.updateProjectTopic(project)
-      else env.discourse.createProjectTopic(project).map(_.void)
+      if (project.topicId.isDefined) env.get.updateProjectTopic(project)
+      else env.get.createProjectTopic(project).map(_.void)
     }
 
   private def updateVersionPost(job: Model[Job.TypedJob], project: Model[Project], version: Model[Version]) = {
     handleDiscourseErrors(job) { env =>
       val doVersion = (project: Model[Project]) =>
-        if (version.postId.isDefined) env.discourse.updateVersionPost(project, version)
-        else env.discourse.createVersionPost(project, version).map(_.void)
+        if (version.postId.isDefined) env.get.updateVersionPost(project, version)
+        else env.get.createVersionPost(project, version).map(_.void)
 
       if (project.topicId.isDefined) {
         doVersion(project)
       } else {
-        env.discourse.createProjectTopic(project).flatMap {
+        env.get.createProjectTopic(project).flatMap {
           case Left(e)      => ZIO.succeed(Left(e))
           case Right(value) => doVersion(value)
         }
@@ -207,9 +207,9 @@ object JobsProcessor {
   }
 
   private def deleteTopic(job: Model[Job.TypedJob], topicId: Int) =
-    handleDiscourseErrors(job)(_.discourse.deleteTopic(topicId))
+    handleDiscourseErrors(job)(_.get.deleteTopic(topicId))
 
   private def postReply(job: Model[Job.TypedJob], topicId: Int, poster: String, content: String) =
-    handleDiscourseErrors(job)(_.discourse.postDiscussionReply(topicId, poster, content).map(_.void))
+    handleDiscourseErrors(job)(_.get.postDiscussionReply(topicId, poster, content).map(_.void))
 
 }

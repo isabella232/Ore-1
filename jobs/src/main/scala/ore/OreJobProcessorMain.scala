@@ -2,8 +2,7 @@ package ore
 
 import java.sql.Connection
 
-import scala.concurrent.Await
-import scala.util.chaining._
+import scala.concurrent.ExecutionContext
 
 import ore.db.ModelService
 import ore.db.access.ModelView
@@ -11,14 +10,11 @@ import ore.db.impl.OrePostgresDriver
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.service.OreModelService
 import ore.discourse.AkkaDiscourseApi.AkkaDiscourseSettings
-import ore.discourse.{AkkaDiscourseApi, Discourse, DiscourseApi, OreDiscourseApi, OreDiscourseApiEnabled}
+import ore.discourse.{AkkaDiscourseApi, DiscourseApi, OreDiscourseApi, OreDiscourseApiEnabled}
 import ore.models.Job
 
 import akka.actor.{ActorSystem, Terminated}
-import akka.stream.scaladsl.{Sink, StreamConverters}
-import akka.stream.{ActorMaterializer, Materializer}
-import akka.util.ByteString
-import cats.effect.{Blocker, Resource}
+import cats.effect.{Blocker, ConcurrentEffect, Resource}
 import cats.tagless.syntax.all._
 import cats.~>
 import com.typesafe.scalalogging
@@ -28,61 +24,44 @@ import doobie.util.transactor.{Strategy, Transactor}
 import slick.jdbc.JdbcDataSource
 import zio._
 import zio.blocking.Blocking
-import zio.clock.Clock
-import zio.console.Console
 import zio.duration.Duration
 import zio.interop.catz._
-import zio.random.Random
-import zio.system.System
 
 object OreJobProcessorMain extends zio.ManagedApp {
   private val Logger = scalalogging.Logger("OreJobsMain")
 
   type SlickDb = OrePostgresDriver.backend.DatabaseDef
 
+  implicit def cEffect[R >: ZEnv]: ConcurrentEffect[RIO[R, *]] = {
+    implicit val runtime: Runtime[R] = this
+    zio.interop.catz.taskEffectInstance
+  }
+
+  private val blocker =
+    Blocker.liftExecutionContext(this.environment.get[Blocking.Service].blockingExecutor.asEC)
+
   override def run(args: List[String]): ZManaged[ZEnv, Nothing, Int] = {
     def log(f: scalalogging.Logger => Unit): ZManaged[Any, Nothing, Unit] = ZManaged.fromEffect(UIO(f(Logger)))
 
-    (for {
-      _          <- log(_.info("Ore jobs processing starting"))
-      db         <- createSlickDb
-      transactor <- createDoobieTransactor(db)
-      taskService = new OreModelService(db, transactor)
-      uioService  = taskService.mapK(Lambda[Task ~> UIO](task => task.orDie))
-      _                   <- log(_.info("Created DB system"))
-      actorSystem         <- createActorSystem
-      _                   <- log(_.info("Created Akka system"))
-      jobsConfig          <- createConfig
-      _                   <- log(_.info("Loaded config"))
-      akkaDiscourseClient <- createDiscourseApi(jobsConfig)(actorSystem)
-      oreDiscourse = createOreDiscourse(akkaDiscourseClient)(jobsConfig, taskService, actorSystem)
-      _ <- log(_.info("Init finished. Starting"))
-      _ <- runApp(db.source.maxConnections.getOrElse(32))
-        .provideSome[ZEnv](createExpandedEnvironment(uioService, oreDiscourse, jobsConfig))
-    } yield 0).catchAll(ZManaged.succeed)
+    val transactorL       = (slickDbLayer ++ doobieInterpreterLayer ++ connectECLayer) >>> transactorLayer
+    val taskModelServiceL = (slickDbLayer ++ transactorL) >>> modelServiceLayer
+    val uioModelServiceL  = taskModelServiceL.map(h => Has(h.get.mapK(Lambda[Task ~> UIO](task => task.orDie))))
+    val discourseApiL     = (configLayer ++ actorSystemLayer) >>> discourseApiLayer
+    val oreDiscourseL     = (discourseApiL ++ configLayer ++ taskModelServiceL) >>> oreDiscourseLayer
+    val oreEnvL           = uioModelServiceL ++ configLayer ++ oreDiscourseL
+
+    val all: ZManaged[OreEnv with Has[SlickDb], Nothing, Int] = for {
+      maxConnections <- ZManaged.access[Has[SlickDb]](_.get.source.maxConnections.getOrElse(32))
+      _              <- log(_.info("Init finished. Starting"))
+      _              <- runApp(maxConnections)
+    } yield 0
+
+    all.provideCustomLayer(oreEnvL ++ slickDbLayer).catchAll(ZManaged.succeed(_))
   }
 
-  type ExpandedEnvironment = Db with Discourse with Config with ZEnv
-
-  private def createExpandedEnvironment(
-      serviceObj: ModelService[UIO],
-      discourseObj: OreDiscourseApi[Task],
-      configObj: OreJobsConfig
-  )(env: ZEnv): ExpandedEnvironment =
-    new Db with Discourse with Config with Clock with Console with System with Random with Blocking {
-      override val random: Random.Service[Any]      = env.random
-      override val system: System.Service[Any]      = env.system
-      override val config: OreJobsConfig            = configObj
-      override val console: Console.Service[Any]    = env.console
-      override val clock: Clock.Service[Any]        = env.clock
-      override val discourse: OreDiscourseApi[Task] = discourseObj
-      override val service: ModelService[UIO]       = serviceObj
-      override val blocking: Blocking.Service[Any]  = env.blocking
-    }
-
-  private def runApp(maxConnections: Int): ZManaged[ExpandedEnvironment, Nothing, Unit] =
-    ZManaged.environment[ExpandedEnvironment].flatMap { env =>
-      implicit val service: ModelService[UIO] = env.service
+  private def runApp(maxConnections: Int): ZManaged[OreEnv, Nothing, Unit] =
+    ZManaged.environment[OreEnv].flatMap { env =>
+      implicit val service: ModelService[UIO] = env.get[ModelService[UIO]]
 
       val checkAndCreateFibers = for {
         awaitingJobs <- ModelView.now(Job).count(_.state === (Job.JobState.NotStarted: Job.JobState))
@@ -99,7 +78,7 @@ object OreJobProcessorMain extends zio.ManagedApp {
         } else ZIO.unit
       } yield ()
 
-      val schedule = Schedule.spaced(Duration.fromScala(env.config.jobs.checkInterval))
+      val schedule = Schedule.spaced(Duration.fromScala(env.get[OreJobsConfig].jobs.checkInterval))
 
       ZManaged.fromEffect(
         checkAndCreateFibers.sandbox
@@ -117,100 +96,122 @@ object OreJobProcessorMain extends zio.ManagedApp {
     ZManaged.succeed(-1)
   }
 
+  private def logErrorInt(msg: String)(e: Throwable): UIO[Int] = {
+    Logger.error(msg, e)
+    ZIO.succeed(-1)
+  }
+
   private def logErrorUIO(msg: String)(e: Throwable): UIO[Unit] = {
     Logger.error(msg, e)
     ZIO.succeed(())
   }
 
-  private def createSlickDb: ZManaged[Any, Int, SlickDb] =
+  private val slickDbLayer: ZLayer[Any, Int, Has[SlickDb]] =
     ZManaged
       .makeEffect(Database.forConfig("jobs-db", classLoader = this.getClass.getClassLoader))(_.close())
       .flatMapError(logErrorManaged("Failed to connect to db"))
+      .toLayer
 
-  private def createDoobieTransactor(db: SlickDb): ZManaged[ZEnv, Int, Transactor[Task]] = {
-    (for {
-      connectEC <- {
-        implicit val runtime: DefaultRuntime = this
-        ExecutionContexts.fixedThreadPool[Task](32).toManaged
+  private val connectECLayer = ExecutionContexts
+    .fixedThreadPool[Task](32)
+    .toManaged
+    .flatMapError(logErrorManaged("Failed to create doobie transactor"))
+    .toLayer
+
+  private val doobieInterpreterLayer: ZLayer[Any, Nothing, Has[KleisliInterpreter[Task]]] =
+    ZLayer.succeed(KleisliInterpreter[Task](blocker))
+
+  private val transactorLayer
+      : ZLayer[Has[ExecutionContext] with Has[KleisliInterpreter[Task]] with Has[SlickDb], Nothing, Has[
+        Transactor[Task]
+      ]] =
+    ZLayer.fromServices[ExecutionContext, KleisliInterpreter[Task], SlickDb, Transactor[Task]] {
+      (connectEC, interpreter, db) =>
+        Transactor[Task, JdbcDataSource](
+          db.source,
+          source => {
+            import zio.blocking._
+            val acquire = Task(source.createConnection()).on(connectEC)
+
+            def release(c: Connection) = effectBlocking(c.close()).provide(environment)
+
+            Resource.make(acquire)(release)
+          },
+          interpreter.ConnectionInterpreter,
+          Strategy.default
+        )
+    }
+
+  private val modelServiceLayer: ZLayer[Has[SlickDb] with Has[Transactor[Task]], Nothing, Has[ModelService[Task]]] =
+    ZLayer.fromServices[SlickDb, Transactor[Task], ModelService[Task]](new OreModelService(_, _))
+
+  private val actorSystemLayer: ZLayer[Any, Nothing, Has[ActorSystem]] =
+    ZManaged
+      .make(UIO(ActorSystem("OreJobs"))) { system =>
+        val terminate: ZIO[Any, Unit, Terminated] = ZIO
+          .fromFuture(ec => system.terminate().map(identity)(ec))
+          .flatMapError(logErrorUIO("Error when stopping actor system"))
+        terminate.ignore
       }
-      blocker <- ZManaged.fromEffect(blocking.blockingExecutor)
-    } yield {
-      Transactor[Task, JdbcDataSource](
-        db.source,
-        source => {
-          import zio.blocking._
-          val acquire = Task(source.createConnection()).on(connectEC)
+      .toLayer
 
-          def release(c: Connection) = effectBlocking(c.close()).provide(environment)
+  private val configLayer: ZLayer[Any, Int, Has[OreJobsConfig]] =
+    ZManaged
+      .fromEither(OreJobsConfig.load)
+      .flatMapError { es =>
+        Logger.error(
+          s"Failed to load config:${es.toList.map(e => s"${e.description} -> ${e.location.fold("")(_.description)}").mkString("\n  ", "\n  ", "")}"
+        )
+        ZManaged.succeed(-1)
+      }
+      .toLayer
 
-          Resource.make(acquire)(release)
-        },
-        KleisliInterpreter[Task](Blocker.liftExecutionContext(blocker.asEC)).ConnectionInterpreter,
-        Strategy.default
-      )
-    }).flatMapError(logErrorManaged("Failed to create doobie transactor"))
-  }
-
-  private def createActorSystem: ZManaged[Any, Nothing, ActorSystem] =
-    ZManaged.make(UIO(ActorSystem("OreJobs"))) { system =>
-      val terminate: ZIO[Any, Unit, Terminated] = ZIO
-        .fromFuture(ec => system.terminate().map(identity)(ec))
-        .flatMapError(logErrorUIO("Error when stopping actor system"))
-      terminate.ignore
-    }
-
-  private def createConfig: ZManaged[Any, Int, OreJobsConfig] =
-    ZManaged.fromEither(OreJobsConfig.load).flatMapError { es =>
-      Logger.error(
-        s"Failed to load config:${es.toList.map(e => s"${e.description} -> ${e.location.fold("")(_.description)}").mkString("\n  ", "\n  ", "")}"
-      )
-      ZManaged.succeed(-1)
-    }
-
-  private def createDiscourseApi(
-      config: OreJobsConfig
-  )(implicit system: ActorSystem): ZManaged[Any, Int, AkkaDiscourseApi[Task]] =
-    config.discourse.api.pipe { cfg =>
-      ZManaged
-        .fromEffect(
-          AkkaDiscourseApi[Task](
-            AkkaDiscourseSettings(
-              cfg.key,
-              cfg.admin,
-              config.discourse.baseUrl,
-              cfg.breaker.maxFailures,
-              cfg.breaker.reset,
-              cfg.breaker.timeout
-            )
+  private val discourseApiLayer: ZLayer[Config with Has[ActorSystem], Int, Has[DiscourseApi[Task]]] =
+    ZLayer.fromServicesM[OreJobsConfig, ActorSystem, Any, Int, DiscourseApi[Task]] {
+      (config: OreJobsConfig, system: ActorSystem) =>
+        implicit val impSystem: ActorSystem = system
+        val cfg                             = config.discourse.api
+        AkkaDiscourseApi[Task](
+          AkkaDiscourseSettings(
+            cfg.key,
+            cfg.admin,
+            config.discourse.baseUrl,
+            cfg.breaker.maxFailures,
+            cfg.breaker.reset,
+            cfg.breaker.timeout
           )
-        )
-        .flatMapError(logErrorManaged("Failed to create forums client"))
+        ).flatMapError(logErrorInt("Failed to create forums client"))
     }
 
-  private def createOreDiscourse(
-      discourseClient: DiscourseApi[Task]
-  )(implicit config: OreJobsConfig, service: ModelService[Task], system: ActorSystem): OreDiscourseApiEnabled[Task] =
-    config.discourse.pipe { cfg =>
-      implicit val runtime: Runtime[ZEnv] = this
-      def readFile(file: String) =
-        Await.result(
-          StreamConverters
-            .fromInputStream(
-              () => this.getClass.getClassLoader.getResourceAsStream(file)
-            )
-            .fold(ByteString.empty)(_ ++ _)
-            .map(_.utf8String)
-            .runWith(Sink.head),
-          scala.concurrent.duration.Duration.Inf
+  private val oreDiscourseLayer
+      : ZLayer[Has[DiscourseApi[Task]] with Has[OreJobsConfig] with Has[ModelService[Task]], Int, Discourse] = {
+    def readFile(file: String): Task[String] = {
+      fs2.io
+        .readInputStream(ZIO(this.getClass.getClassLoader.getResourceAsStream(file)), 1024, blocker)
+        .through(fs2.text.utf8Decode)
+        .compile
+        .string
+    }
+
+    ZLayer.fromServicesM[DiscourseApi[Task], OreJobsConfig, ModelService[Task], Any, Int, OreDiscourseApi[Task]] {
+      (discourseClient, config, service) =>
+        val cfg                                     = config.discourse
+        implicit val impService: ModelService[Task] = service
+        implicit val impConfig: OreJobsConfig       = config
+
+        val f = for {
+          projectTopic <- readFile("discourse/project_topic.md")
+          versionPost  <- readFile("discourse/version_post.md")
+        } yield new OreDiscourseApiEnabled[Task](
+          discourseClient,
+          cfg.categoryDefault,
+          cfg.categoryDeleted,
+          projectTopic,
+          versionPost,
+          cfg.api.admin
         )
 
-      new OreDiscourseApiEnabled[Task](
-        discourseClient,
-        cfg.categoryDefault,
-        cfg.categoryDeleted,
-        readFile("discourse/project_topic.md"),
-        readFile("discourse/version_post.md"),
-        cfg.api.admin
-      )
+        f.flatMapError(logErrorInt("Failed to create ore discourse client"))
     }
+  }
 }
