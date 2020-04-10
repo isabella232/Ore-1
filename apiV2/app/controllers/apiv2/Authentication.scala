@@ -146,8 +146,7 @@ class Authentication(
 
   def authenticate(): Action[ApiSessionProperties] =
     Action.asyncF(defaultBody(parseCirce.decodeJson[ApiSessionProperties], ApiSessionProperties(None, None))) {
-      implicit request =>
-        if (request.body._fake.getOrElse(false)) authenticateDev else authenticateKeyPublic
+      implicit request => if (request.body._fake.getOrElse(false)) authenticateDev else authenticateKeyPublic
     }
 
   def deleteSession(): Action[AnyContent] = ApiAction(Permission.None, APIScope.GlobalScope).asyncF { request =>

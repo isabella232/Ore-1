@@ -1,7 +1,5 @@
 package db.impl
 
-import javax.inject.{Inject, Singleton}
-
 import scala.concurrent.{ExecutionContext, Future}
 
 import play.api.inject.ApplicationLifecycle
@@ -19,8 +17,7 @@ import doobie.implicits._
 import zio.clock.Clock
 import zio.{Schedule, RIO, Task, UIO, ZIO, duration}
 
-@Singleton
-class DbUpdateTask @Inject()(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.Runtime[Clock])(
+class DbUpdateTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.Runtime[Clock])(
     implicit ec: ExecutionContext,
     projects: ProjectBase[Task],
     service: ModelService[Task]

@@ -1,7 +1,5 @@
 package ore.models.project.factory
 
-import javax.inject.{Inject, Singleton}
-
 import play.api.cache.SyncCacheApi
 import play.api.i18n.Messages
 
@@ -285,8 +283,7 @@ trait ProjectFactory {
 
 }
 
-@Singleton
-class OreProjectFactory @Inject()(
+class OreProjectFactory(
     val service: ModelService[UIO],
     val config: OreConfig,
     val cacheApi: SyncCacheApi,

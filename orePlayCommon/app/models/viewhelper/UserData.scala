@@ -66,12 +66,9 @@ object UserData {
       implicit service: ModelService[F],
       F: Monad[F],
       par: Parallel[F]
-  ): F[(Set[Role], Permission)] = {
+  ): F[(Set[Role], Permission)] =
     (
       user.permissionsIn(GlobalScope),
       user.globalRoles.allFromParent
-    ).parMapN { (userPerms, globalRoles) =>
-      (globalRoles.map(_.toRole).toSet, userPerms)
-    }
-  }
+    ).parMapN((userPerms, globalRoles) => (globalRoles.map(_.toRole).toSet, userPerms))
 }

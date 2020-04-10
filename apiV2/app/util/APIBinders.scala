@@ -11,9 +11,7 @@ object APIBinders {
   private def objBindable[A](name: String, decode: String => Option[A], encode: A => String) =
     new QueryStringBindable[A] {
       override def bind(key: String, params: Map[String, Seq[String]]): Option[Either[String, A]] =
-        params.get(key).flatMap(_.headOption).map { str =>
-          decode(str).toRight(s"$str is not a valid $name")
-        }
+        params.get(key).flatMap(_.headOption).map(str => decode(str).toRight(s"$str is not a valid $name"))
 
       override def unbind(key: String, value: A): String = s"$key=${encode(value)}"
     }

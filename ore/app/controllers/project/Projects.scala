@@ -3,7 +3,6 @@ package controllers.project
 import java.nio.file.{Files, Path}
 import java.security.MessageDigest
 import java.util.Base64
-import javax.inject.{Inject, Singleton}
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
@@ -48,8 +47,7 @@ import zio.{IO, Task, UIO, ZIO}
 /**
   * Controller for handling Project related actions.
   */
-@Singleton
-class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms)(
+class Projects(stats: StatTracker[UIO], forms: OreForms)(
     implicit oreComponents: OreControllerComponents,
     messagesApi: MessagesApi,
     renderer: MarkdownRenderer
@@ -558,8 +556,7 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms)(
     */
   def showFlags(author: String, slug: String): Action[AnyContent] =
     Authenticated.andThen(PermissionAction(Permission.ModNotesAndFlags)).andThen(ProjectAction(author, slug)) {
-      implicit request =>
-        Ok(views.admin.flags(request.data))
+      implicit request => Ok(views.admin.flags(request.data))
     }
 
   /**
@@ -573,8 +570,7 @@ class Projects @Inject()(stats: StatTracker[UIO], forms: OreForms)(
       getProject(author, slug).flatMap { project =>
         import cats.instances.vector._
         project.decodeNotes.toVector.parTraverse(note => ModelView.now(User).get(note.user).value.tupleLeft(note)).map {
-          notes =>
-            Ok(views.admin.notes(project, Model.unwrapNested(notes)))
+          notes => Ok(views.admin.notes(project, Model.unwrapNested(notes)))
         }
       }
     }

@@ -134,8 +134,8 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
         .flatMap {
           case (_, id, _, _) =>
             //TODO: In the future when we represent the tree in a better way, just promote all children one level up
-            service.deleteWhere(Page)(
-              p => p.id === id && p.isDeletable && TableQuery[PageTable].filter(_.parentId === id).size === 0
+            service.deleteWhere(Page)(p =>
+              p.id === id && p.isDeletable && TableQuery[PageTable].filter(_.parentId === id).size === 0
             )
         }
         .map {

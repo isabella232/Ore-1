@@ -1,7 +1,6 @@
 package ore.rest
 
 import java.lang.Math._
-import javax.inject.{Inject, Singleton}
 
 import play.api.libs.json.Json.{obj, toJson}
 import play.api.libs.json.{JsArray, JsObject, JsString, JsValue}
@@ -283,16 +282,15 @@ trait OreRestfulApiV1 extends OreWrites {
         val seq      = pages.filter(_.parentId == parentId)
         val pageById = pages.map(p => (p.id.value, p)).toMap
         toJson(
-          seq.map(
-            page =>
-              obj(
-                "createdAt" -> page.createdAt.value,
-                "id"        -> page.id.value,
-                "name"      -> page.name,
-                "parentId"  -> page.parentId,
-                "slug"      -> page.slug,
-                "fullSlug"  -> page.fullSlug(page.parentId.flatMap(pageById.get).map(_.obj))
-              )
+          seq.map(page =>
+            obj(
+              "createdAt" -> page.createdAt.value,
+              "id"        -> page.id.value,
+              "name"      -> page.name,
+              "parentId"  -> page.parentId,
+              "slug"      -> page.slug,
+              "fullSlug"  -> page.fullSlug(page.parentId.flatMap(pageById.get).map(_.obj))
+            )
           )
         )
       }
@@ -380,9 +378,7 @@ trait OreRestfulApiV1 extends OreWrites {
       pluginId: String,
       version: String
   )(implicit projectBase: ProjectBase[UIO]): OptionT[UIO, JsValue] =
-    OptionT(projectBase.withPluginId(pluginId)).map { _ =>
-      JsArray.empty
-    }
+    OptionT(projectBase.withPluginId(pluginId)).map(_ => JsArray.empty)
 
   /**
     * Get the Tag Color information from an ID
@@ -393,5 +389,4 @@ trait OreRestfulApiV1 extends OreWrites {
   def getTagColor(tagId: Int): Option[JsValue] = TagColor.withValueOpt(tagId).map(toJson(_)(tagColorWrites))
 }
 
-@Singleton
-class OreRestfulServerV1 @Inject()(val service: ModelService[UIO], val config: OreConfig) extends OreRestfulApiV1
+class OreRestfulServerV1(val service: ModelService[UIO], val config: OreConfig) extends OreRestfulApiV1
