@@ -14,15 +14,16 @@ import db.impl.query.APIV2Queries
 import models.protocols.APIV2
 import models.querymodels.APIV2ProjectStatsQuery
 import models.viewhelper.ProjectData
+import ore.OreConfig
 import ore.data.project.Category
 import ore.models.project.factory.{ProjectFactory, ProjectTemplate}
 import ore.models.project.{ProjectSortingStrategy, Version}
 import ore.permission.Permission
 import ore.util.OreMDC
-import util.PatchDecoder
+import util.{PartialUtils, PatchDecoder}
 import util.syntax._
 
-import cats.data.{NonEmptyList, Validated}
+import cats.data.{NonEmptyList, Validated, ValidatedNel}
 import cats.syntax.all._
 import com.typesafe.scalalogging
 import io.circe._
@@ -158,6 +159,7 @@ class Projects(
               project.visibility,
               APIV2.UserActions(starred = false, watching = false),
               APIV2.ProjectSettings(
+                project.settings.keywords,
                 project.settings.homepage,
                 project.settings.issues,
                 project.settings.source,
@@ -194,18 +196,17 @@ class Projects(
   def editProject(pluginId: String): Action[Json] =
     ApiAction(Permission.EditProjectSettings, APIScope.ProjectScope(pluginId))
       .asyncF(parseCirce.json) { implicit request =>
-        val root = request.body.hcursor
-
-        val res: Decoder.AccumulatingResult[EditableProject] = EditableProjectF.patchDecoder.traverseKC(
-          λ[PatchDecoder ~>: Compose2[Decoder.AccumulatingResult, Option, *]](_.decode(root))
+        val res: ValidatedNel[String, EditableProject] = PartialUtils.decodeAndValidate(
+          EditableProjectF.patchDecoder,
+          EditableProjectF.validation,
+          request.body.hcursor
         )
 
         res match {
           case Validated.Valid(a) =>
             //Renaming a project is a big deal, and can't be done as easily as most other things
             val withoutName = a.copy[Option](
-              name = None,
-              settings = a.settings.copy[Option](keywords = a.settings.keywords.map(_.distinct))
+              name = None
             )
 
             val renameOp = a.name.fold(ZIO.unit: ZIO[Any, Result, Unit]) { newName =>
@@ -230,7 +231,7 @@ class Projects(
               )
               .flatten
               .map(Ok(_))
-          case Validated.Invalid(e) => ZIO.fail(BadRequest(ApiErrors(e.map(_.show))))
+          case Validated.Invalid(e) => ZIO.fail(BadRequest(ApiErrors(e)))
         }
       }
 
@@ -316,6 +317,34 @@ object Projects {
       PatchDecoder.fromName(Derive.namesWithProductImplicitsC[EditableProjectF, Decoder])(
         io.circe.derivation.renaming.snakeCase
       )
+
+    def validation(implicit config: OreConfig): EditableProjectF[PartialUtils.Validator] = {
+      import PartialUtils.Validator
+      import PartialUtils.Validator._
+
+      EditableProjectF[Validator](
+        checkLength("project name", config.ore.projects.maxDescLen),
+        noValidation,
+        noValidation,
+        allValid(invaidIfEmpty("summary"), validIfEmpty(checkLength("summary", config.ore.projects.maxDescLen))),
+        EditableProjectSettingsF[Validator](
+          allValid(
+            seq => Validated.condNel(seq.lengthIs > 5, seq, "Too many keywords provided"),
+            seq => Validated.condNel(seq.contains(""), seq, "Found keywords with empty strings"),
+            seq => Validated.condNel(seq.distinct == seq, seq, "Found duplicate keywords")
+          ),
+          invaidIfEmpty("homepage"),
+          invaidIfEmpty("issues"),
+          invaidIfEmpty("sources"),
+          invaidIfEmpty("support"),
+          EditableProjectLicenseF[Validator](
+            invaidIfEmpty("license name"),
+            invaidIfEmpty("license url")
+          ),
+          noValidation
+        )
+      )
+    }
   }
 
   case class EditableProjectSettingsF[F[_]](

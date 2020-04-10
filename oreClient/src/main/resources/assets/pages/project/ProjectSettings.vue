@@ -35,6 +35,16 @@
                     </div>
 
                     <div class="panel-body">
+                        <!-- Summary -->
+                        <div class="setting" :set="maxLength = config.ore.projects.maxDescLen">
+                            <div class="setting-description">
+                                <h4>Summary</h4>
+                                <p><label for="summary-setting">A short summary of your project (max {{ maxLength }}).</label></p>
+                            </div>
+                            <input id="summary-setting" class="form-control" type="text" :maxlength="maxLength" v-model="summary">
+                            <div class="clearfix"></div>
+                        </div>
+
                         <div class="setting">
                             <div class="setting-description">
                                 <h4>Category</h4>
@@ -180,18 +190,8 @@
                             <div class="clearfix"></div>
                         </div>
 
-                        <!-- Summary -->
-                        <div class="setting" :set="maxLength = config.ore.projects.maxDescLen">
-                            <div class="setting-description">
-                                <h4>Summary</h4>
-                                <p><label for="summary-setting">A short summary of your project (max {{ maxLength }}).</label></p>
-                            </div>
-                            <input id="summary-setting" class="form-control" type="text" :maxlength="maxLength" v-model="summary">
-                            <div class="clearfix"></div>
-                        </div>
-
-                        <button name="save" class="btn btn-success btn-spinner" data-icon="fa-check">
-                            <font-awesome-icon :icon="['fas', 'check']" /> Save changes
+                        <button @click="sendProjectUpdate(dataToSend)" name="save" class="btn btn-success">
+                            <font-awesome-icon :icon="saveChangesIcon" :spin="sendingChanges" /> Save changes
                             {{ dataToSend }}
                         </button>
                     </div>
@@ -262,14 +262,13 @@
                         <div class="setting">
                             <div class="setting-description">
                                 <h4 class="danger">Rename</h4>
-                                <p>Rename project</p>
+                                <p>Rename project. <strong>NOTE: This will not change the project's plugin id, only it's name.</strong></p>
                             </div>
                             <div class="setting-content">
-                                <input form="rename" class="form-control" type="text"
-                                       :value="project.name"
+                                <input class="form-control" type="text"
+                                       v-model="newName"
                                        :maxlength="config.ore.projects.maxNameLen">
-                                <button id="btn-rename" data-toggle="modal" data-target="#modal-rename"
-                                        class="btn btn-warning" disabled>
+                                <button id="btn-rename" data-toggle="modal" data-target="#modal-rename" class="btn btn-warning">
                                     Rename
                                 </button>
                             </div>
@@ -341,7 +340,7 @@
                             <button type="button" class="btn btn-default" data-dismiss="modal">
                                 Close
                             </button>
-                            <button name="rename" class="btn btn-warning">Rename</button>
+                            <button @click="sendProjectUpdate({'name': newName})" name="rename" class="btn btn-warning">Rename</button>
                         </div>
                     </div>
                 </div>
@@ -385,8 +384,9 @@
     import CSRFField from "../../components/CSRFField";
     import MemberList from "../../components/MemberList";
     import Icon from "../../components/Icon";
-    import {avatarUrl as avatarUrlUtils, clearFromDefaults} from "../../utils"
+    import {avatarUrl as avatarUrlUtils, clearFromDefaults, cleanEmptyObject, nullIfEmpty} from "../../utils"
     import {Category} from "../../enums";
+    import {API} from "../../api";
 
     export default {
         components: {
@@ -397,8 +397,9 @@
         },
         data() {
             return {
+                newName: this.project.name,
                 category: this.project.category,
-                keywords: '', //TODO
+                keywords: this.project.settings.keywords,
                 homepage: this.project.settings.homepage,
                 issues: this.project.settings.issues,
                 sources: this.project.settings.sources,
@@ -408,7 +409,8 @@
                 forumSync: this.project.settings.forum_sync,
                 summary: this.project.summary,
                 iconUrl: this.project.icon_url,
-                deployKey: null //TODO
+                deployKey: null, //TODO
+                sendingChanges: false
             }
         },
         props: {
@@ -444,25 +446,40 @@
                 return Category
             },
             keywordArr() {
-                return this.keywords.split(' ')
+                return this.keywords.length ? this.keywords.split(' ') : [];
             },
             dataToSend() {
                 let base = clearFromDefaults({category: this.category, summary: this.summary}, this.project);
                 base.settings = clearFromDefaults({
                     keywords: this.keywordArr,
-                    homepage: this.homepage,
-                    issues: this.issues,
-                    support: this.support,
+                    homepage: nullIfEmpty(this.homepage),
+                    issues: nullIfEmpty(this.issues),
+                    support: nullIfEmpty(this.support),
                     forum_sync: this.forumSync
                 }, this.project.settings);
-                base.settings.license = clearFromDefaults({name: this.licenseName, url: this.licenseUrl}, this.project.settings.license);
+                base.settings.license = clearFromDefaults({name: nullIfEmpty(this.licenseName), url: nullIfEmpty(this.licenseUrl)}, this.project.settings.license);
 
-                return base
+                let ret = cleanEmptyObject(base);
+                return ret ? ret : {};
+            },
+            saveChangesIcon() {
+                return ['fas', this.sendingChanges ? 'spinner' : 'check']
             }
         },
         methods: {
             avatarUrl(name) {
                 return avatarUrlUtils(name)
+            },
+            sendProjectUpdate(update) {
+                this.sendingChanges = true;
+                $('#modal-rename').modal('hide');
+
+                API.request('projects/' + this.project.plugin_id, 'PATCH', update).then(result => {
+                    this.$emit('update_project', result);
+                    this.sendingChanges = false;
+                }).catch(failed => {
+                    //TODO
+                })
             }
         }
     }

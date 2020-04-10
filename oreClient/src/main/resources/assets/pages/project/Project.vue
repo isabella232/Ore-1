@@ -3,7 +3,7 @@
         <project-header :project="currentProject" :permissions="permissions" :members="members" :current-user="currentUser"
                         v-on:set-watching="updateWatching" v-on:toggle-starred="toggleStarred"/>
 
-        <router-view :project="currentProject" :permissions="permissions" :members="members"/>
+        <router-view :project="currentProject" :permissions="permissions" :members="members" v-on:update_project="updateProject" />
     </div>
 </template>
 
@@ -20,7 +20,7 @@
                 fetchedProject: null,
                 permissions: [],
                 members: [],
-                currentUser: null //TODO
+                currentUser: null
             }
         },
         props: {
@@ -90,6 +90,9 @@
                 else {
                     this.$emit('update-watching', newWatching)
                 }
+            },
+            updateProject(newProject) {
+                this.fetchedProject = newProject;
             }
         }
     }

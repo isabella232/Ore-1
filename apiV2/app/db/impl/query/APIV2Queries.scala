@@ -139,7 +139,8 @@ object APIV2Queries extends DoobieOreProtocol {
             |       p.description,
             |       ps.last_updated,
             |       p.visibility,""".stripMargin ++ userActionsTaken ++
-        fr"""|       p.homepage,
+        fr"""|       p.keywords,
+             |       p.homepage,
              |       p.issues,
              |       p.source,
              |       p.support,

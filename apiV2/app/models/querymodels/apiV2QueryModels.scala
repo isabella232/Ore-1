@@ -45,6 +45,7 @@ case class APIV2QueryProject(
     visibility: Visibility,
     userStarred: Boolean,
     userWatching: Boolean,
+    keywords: List[String],
     homepage: Option[String],
     issues: Option[String],
     sources: Option[String],
@@ -95,6 +96,7 @@ case class APIV2QueryProject(
           userWatching
         ),
         APIV2.ProjectSettings(
+          keywords,
           homepage,
           issues,
           sources,

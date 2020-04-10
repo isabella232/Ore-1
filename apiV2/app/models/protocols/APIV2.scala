@@ -77,6 +77,7 @@ object APIV2 {
   )
   @SnakeCaseJsonCodec case class UserActions(starred: Boolean, watching: Boolean)
   @SnakeCaseJsonCodec case class ProjectSettings(
+      keywords: Seq[String],
       homepage: Option[String],
       issues: Option[String],
       sources: Option[String],
