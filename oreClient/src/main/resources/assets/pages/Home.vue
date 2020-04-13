@@ -94,6 +94,7 @@
     import queryString from "query-string"
     import {clearFromDefaults} from "./../utils"
     import {Category, Platform, SortOptions} from "./../enums";
+    import sponsors from "./sponsors.json"
 
     function defaultData() {
         return {
@@ -142,39 +143,6 @@
                 return `Search in ${this.projectCount === null ? "all" : this.projectCount} projects` +
                     `${!this.isDefault ? " matching your filters" : ""}` +
                     ", proudly made by the community...";
-            },
-            config() {
-                return {
-                    sponge: {
-                        sponsors: [
-                            {
-                                "name": "MC Server Hosting",
-                                "image": "images/sponsors/mcserverhosting.png",
-                                "link": "https://mcserverhosting.net/?ref=sponge"
-                            },
-                            {
-                                "name": "CreeperHost",
-                                "image": "images/sponsors/creeperhost.svg",
-                                "link": "https://billing.creeperhost.net/link.php?id=8"
-                            },
-                            {
-                                "name": "Triplequote",
-                                "image": "images/sponsors/triplequote_black.svg",
-                                "link": "https://triplequote.com/hydra"
-                            },
-                            {
-                                "name": "JetBrains",
-                                "image": "images/sponsors/jetbrains.svg",
-                                "link": "https://www.jetbrains.com/"
-                            },
-                            {
-                                "name": "YourKit",
-                                "image": "images/sponsors/yourkit.png",
-                                "link": "https://www.yourkit.com/"
-                            },
-                        ]
-                    }
-                }
             }
         },
         methods: {
@@ -197,10 +165,8 @@
                 return '/assets/' + path;
             },
             randomSponsor() {
-                let logos = this.config.sponge.sponsors
-
-                let index = Math.floor(Math.random() * logos.length)
-                return logos[index]
+                let index = Math.floor(Math.random() * sponsors.length)
+                return sponsors[index]
             }
         },
         created() {
