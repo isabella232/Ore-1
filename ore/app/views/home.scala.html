@@ -33,34 +33,5 @@ sorted according to different criteria.
 
 @layout.base(messages("general.title"), scripts, additionalMeta = meta, additionalStyling = stylesheets) {
 
-    <!-- Header -->
-    <div class="index-header">
-        <div class="row centered-content-row">
-            <div class="col-md-9 ore-banner">
-                <div class="row aligned-row">
-                    <div class="col-xs-2 ore-logo">
-                        <img src="@assetsFinder.path("images/ore-colored.svg")" alt="Ore logo" />
-                    </div>
-                    <div class="col-xs-10 text">
-                        <div class="headline">Ore</div>
-                        <div>A Minecraft package repository</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 sponsor">
-                <div class="panel sponsor-panel">
-                    <span>Sponsored by</span>
-                    <div class="panel-body">
-                    @defining(randomSponsor) { sponsor =>
-                        <a href="@sponsor.link">
-                            <img class="logo" src="@assetsFinder.path(sponsor.image)" alt="Sponsor" />
-                        </a>
-                    }
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div id="home"></div>
 }

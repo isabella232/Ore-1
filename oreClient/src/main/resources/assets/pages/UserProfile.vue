@@ -1,6 +1,6 @@
 <template>
     <ProjectList :owner="user" :offset="(page - 1) * limit" :limit="limit"
-                 @prevPage="page--" @nextPage="page++" @jumpToPage="page = $event"></ProjectList>
+                 @prevPage="page--" @nextPage="page++" @jumpToPage="page = $event" :use-vue-router="false"></ProjectList>
 </template>
 
 <script>
@@ -10,11 +10,16 @@
         components: {
             ProjectList
         },
+        props: {
+            user: {
+                type: String,
+                required: true
+            }
+        },
         data: function() {
             return {
                 page: 1,
-                limit: 5,
-                user: window.USERNAME
+                limit: 5
             }
         }
     }
