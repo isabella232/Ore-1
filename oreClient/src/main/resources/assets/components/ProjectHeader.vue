@@ -1,6 +1,6 @@
 <template>
     <div class="project-header-container">
-        <div class="row" v-if="project.visibility !== 'public'">
+        <div class="row" v-if="project && project.visibility !== 'public'">
             <div class="col-xs-12">
                 <div class="alert alert-danger" role="alert" style="margin: 0.2em 0 0 0">
                     <span v-if="project.visibility === 'new'">
@@ -25,11 +25,11 @@
 
         <div class="row">
             <div class="col-md-6">
-                <div class="project-header">
+                <div v-if="project" class="project-header">
                     <div class="project-path">
                         <a :href="routes.Users.showProjects(project.namespace.owner).absoluteURL()">{{ project.namespace.owner }}</a>
                         /
-                        <router-link :to="{name: 'project_home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
+                        <router-link :to="{name: 'project_home'}" v-slot="{ href, navigate, isExactActive }">
                             <a class="project-name" :href="href" @click="navigate">{{ project.name }}</a>
                         </router-link>
                     </div>
@@ -50,7 +50,7 @@
                         {{ flagError }}
                     </span>
 
-                    <template v-if="project.visibility !== 'softDelete'">
+                    <template v-if="project && project.visibility !== 'softDelete'">
                         <template v-if="!isMember && currentUser">
                             <div class="btn-group" role="group" aria-label="Stars">
                                 <button @click="toggleStarred" class="btn btn-default btn-star">
@@ -150,7 +150,7 @@
                             Admin actions
                             <span class="caret"></span>
                         </button>
-                        <ul class="dropdown-menu" aria-labelledby="admin-actions">
+                        <ul v-if="project" class="dropdown-menu" aria-labelledby="admin-actions">
                             <li v-if="permissions.includes(permission.ModNotesAndFlags)">
                                 <a :href="routes.project.Projects.showFlags(project.namespace.owner, project.namespace.slug).absoluteURL()">
                                     Flag history ({{ projectData.flagCount }})
@@ -182,7 +182,7 @@
                 <div class="navbar navbar-default project-navbar pull-left">
                     <div class="navbar-inner">
                         <ul class="nav navbar-nav">
-                            <router-link :to="{name: 'project_home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
+                            <router-link :to="{name: 'project_home'}" v-slot="{ href, navigate, isExactActive }">
                                 <li :class="[isExactActive && 'active']">
                                     <a :href="href" @click="navigate"><font-awesome-icon :icon="['fas', 'book']" /> Docs</a>
                                 </li>
@@ -207,26 +207,26 @@
                                 </li>
                             </router-link>
 
-                            <li v-if="project.settings.homepage" id="homepage">
+                            <li v-if="project && project.settings.homepage" id="homepage">
                                 <a :title="project.settings.homepage" target="_blank" rel="noopener"
                                    :href="routes.Application.linkOut(project.settings.homepage).absoluteURL()">
                                     <font-awesome-icon :icon="['fas', 'home']" /> Homepage <font-awesome-icon :icon="['fas', 'external-link-alt']" /></a>
                             </li>
 
-                            <li v-if="project.settings.issues" id="issues">
+                            <li v-if="project && project.settings.issues" id="issues">
                                 <a :title="project.settings.issues" target="_blank" rel="noopener"
                                    :href="routes.Application.linkOut(project.settings.issues).absoluteURL()">
                                     <font-awesome-icon :icon="['fas', 'bug']" /> Issues <font-awesome-icon :icon="['fas', 'external-link-alt']" /></a>
                             </li>
 
-                            <li v-if="project.settings.sources" id="source">
+                            <li v-if="project && project.settings.sources" id="source">
                                 <a :title="project.settings.sources" target="_blank" rel="noopener"
                                    :href="routes.Application.linkOut(project.settings.sources).absoluteURL()">
                                     <font-awesome-icon :icon="['fas', 'code']" /> Source <font-awesome-icon :icon="['fas', 'external-link-alt']" />
                                 </a>
                             </li>
 
-                            <li v-if="project.settings.support" id="support">
+                            <li v-if="project && project.settings.support" id="support">
                                 <a :title="project.settings.support" target="_blank" rel="noopener"
                                    :href="routes.Application.linkOut(project.settings.support).absoluteURL()">
                                     <font-awesome-icon :icon="['fas', 'question-circle']" /> Support <font-awesome-icon :icon="['fas', 'external-link-alt']" />
@@ -249,6 +249,7 @@
     import markdownItWikilinks from "markdown-it-wikilinks"
     import markdownItTaskLists from "markdown-it-task-lists"
     import {API} from "../api";
+    import { mapState } from 'vuex'
 
     const md = markdownIt({
         linkify: true,
@@ -275,20 +276,7 @@
             noButtons: {
                 type: Boolean,
                 default: false
-            },
-            permissions: {
-                type: Array,
-                required: true
-            },
-            project: {
-                type: Object,
-                required: true
-            },
-            members: {
-                type: Array,
-                required: true,
-            },
-            currentUser: Object
+            }
         },
         computed: {
             fullSlug: function () {
@@ -317,12 +305,18 @@
             },
             flagReason() {
                 return FlagReason
-            }
+            },
+            ...mapState('user', {
+                currentUser: 'currentUser'
+            }),
+            ...mapState('project', ['project', 'permissions', 'members'])
         },
-        created() {
-            API.request('projects/' + this.project.plugin_id + '/_projectData').then((res) => {
-                this.projectData = res;
-            })
+        watch: {
+            project(val) {
+                API.request('projects/' + val.plugin_id + '/_projectData').then((res) => {
+                    this.projectData = res;
+                })
+            }
         },
         methods: {
             renderVisibilityChange: function (orElse) {
@@ -362,7 +356,7 @@
                         'csrfToken': window.csrf
                     }
                 }).done((res) => {
-                    this.$emit('toggle-starred');
+                    this.$store.commit('project/toggleStarred')
                 }).fail((xhr) => {
                     console.log(xhr)
                     //TODO: Handle error
@@ -377,7 +371,10 @@
                         'csrfToken': window.csrf
                     }
                 }).done((res) => {
-                    this.$emit('set-watching', newWatching);
+                    this.$store.commit({
+                        type: 'project/setWatching',
+                        watching: newWatching
+                    });
                 }).fail((xhr) => {
                     console.log(xhr)
                     //TODO: Handle error

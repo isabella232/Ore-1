@@ -1,7 +1,7 @@
 <template>
     <div class="row">
         <div class="col-md-9">
-            <version-list :project="project" :permissions="permissions" :platforms="concatPlatforms" :stability="flatStability"></version-list>
+            <version-list :platforms="concatPlatforms" :stability="flatStability"></version-list>
         </div>
 
         <div class="col-md-3">
@@ -65,6 +65,7 @@
     import VersionList from "./VersionList";
     import MemberList from "../../components/MemberList";
     import {Stability, Platform, Category} from "../../enums";
+    import { mapState } from 'vuex'
 
     export default {
         components: {
@@ -76,17 +77,6 @@
                 platforms: Platform.values.reduce((o, p) => ({...o, [p.id]: {name: '$all', versions: [p.id]}}), {}),
                 stability: [],
                 minecraftVersions: true
-            }
-        },
-        props: {
-            permissions: Array,
-            project: {
-                type: Object,
-                required: true
-            },
-            members: {
-                type: Array,
-                required: true
             }
         },
         computed: {
@@ -113,7 +103,11 @@
 
                     return res.flat()
                 }
-            }
+            },
+            ...mapState('project', [
+                'permissions',
+                'members'
+            ])
         },
         methods: {
             toggleStability(event, id) {

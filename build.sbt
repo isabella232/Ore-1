@@ -145,6 +145,7 @@ lazy val oreClient = project
     npmDependencies in Compile ++= Seq(
       NPMDeps.vue,
       NPMDeps.vueRouter,
+      NPMDeps.vuex,
       NPMDeps.lodash,
       NPMDeps.queryString,
       NPMDeps.fontAwesome,
@@ -155,7 +156,8 @@ lazy val oreClient = project
       NPMDeps.markdownIt,
       NPMDeps.markdownItAnchor,
       NPMDeps.markdownItTaskLists,
-      NPMDeps.markdownItWikiLinks
+      NPMDeps.markdownItWikiLinks,
+      NPMDeps.nProgress
     ),
     npmDevDependencies in Compile ++= Seq(
       NPMDeps.webpackMerge,
@@ -166,6 +168,7 @@ lazy val oreClient = project
       NPMDeps.babelLoader,
       NPMDeps.babel,
       NPMDeps.babelPresetEnv,
+      NPMDeps.json5Loader,
       NPMDeps.webpackTerser,
       NPMDeps.miniCssExtractor,
       NPMDeps.optimizeCssAssets,

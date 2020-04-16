@@ -1,3 +1,5 @@
+import config from "./config.json5"
+
 export function clearFromEmpty(object) {
     return Object.entries(object)
         .filter(([key, value]) => value != null && value !== "")
@@ -47,12 +49,22 @@ export function parseJsonOrNull(jsonString) {
     }
 }
 
+//https://stackoverflow.com/a/4673436/7207457
+export function formatString(format) {
+    let args = Array.prototype.slice.call(arguments, 1);
+    return format.replace(/{(\d+)}/g, function(match, number) {
+        return typeof args[number] != 'undefined'
+            ? args[number]
+            : match
+            ;
+    });
+};
+
 export function avatarUrl(name) {
-    //TODO: Get stuff from config
     if (name === 'Spongie') {
-        return 'https://www.spongepowered.org/assets/img/icons/spongie-mark.svg'
+        return config.sponge.logo;
     }
     else {
-        return `https://auth.spongepowered.org/avatar/${name}?size=120x120`;
+        return formatString(config.security.api.avatarUrl, name)
     }
 }

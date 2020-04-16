@@ -34,6 +34,12 @@ module.exports = {
                 to: Path.resolve(outputDir, 'font-awesome.css')
             }
         ]),
+        new CopyPlugin([
+            {
+                from: Path.resolve(modulesDir, 'nprogress', 'nprogress.css'),
+                to: Path.resolve(outputDir, 'nprogress.css')
+            }
+        ]),
         //new BundleAnalyzerPlugin()
     ],
     module: {
@@ -57,6 +63,11 @@ module.exports = {
             {
                 test: /\.scss$/,
                 use: [MiniCssExtractPlugin.loader, 'css-loader', 'postcss-loader', 'sass-loader'],
+            },
+            {
+                test: /\.json5$/i,
+                loader: 'json5-loader',
+                type: 'javascript/auto',
             },
         ]
     },

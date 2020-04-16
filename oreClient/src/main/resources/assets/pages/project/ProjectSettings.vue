@@ -1,5 +1,5 @@
 <template>
-    <div>
+    <div v-if="project">
         <div class="row">
             <div class="col-md-8">
 
@@ -350,6 +350,10 @@
             </div>
         </div>
     </div>
+    <div v-else>
+        <font-awesome-icon :icon="['fas', 'spinner']" spin></font-awesome-icon>
+        Loading
+    </div>
 </template>
 
 <script>
@@ -360,6 +364,8 @@
     import {avatarUrl as avatarUrlUtils, clearFromDefaults, cleanEmptyObject, nullIfEmpty} from "../../utils"
     import {Category} from "../../enums";
     import {API} from "../../api";
+    import config from "../../config.json5"
+    import { mapState } from 'vuex'
 
     export default {
         components: {
@@ -369,39 +375,51 @@
             Icon
         },
         data() {
-            return {
-                newName: this.project.name,
-                category: this.project.category,
-                keywords: this.project.settings.keywords,
-                homepage: this.project.settings.homepage,
-                issues: this.project.settings.issues,
-                sources: this.project.settings.sources,
-                support: this.project.settings.support,
-                licenseName: this.project.settings.license.name,
-                licenseUrl: this.project.settings.license.url,
-                forumSync: this.project.settings.forum_sync,
-                summary: this.project.summary,
-                iconUrl: this.project.icon_url,
-                deployKey: null,
-                showDeployKeySpinner: false,
-                sendingChanges: false,
-                selectedLogo: false,
-                deleteReason: '',
-                hardDelete: false
+            //Seems project hasn't been initialized yet, so we use the store directly
+            let project = this.$store.state.project.project;
+            if(project) {
+                return {
+                        newName: project.name,
+                        category: project.category,
+                        keywords: project.settings.keywords,
+                        homepage: project.settings.homepage,
+                        issues: project.settings.issues,
+                        sources: project.settings.sources,
+                        support: project.settings.support,
+                        licenseName: project.settings.license.name,
+                        licenseUrl: project.settings.license.url,
+                        forumSync: project.settings.forum_sync,
+                        summary: project.summary,
+                        iconUrl: project.icon_url,
+                        deployKey: null,
+                        showDeployKeySpinner: false,
+                        sendingChanges: false,
+                        selectedLogo: false,
+                        deleteReason: '',
+                        hardDelete: false
+                }
             }
-        },
-        props: {
-            permissions: {
-                type: Array,
-                required: true
-            },
-            project: {
-                type: Object,
-                required: true
-            },
-            members: {
-                type: Array,
-                required: true
+            else {
+                return {
+                    newName: null,
+                    category: null,
+                    keywords: [],
+                    homepage: null,
+                    issues: null,
+                    sources: null,
+                    support: null,
+                    licenseName: null,
+                    licenseUrl: null,
+                    forumSync: null,
+                    summary: null,
+                    iconUrl: null,
+                    deployKey: null,
+                    showDeployKeySpinner: false,
+                    sendingChanges: false,
+                    selectedLogo: false,
+                    deleteReason: '',
+                    hardDelete: false
+                }
             }
         },
         computed: {
@@ -409,15 +427,7 @@
                 return jsRoutes.controllers
             },
             config() {
-                return {
-                    ore: {
-                        projects: {
-                            //TODO: Get this from someplace better
-                            maxDescLen: 120,
-                            maxNameLen: 25
-                        }
-                    }
-                }
+                return config
             },
             categories() {
                 return Category
@@ -441,6 +451,26 @@
             },
             saveChangesIcon() {
                 return ['fas', this.sendingChanges ? 'spinner' : 'check']
+            },
+            ...mapState('project', ['project', 'permissions', 'members'])
+        },
+        watch: {
+            project(val, oldVal) {
+                console.log({val, oldVal})
+                if(!oldVal || val.plugin_id !== oldVal.plugin_id) {
+                    this.newName = this.project.name;
+                    this.category = this.project.category;
+                    this.keywords = '';
+                    this.homepage = this.project.settings.homepage;
+                    this.issues = this.project.settings.issues;
+                    this.sources = this.project.settings.sources;
+                    this.support = this.project.settings.support;
+                    this.licenseName = this.project.settings.license.name;
+                    this.licenseUrl = this.project.settings.license.url;
+                    this.forumSync = this.project.settings.forum_sync;
+                    this.summary = this.project.summary;
+                    this.iconUrl = this.project.icon_url;
+                }
             }
         },
         created() {
