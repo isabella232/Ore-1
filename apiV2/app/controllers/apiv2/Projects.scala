@@ -211,13 +211,13 @@ class Projects(
         )
 
         res match {
-          case Validated.Valid(a) =>
+          case Validated.Valid(edits) =>
             //Renaming a project is a big deal, and can't be done as easily as most other things
-            val withoutName = a.copy[Option](
+            val withoutName = edits.copy[Option](
               name = None
             )
 
-            val renameOp = a.name.fold(ZIO.unit: ZIO[Any, Result, Unit]) { newName =>
+            val renameOp = edits.name.fold(ZIO.unit: ZIO[Any, Result, Unit]) { newName =>
               projects
                 .withPluginId(pluginId)
                 .get
@@ -226,10 +226,12 @@ class Projects(
                 .mapError(e => BadRequest(ApiError(e)))
             }
 
-            renameOp *> service
+            val update = service.runDbCon(APIV2Queries.updateProject(pluginId, withoutName).run)
+
+            //We need two queries two queries as we use the generic update function
+            val get = service
               .runDbCon(
-                //We need two queries two queries as we use the generic update function
-                APIV2Queries.updateProject(pluginId, withoutName).run *> APIV2Queries
+                APIV2Queries
                   .singleProjectQuery(
                     pluginId,
                     request.globalPermissions.has(Permission.SeeHidden),
@@ -239,6 +241,13 @@ class Projects(
               )
               .flatten
               .map(Ok(_))
+
+            val count = PartialUtils.countDefined(edits)
+            count match {
+              case 0                         => ZIO.fail(BadRequest(ApiError("No updates defined")))
+              case 1 if edits.name.isDefined => renameOp *> get
+              case _                         => renameOp *> update *> get
+            }
           case Validated.Invalid(e) => ZIO.fail(BadRequest(ApiErrors(e)))
         }
       }

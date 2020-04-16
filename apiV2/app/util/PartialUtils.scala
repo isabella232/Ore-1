@@ -27,7 +27,7 @@ object PartialUtils {
     }
 
     def checkLength(field: String, maxLength: Int): Validator[String] =
-      name => Validated.condNel(name.length > maxLength, name, s"${field.capitalize} too long. Max length $maxLength")
+      name => Validated.condNel(name.length <= maxLength, name, s"${field.capitalize} too long. Max length $maxLength")
 
     def allValid[A](validators: Validator[A]*): Validator[A] =
       a => validators.map(f => f(a)).foldLeft(Validated.validNel[String, A](a))((acc, v) => acc *> v)
@@ -55,5 +55,15 @@ object PartialUtils {
     FT.sequenceK(
       FA.map2K(FA.mapK(decoders)(decodeAll(root)), validators)(validateAll)
     )
+
+  def toListK[F[_[_]], A](values: F[Const[A]#λ])(implicit F: FoldableKC[F]): List[A] = {
+    import cats.instances.list._
+    F.foldMapK(values)(FunctionK.liftConstToConst(a => List(a)))
+  }
+
+  def countDefined[F[_[_]]](values: F[Option])(implicit F: FoldableKC[F]): Int = {
+    import cats.instances.int._
+    F.foldMapK(values)(λ[Option ~>: Const[Int]#λ](fa => if (fa.isDefined) 1 else 0))
+  }
 
 }

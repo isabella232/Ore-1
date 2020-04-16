@@ -371,7 +371,7 @@ object APIV2Queries extends DoobieOreProtocol {
       (fr", owner_id = u.id", fr"FROM users u", fr"AND u.name = $owner")
     }
 
-    (updateTable("projects", projectColumns, edits) ++ ownerSet ++ ownerFrom ++ fr"WHERE plugin_id = $pluginId" ++ ownerFilter).update
+    (updateTable("projects", projectColumns, edits) ++ ownerSet ++ ownerFrom ++ fr" WHERE plugin_id = $pluginId" ++ ownerFilter).update
   }
 
   def projectMembers(pluginId: String, limit: Long, offset: Long): Query0[APIV2.ProjectMember] =

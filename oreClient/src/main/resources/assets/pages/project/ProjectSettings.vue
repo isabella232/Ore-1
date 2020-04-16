@@ -242,7 +242,7 @@
                                 <input class="form-control" type="text"
                                        v-model="newName"
                                        :maxlength="config.ore.projects.maxNameLen">
-                                <button id="btn-rename" data-toggle="modal" data-target="#modal-rename" class="btn btn-warning">
+                                <button id="btn-rename" data-toggle="modal" data-target="#modal-rename" class="btn btn-warning" :disabled="newName === this.project.name">
                                     Rename
                                 </button>
                             </div>
@@ -456,38 +456,54 @@
         },
         watch: {
             project(val, oldVal) {
-                console.log({val, oldVal})
                 if(!oldVal || val.plugin_id !== oldVal.plugin_id) {
-                    this.newName = this.project.name;
-                    this.category = this.project.category;
-                    this.keywords = '';
-                    this.homepage = this.project.settings.homepage;
-                    this.issues = this.project.settings.issues;
-                    this.sources = this.project.settings.sources;
-                    this.support = this.project.settings.support;
-                    this.licenseName = this.project.settings.license.name;
-                    this.licenseUrl = this.project.settings.license.url;
-                    this.forumSync = this.project.settings.forum_sync;
-                    this.summary = this.project.summary;
-                    this.iconUrl = this.project.icon_url;
+                    this.updateDataFromProject()
                 }
             }
         },
         created() {
-            this.getDeployKey()
+            if(this.project) {
+                this.getDeployKey()
+            }
         },
         methods: {
+            updateDataFromProject() {
+                this.getDeployKey();
+
+                this.newName = this.project.name;
+                this.category = this.project.category;
+                this.keywords = '';
+                this.homepage = this.project.settings.homepage;
+                this.issues = this.project.settings.issues;
+                this.sources = this.project.settings.sources;
+                this.support = this.project.settings.support;
+                this.licenseName = this.project.settings.license.name;
+                this.licenseUrl = this.project.settings.license.url;
+                this.forumSync = this.project.settings.forum_sync;
+                this.summary = this.project.summary;
+                this.iconUrl = this.project.icon_url;
+            },
             avatarUrl(name) {
                 return avatarUrlUtils(name)
             },
             sendProjectUpdate(update) {
                 this.sendingChanges = true;
                 $('#modal-rename').modal('hide');
+                let changedName = this.project.name !== this.newName;
 
                 API.request('projects/' + this.project.plugin_id, 'PATCH', update).then(result => {
-                    this.$emit('update_project', result);
+                    this.$store.commit({
+                        type: 'project/updateProject',
+                        project: result
+                    });
                     this.sendingChanges = false;
+                    this.updateDataFromProject();
+
+                    if(changedName) {
+                        this.$router.replace({name: 'settings', params: result.namespace})
+                    }
                 }).catch(failed => {
+                    this.sendingChanges = false;
                     //TODO
                 })
             },
