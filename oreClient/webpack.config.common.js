@@ -34,6 +34,12 @@ module.exports = {
                 to: Path.resolve(outputDir, 'font-awesome.css')
             }
         ]),
+        new CopyPlugin([
+            {
+                from: Path.resolve(modulesDir, 'nprogress', 'nprogress.css'),
+                to: Path.resolve(outputDir, 'nprogress.css')
+            }
+        ]),
         //new BundleAnalyzerPlugin()
     ],
     module: {

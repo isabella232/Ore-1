@@ -156,7 +156,8 @@ lazy val oreClient = project
       NPMDeps.markdownIt,
       NPMDeps.markdownItAnchor,
       NPMDeps.markdownItTaskLists,
-      NPMDeps.markdownItWikiLinks
+      NPMDeps.markdownItWikiLinks,
+      NPMDeps.nProgress
     ),
     npmDevDependencies in Compile ++= Seq(
       NPMDeps.webpackMerge,

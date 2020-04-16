@@ -28,6 +28,8 @@ object NPMDeps {
   val markdownItWikiLinks = "markdown-it-wikilinks"  -> "1.0.1"
   val markdownItTaskLists = "markdown-it-task-lists" -> "2.1.1"
 
+  val nProgress = "nprogress" -> "0.2.0"
+
   val webpack               = "4.42.0"
   val webpackDevServer      = "3.10.3"
   val webpackMerge          = "webpack-merge" -> "4.2.2"

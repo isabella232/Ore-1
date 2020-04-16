@@ -90,6 +90,7 @@
     import Pagination from "../../components/Pagination";
     import {Visibility, Stability, ReleaseType, Platform} from "../../enums";
     import {API} from "../../api";
+    import NProgress from "nprogress"
     import { mapState } from 'vuex'
 
     export default {
@@ -151,11 +152,12 @@
                     stability: this.stability
                 };
 
-
+                NProgress.start();
                 API.request("projects/" + this.project.plugin_id + "/versions", "GET", requestParams).then((response) => {
                     this.versions = response.result;
                     this.totalVersions = response.pagination.count;
                     this.loading = false;
+                    NProgress.done();
                 });
             },
             formatSize(size) {
