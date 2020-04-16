@@ -9,6 +9,9 @@ jdk:
 
 scala:
   - 2.13.1
+  
+node_js:
+- node
 
 services: postgresql
 
