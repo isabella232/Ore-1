@@ -145,6 +145,7 @@ lazy val oreClient = project
     npmDependencies in Compile ++= Seq(
       NPMDeps.vue,
       NPMDeps.vueRouter,
+      NPMDeps.vuex,
       NPMDeps.lodash,
       NPMDeps.queryString,
       NPMDeps.fontAwesome,

@@ -1,5 +1,5 @@
 <template>
-    <div>
+    <div v-if="project">
         <div class="row">
             <div class="col-md-8">
 
@@ -378,6 +378,10 @@
             </div>
         </div>
     </div>
+    <div v-else>
+        <font-awesome-icon :icon="['fas', 'spinner']" spin></font-awesome-icon>
+        Loading
+    </div>
 </template>
 
 <script>
@@ -387,6 +391,7 @@
     import Icon from "../../components/Icon";
     import {avatarUrl as avatarUrlUtils, clearFromDefaults} from "../../utils"
     import {Category} from "../../enums";
+    import { mapState } from 'vuex'
 
     export default {
         components: {
@@ -397,32 +402,18 @@
         },
         data() {
             return {
-                category: this.project.category,
-                keywords: '', //TODO
-                homepage: this.project.settings.homepage,
-                issues: this.project.settings.issues,
-                sources: this.project.settings.sources,
-                support: this.project.settings.support,
-                licenseName: this.project.settings.license.name,
-                licenseUrl: this.project.settings.license.url,
-                forumSync: this.project.settings.forum_sync,
-                summary: this.project.summary,
-                iconUrl: this.project.icon_url,
+                category: null,
+                keywords: null, //TODO
+                homepage: null,
+                issues: null,
+                sources: null,
+                support: null,
+                licenseName: null,
+                licenseUrl: null,
+                forumSync: null,
+                summary: null,
+                iconUrl: null,
                 deployKey: null //TODO
-            }
-        },
-        props: {
-            permissions: {
-                type: Array,
-                required: true
-            },
-            project: {
-                type: Object,
-                required: true
-            },
-            members: {
-                type: Array,
-                required: true
             }
         },
         computed: {
@@ -444,7 +435,7 @@
                 return Category
             },
             keywordArr() {
-                return this.keywords.split(' ')
+                return this.keywords ? this.keywords.split(' ') : null;
             },
             dataToSend() {
                 let base = clearFromDefaults({category: this.category, summary: this.summary}, this.project);
@@ -458,6 +449,25 @@
                 base.settings.license = clearFromDefaults({name: this.licenseName, url: this.licenseUrl}, this.project.settings.license);
 
                 return base
+            },
+            ...mapState('project', ['project', 'permissions', 'members'])
+        },
+        watch: {
+            project(val, oldVal) {
+                if(!oldVal || val.plugin_id !== oldVal.plugin_id) {
+                    this.category = this.project.category;
+                    this.keywords = '';
+                    this.homepage = this.project.settings.homepage;
+                    this.issues = this.project.settings.issues;
+                    this.sources = this.project.settings.sources;
+                    this.support = this.project.settings.support;
+                    this.licenseName = this.project.settings.license.name;
+                    this.licenseUrl = this.project.settings.license.url;
+                    this.forumSync = this.project.settings.forum_sync;
+                    this.summary = this.project.summary;
+                    this.iconUrl = this.project.icon_url;
+                    this.deployKey = null //TODO
+                }
             }
         },
         methods: {
