@@ -401,19 +401,39 @@
             Icon
         },
         data() {
-            return {
-                category: null,
-                keywords: null, //TODO
-                homepage: null,
-                issues: null,
-                sources: null,
-                support: null,
-                licenseName: null,
-                licenseUrl: null,
-                forumSync: null,
-                summary: null,
-                iconUrl: null,
-                deployKey: null //TODO
+            //Seems project hasn't been initialized yet, so we use the store directly
+            let project = this.$store.state.project.project;
+            if(project) {
+                return {
+                    category: project.category,
+                    keywords: '',
+                    homepage: project.settings.homepage,
+                    issues: project.settings.issues,
+                    sources: project.settings.sources,
+                    support: project.settings.support,
+                    licenseName: project.settings.license.name,
+                    licenseUrl: project.settings.license.url,
+                    forumSync: project.settings.forum_sync,
+                    summary: project.summary,
+                    iconUrl: project.icon_url,
+                    deployKey: null //TODO
+                }
+            }
+            else {
+                return {
+                    category: null,
+                    keywords: null, //TODO
+                    homepage: null,
+                    issues: null,
+                    sources: null,
+                    support: null,
+                    licenseName: null,
+                    licenseUrl: null,
+                    forumSync: null,
+                    summary: null,
+                    iconUrl: null,
+                    deployKey: null //TODO
+                }
             }
         },
         computed: {
@@ -454,6 +474,7 @@
         },
         watch: {
             project(val, oldVal) {
+                console.log({val, oldVal})
                 if(!oldVal || val.plugin_id !== oldVal.plugin_id) {
                     this.category = this.project.category;
                     this.keywords = '';
