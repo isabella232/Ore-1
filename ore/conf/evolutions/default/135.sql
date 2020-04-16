@@ -79,7 +79,7 @@ CREATE TABLE project_version_platforms
 (
     id                      BIGSERIAL PRIMARY KEY,
     created_at              TIMESTAMPTZ NOT NULL,
-    version_id              BIGINT      NOT NULL REFERENCES project_versions,
+    version_id              BIGINT      NOT NULL REFERENCES project_versions ON DELETE CASCADE,
     platform                TEXT        NOT NULL,
     platform_version        TEXT,
     platform_coarse_version TEXT
@@ -160,7 +160,7 @@ ORDER BY sq.platform_version DESC;
 
 CREATE TABLE project_stats
 (
-    id               BIGINT      NOT NULL PRIMARY KEY REFERENCES projects,
+    id               BIGINT      NOT NULL PRIMARY KEY REFERENCES projects ON DELETE CASCADE,
     views            BIGINT      NOT NULL,
     downloads        BIGINT      NOT NULL,
     recent_views     BIGINT      NOT NULL,
@@ -270,7 +270,7 @@ CREATE FUNCTION update_project_stats_last_updated_trigger() RETURNS TRIGGER
 $$
 BEGIN
     UPDATE project_stats
-    SET last_updated = (SELECT coalesce(max(lv), (SELECT p.created_at FROM projects p WHERE p.id = old.project_id))
+    SET last_updated = (SELECT coalesce(max(lv.created_at), (SELECT p.created_at FROM projects p WHERE p.id = old.project_id))
                         FROM project_versions lv
                         WHERE lv.project_id = old.project_id)
     WHERE id = old.project_id;;
@@ -290,7 +290,7 @@ CREATE FUNCTION remove_invalid_promoted_versions_trigger() RETURNS TRIGGER
 $$
 BEGIN
     IF ((tg_op = 'UPDATE' AND new.visibility != 1) OR tg_op = 'DELETE') THEN
-        DELETE FROM promoted_versions WHERE project_id = old.project_id AND version_string = old.version_string;;
+        REFRESH MATERIALIZED VIEW promoted_versions;; --Let's hope this won't become a performance problem
     END IF;;
 
     IF (tg_op = 'UPDATE') THEN

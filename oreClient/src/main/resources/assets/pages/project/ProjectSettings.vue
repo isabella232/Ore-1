@@ -564,13 +564,13 @@
             },
             deleteProject() {
                 if(this.hardDelete) {
-                    API.request('/projects/' + this.plugin.plugin_id, 'DELETE').then(res => {
+                    API.request('projects/' + this.project.plugin_id, 'DELETE').then(res => {
                         //TODO: Needs the merged Vue views to really make sense
                         this.$router.push({to: 'home'})
                     })
                 }
                 else {
-                    API.request('projects/' + this.plugin.plugin_id + '/visibility', 'POST', {
+                    API.request('projects/' + this.project.plugin_id + '/visibility', 'POST', {
                         visibility: 'softDelete',
                         reason: this.deleteReason
                     }).then(res => {
