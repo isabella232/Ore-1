@@ -204,24 +204,21 @@
                     <div class="panel-body">
                         <!-- Project icon -->
                         <div class="setting setting-icon">
-                            <form id="form-icon" enctype="multipart/form-data">
+                            <form id="form-icon" enctype="multipart/form-data" method="post">
                                 <CSRFField></CSRFField>
                                 <div class="setting-description">
                                     <h4>Icon</h4>
 
-                                    <icon :username="project.namespace.owner"
-                                          :src="avatarUrl(project.namespace.owner)"
-                                          :imgSrc="iconUrl"
-                                          class="user-avatar-md"></icon>
+                                    <icon :src="iconUrl" extra-classes="user-avatar-md"></icon>
 
-                                    <input class="form-control-static" type="file" id="icon" name="icon"/>
+                                    <input class="form-control-static" type="file" id="icon" name="icon" @change="selectedLogo = true" />
                                 </div>
                                 <div class="setting-content">
                                     <div class="icon-description">
                                         <p>Upload an image representative of your project.</p>
                                         <div class="btn-group pull-right">
-                                            <button class="btn btn-default btn-reset">Reset</button>
-                                            <button class="btn btn-info btn-upload pull-right" disabled>
+                                            <button @click.prevent="resetIcon" class="btn btn-default btn-reset">Reset</button>
+                                            <button @click.prevent="updateIcon" class="btn btn-info btn-upload pull-right" :disabled="!selectedLogo">
                                                 <font-awesome-icon :icon="['fas', 'upload']" /> Upload
                                             </button>
                                         </div>
@@ -411,6 +408,7 @@
                 deployKey: null,
                 showDeployKeySpinner: false,
                 sendingChanges: false,
+                selectedLogo: false
             }
         },
         props: {
@@ -482,6 +480,44 @@
                     this.sendingChanges = false;
                 }).catch(failed => {
                     //TODO
+                })
+            },
+            updateIcon() {
+                let form = document.getElementById('form-icon');
+                let data = new FormData(form);
+                let iconUrl = '/' + this.project.namespace.owner + '/' + this.project.namespace.slug + '/icon';
+                fetch(iconUrl, {
+                    credentials: "same-origin",
+                    method: 'post',
+                    body: data
+                }).then(res => {
+                    if(res.ok) {
+                        form.reset();
+                        this.selectedLogo = false;
+                        //Makes sure we update the image
+                        this.iconUrl = iconUrl + '?temp=' + Math.random()
+                    }
+                    else {
+                        // TODO
+                    }
+                })
+            },
+            resetIcon() {
+                let data = new FormData(document.getElementById('form-icon'));
+                let iconUrl = '/' + this.project.namespace.owner + '/' + this.project.namespace.slug + '/icon';
+                fetch(iconUrl + '/reset', {
+                    credentials: "same-origin",
+                    method: 'post',
+                    body: data
+                }).then(res => {
+                    if(res.ok) {
+                        this.selectedLogo = false;
+                        //Makes sure we update the image
+                        this.iconUrl = iconUrl + '?temp=' + Math.random()
+                    }
+                    else {
+                        // TODO
+                    }
                 })
             },
             getDeployKey() {

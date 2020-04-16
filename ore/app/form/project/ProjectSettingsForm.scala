@@ -100,25 +100,6 @@ case class ProjectSettingsForm(
 
     updateProject.semiflatMap {
       case (newProject, newOwnerName) =>
-        // Update icon
-        val moveIcon = if (this.updateIcon) {
-          fileManager.getPendingIconPath(newOwnerName, newProject.name).flatMap { pendingPathOpt =>
-            pendingPathOpt.fold(F.unit) { pendingPath =>
-              val iconDir = fileManager.getIconDir(newOwnerName, newProject.name)
-
-              val notExist   = fileIO.notExists(iconDir)
-              val createDirs = fileIO.createDirectories(iconDir)
-              val deleteFiles = fileIO.list(iconDir).use { ps =>
-                import cats.instances.lazyList._
-                fileIO.traverseLimited(ps)(p => fileIO.delete(p))
-              }
-              val move = fileIO.move(pendingPath, iconDir.resolve(pendingPath.getFileName))
-
-              notExist.ifM(createDirs, F.unit) *> deleteFiles *> move.void
-            }
-          }
-        } else F.unit
-
         // Add new roles
         val dossier = newProject.memberships
         val addRoles = this
@@ -162,7 +143,7 @@ case class ProjectSettingsForm(
             .flatMap(updates => service.runDBIO(DBIO.sequence(updates)))
         }
 
-        moveIcon *> addRoles *> updateExistingRoles.as(newProject)
+        addRoles *> updateExistingRoles.as(newProject)
     }
   }
 

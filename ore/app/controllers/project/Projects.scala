@@ -321,20 +321,20 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
       request.body.file("icon") match {
         case None => IO.fail(Redirect(self.show(author, slug, "")).withError("error.noFile"))
         case Some(tmpFile) =>
-          val data       = request.data
-          val pendingDir = projectFiles.getPendingIconDir(data.project.ownerName, data.project.name)
+          val data = request.data
+          val dir  = projectFiles.getIconDir(data.project.ownerName, data.project.name)
 
           import zio.blocking._
 
-          val notExist   = effectBlocking(Files.notExists(pendingDir))
-          val createDir  = effectBlocking(Files.createDirectories(pendingDir))
+          val notExist   = effectBlocking(Files.notExists(dir))
+          val createDir  = effectBlocking(Files.createDirectories(dir))
           val deleteFile = (p: Path) => effectBlocking(Files.delete(p))
 
-          val deleteFiles = effectBlocking(Files.list(pendingDir))
+          val deleteFiles = effectBlocking(Files.list(dir))
             .map(_.iterator().asScala)
             .flatMap(it => ZIO.foreachParN_(config.performance.nioBlockingFibers)(it.to(Iterable))(deleteFile))
 
-          val moveFile = effectBlocking(tmpFile.ref.moveTo(pendingDir.resolve(tmpFile.filename), replace = true))
+          val moveFile = effectBlocking(tmpFile.ref.moveTo(dir.resolve(tmpFile.filename), replace = true))
 
           //todo data
           val log = UserActionLogger.log(request.request, LoggedActionType.ProjectIconChanged, data.project.id, "", "")(
@@ -362,11 +362,8 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
         op.fold(IO.succeed(()): ZIO[Blocking, Throwable, Unit])(p => effectBlocking(Files.delete(p)))
 
       val res = for {
-        icon        <- projectFiles.getIconPath(project)
-        _           <- deleteOptFile(icon)
-        pendingIcon <- projectFiles.getPendingIconPath(project)
-        _           <- deleteOptFile(pendingIcon)
-        _           <- effectBlocking(Files.delete(projectFiles.getPendingIconDir(project.ownerName, project.name)))
+        icon <- projectFiles.getIconPath(project)
+        _    <- deleteOptFile(icon)
         //todo data
         _ <- UserActionLogger.log(request.request, LoggedActionType.ProjectIconChanged, project.id, "", "")(
           LoggedActionProject.apply
@@ -374,22 +371,6 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
       } yield Ok
       res.orDie
   }
-
-  /**
-    * Displays the specified [[ore.models.project.Project]]'s current pending
-    * icon, if any.
-    *
-    * @param author Project owner
-    * @param slug   Project slug
-    * @return       Pending icon
-    */
-  def showPendingIcon(author: String, slug: String): Action[AnyContent] =
-    ProjectAction(author, slug).asyncF { implicit request =>
-      projectFiles.getPendingIconPath(request.project.ownerName, request.project.name).map {
-        case None       => notFound
-        case Some(path) => showImage(path)
-      }
-    }
 
   /**
     * Removes a [[ProjectMember]] from the specified project.
