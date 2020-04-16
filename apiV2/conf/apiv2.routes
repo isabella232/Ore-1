@@ -206,6 +206,8 @@ GET     /permissions/hasAny                                  @controllers.apiv2.
 #      description: How to sort the projects
 #    - name: relevance
 #      description: If how relevant the project is to the given query should be used when sorting the projects
+#    - name: exact
+#      description: If specified, changes the search to only look for exact mathes of the query to the project name.
 #    - name: limit
 #      description: The maximum amount of projects to return
 #    - name: offset
@@ -222,7 +224,7 @@ GET     /permissions/hasAny                                  @controllers.apiv2.
 #    403:
 #      $ref: '#/components/responses/ForbiddenError'
 ###
-GET     /projects                                            @controllers.apiv2.Projects.listProjects(q: Option[String], categories: Seq[Category], platforms: Seq[String], stability: Seq[Version.Stability], owner: Option[String], sort: Option[ProjectSortingStrategy], relevance: Option[Boolean], limit: Option[Long], offset: Long ?= 0)
+GET     /projects                                            @controllers.apiv2.Projects.listProjects(q: Option[String], categories: Seq[Category], platforms: Seq[String], stability: Seq[Version.Stability], owner: Option[String], sort: Option[ProjectSortingStrategy], relevance: Option[Boolean], exact: Option[Boolean], limit: Option[Long], offset: Long ?= 0)
 
 ###
 #  summary: Creates a new project

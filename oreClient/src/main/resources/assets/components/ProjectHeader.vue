@@ -29,7 +29,7 @@
                     <div class="project-path">
                         <a :href="routes.Users.showProjects(project.namespace.owner).absoluteURL()">{{ project.namespace.owner }}</a>
                         /
-                        <router-link :to="{name: 'home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
+                        <router-link :to="{name: 'project_home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
                             <a class="project-name" :href="href" @click="navigate">{{ project.name }}</a>
                         </router-link>
                     </div>
@@ -52,15 +52,29 @@
 
                     <template v-if="project.visibility !== 'softDelete'">
                         <template v-if="!isMember && currentUser">
-                            <button @click="toggleStarred" class="btn btn-default btn-star">
-                                <font-awesome-icon :icon="starredIcon" />
-                                <span :class="{starred: project.user_actions.starred }">{{ project.stats.stars }}</span>
-                            </button>
+                            <div class="btn-group" role="group" aria-label="Stars">
+                                <button @click="toggleStarred" class="btn btn-default btn-star">
+                                    <font-awesome-icon :icon="starredIcon" />
+                                    <span :class="{starred: project.user_actions.starred }">
+                                        {{ project.user_actions.starred ? 'Unstar' : 'Star' }}
+                                    </span>
+                                </button>
+                                <a :href="routes.project.Projects.showStargazers(project.namespace.owner, project.namespace.slug, null).absoluteURL()" class="btn btn-default">
+                                    {{ formatStats(project.stats.stars) }}
+                                </a>
+                            </div>
 
-                            <button @click="toggleWatching" class="btn btn-default btn-watch">
-                                <font-awesome-icon :icon="watchingIcon" />
-                                <span :class="{watching: project.user_actions.watching}">{{ project.stats.watchers }}</span>
-                            </button>
+                            <div class="btn-group" role="group" aria-label="Watchers">
+                                <button @click="toggleWatching" class="btn btn-default btn-watch">
+                                    <font-awesome-icon :icon="watchingIcon" />
+                                    <span :class="{watching: project.user_actions.watching}">
+                                        {{ project.user_actions.watching ? 'Unwatch' : 'Watch' }}
+                                    </span>
+                                </button>
+                                <a :href="routes.project.Projects.showWatchers(project.namespace.owner, project.namespace.slug, null).absoluteURL()" class="btn btn-default">
+                                    {{ formatStats(project.stats.watchers) }}
+                                </a>
+                            </div>
                         </template>
                         <template v-else>
                             <span class="minor stat-static">
@@ -168,7 +182,7 @@
                 <div class="navbar navbar-default project-navbar pull-left">
                     <div class="navbar-inner">
                         <ul class="nav navbar-nav">
-                            <router-link :to="{name: 'home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
+                            <router-link :to="{name: 'project_home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
                                 <li :class="[isExactActive && 'active']">
                                     <a :href="href" @click="navigate"><font-awesome-icon :icon="['fas', 'book']" /> Docs</a>
                                 </li>
@@ -368,6 +382,9 @@
                     console.log(xhr)
                     //TODO: Handle error
                 });
+            },
+            formatStats(number) {
+                return numberWithCommas(number);
             }
         }
     }

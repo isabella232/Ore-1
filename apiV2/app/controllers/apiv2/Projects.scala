@@ -61,6 +61,7 @@ class Projects(
       owner: Option[String],
       sort: Option[ProjectSortingStrategy],
       relevance: Option[Boolean],
+      exact: Option[Boolean],
       limit: Option[Long],
       offset: Long
   ): Action[AnyContent] =
@@ -85,6 +86,7 @@ class Projects(
           request.user.map(_.id),
           sort.getOrElse(ProjectSortingStrategy.Default),
           relevance.getOrElse(true),
+          exact.getOrElse(false),
           realLimit,
           realOffset
         )
@@ -99,7 +101,8 @@ class Projects(
           q,
           owner,
           request.globalPermissions.has(Permission.SeeHidden),
-          request.user.map(_.id)
+          request.user.map(_.id),
+          exact.getOrElse(false)
         )
         .unique
 

@@ -1,64 +1,92 @@
 <template>
-    <div class="row">
-        <div class="col-md-9">
-            <div class="project-search" :class="{'input-group': q.length > 0}">
-                <input type="text" class="form-control" v-model="q" @keydown="resetPage" :placeholder="queryPlaceholder" />
-                <span class="input-group-btn" v-if="q.length > 0">
-                    <button class="btn btn-default" type="button" @click="q = ''">
-                        <font-awesome-icon :icon="['fas', 'times']" />
-                    </button>
-                </span>
-            </div>
-            <div v-if="!isDefault" class="clearSelection">
-                <a @click="reset">
-                    <font-awesome-icon :icon="['fas', 'window-close']" />
-                    Clear current search query, categories, platform, and sort</a>
-            </div>
-            <project-list v-bind="listBinding" ref="list" @prevPage="page--"
-                          @nextPage="page++" @jumpToPage="page = $event" v-bind:projectCount.sync="projectCount"></project-list>
-        </div>
-        <div class="col-md-3">
-            <select class="form-control select-sort" v-model="sort" @change="resetPage">
-                <option v-for="option in availableOptions.sort" :value="option.id">{{ option.name }}</option>
-            </select>
-
-            <div>
-                <input type="checkbox" id="relevanceBox" v-model="relevance">
-                <label for="relevanceBox">Sort with relevance</label>
-                <div class="panel panel-default">
-                    <div class="panel-heading">
-                        <h3 class="panel-title">Categories</h3>
-                        <a class="category-reset" @click="categories = []" v-if="categories.length > 0">
-                            <font-awesome-icon class="white" :icon="['fas', 'times']" />
-                        </a>
-                    </div>
-
-                    <div class="list-group category-list">
-                        <a v-for="category in availableOptions.category" class="list-group-item" @click="changeCategory(category)"
-                           v-bind:class="{ active: categories.includes(category.id) }">
-                            <font-awesome-icon fixed-width :icon="['fas', category.icon]" />
-                            <strong>{{ category.name }}</strong>
-                        </a>
+    <div>
+        <div class="index-header">
+            <div class="row centered-content-row">
+                <div class="col-md-9 ore-banner">
+                    <div class="row aligned-row">
+                        <div class="col-xs-2 ore-logo">
+                            <img :src="assetPath('images/ore-colored.svg')" alt="Ore logo" />
+                        </div>
+                        <div class="col-xs-10 text">
+                            <div class="headline">Ore</div>
+                            <div>A Minecraft package repository</div>
+                        </div>
                     </div>
                 </div>
-                <div class="panel panel-default">
-                    <div class="panel-heading">
-                        <h3 class="panel-title">Platforms</h3>
-                    </div>
-
-                    <div class="list-group platform-list">
-                        <a class="list-group-item" @click="platforms = []" v-bind:class="{ active: platforms.length === 0 }">
-                            <span class="parent">Any</span>
-                        </a>
-                        <a v-for="platform in availableOptions.platform" class="list-group-item" @click="platforms = [platform.id]"
-                           v-bind:class="{ active: platforms.includes(platform.id) }">
-                            <span :class="{parent: platform.parent}">{{ platform.name }}</span>
-                        </a>
+                <div class="col-md-3 sponsor">
+                    <div class="panel sponsor-panel">
+                        <span>Sponsored by</span>
+                        <div class="panel-body" :set="sponsor = randomSponsor">
+                            <a :href="sponsor.link">
+                                <img class="logo" :src="assetPath(sponsor.image)" alt="Sponsor" />
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+
+        <div class="row">
+            <div class="col-md-9">
+                <div class="project-search" :class="{'input-group': q.length > 0}">
+                    <input type="text" class="form-control" v-model="q" @keydown="resetPage" :placeholder="queryPlaceholder" />
+                    <span class="input-group-btn" v-if="q.length > 0">
+                        <button class="btn btn-default" type="button" @click="q = ''">
+                            <font-awesome-icon :icon="['fas', 'times']" />
+                        </button>
+                    </span>
+                </div>
+                <div v-if="!isDefault" class="clearSelection">
+                    <a @click="reset">
+                        <font-awesome-icon :icon="['fas', 'window-close']" />
+                        Clear current search query, categories, platform, and sort</a>
+                </div>
+                <project-list v-bind="listBinding" ref="list" @prevPage="page--"
+                              @nextPage="page++" @jumpToPage="page = $event" v-bind:projectCount.sync="projectCount"></project-list>
+            </div>
+            <div class="col-md-3">
+                <select class="form-control select-sort" v-model="sort" @change="resetPage">
+                    <option v-for="option in availableOptions.sort" :value="option.id">{{ option.name }}</option>
+                </select>
+
+                <div>
+                    <input type="checkbox" id="relevanceBox" v-model="relevance">
+                    <label for="relevanceBox">Sort with relevance</label>
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h3 class="panel-title">Categories</h3>
+                            <a class="category-reset" @click="categories = []" v-if="categories.length > 0">
+                                <font-awesome-icon class="white" :icon="['fas', 'times']" />
+                            </a>
+                        </div>
+
+                        <div class="list-group category-list">
+                            <a v-for="category in availableOptions.category" class="list-group-item" @click="changeCategory(category)"
+                               v-bind:class="{ active: categories.includes(category.id) }">
+                                <font-awesome-icon fixed-width :icon="['fas', category.icon]" />
+                                <strong>{{ category.name }}</strong>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h3 class="panel-title">Platforms</h3>
+                        </div>
+
+                        <div class="list-group platform-list">
+                            <a class="list-group-item" @click="platforms = []" v-bind:class="{ active: platforms.length === 0 }">
+                                <span class="parent">Any</span>
+                            </a>
+                            <a v-for="platform in availableOptions.platform" class="list-group-item" @click="platforms = [platform.id]"
+                               v-bind:class="{ active: platforms.includes(platform.id) }">
+                                <span :class="{parent: platform.parent}">{{ platform.name }}</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
 </template>
 
 <script>
@@ -66,6 +94,7 @@
     import queryString from "query-string"
     import {clearFromDefaults} from "./../utils"
     import {Category, Platform, SortOptions} from "./../enums";
+    import sponsors from "./sponsors.json"
 
     function defaultData() {
         return {
@@ -92,10 +121,10 @@
         },
         data: defaultData,
         computed: {
-            isDefault: function() {
+            isDefault() {
                 return Object.keys(clearFromDefaults(this.baseBinding, defaultData())).length === 0;
             },
-            baseBinding: function () {
+            baseBinding() {
                 return {
                     q: this.q,
                     sort: this.sort,
@@ -104,26 +133,30 @@
                     platforms: this.platforms
                 }
             },
-            listBinding: function () {
+            listBinding() {
                 return clearFromDefaults(Object.assign({}, this.baseBinding, {offset: (this.page - 1) * this.limit, limit: this.limit}), defaultData())
             },
-            urlBinding: function () {
+            urlBinding() {
                 return clearFromDefaults(Object.assign({}, this.baseBinding, {page: this.page}), defaultData())
             },
-            queryPlaceholder: function () {
+            queryPlaceholder() {
                 return `Search in ${this.projectCount === null ? "all" : this.projectCount} projects` +
                     `${!this.isDefault ? " matching your filters" : ""}` +
                     ", proudly made by the community...";
+            },
+            randomSponsor() {
+                let index = Math.floor(Math.random() * sponsors.length)
+                return sponsors[index]
             }
         },
         methods: {
-            reset: function() {
+            reset() {
                 Object.entries(defaultData()).forEach(([key, value]) => this.$data[key] = value)
             },
-            resetPage: function() {
+            resetPage() {
                 this.page = 1;
             },
-            changeCategory: function(category) {
+            changeCategory(category) {
                 if(this.categories.includes(category.id)) {
                     this.categories.splice(this.categories.indexOf(category.id), 1);
                 } else if(this.categories.length + 1 === Category.values.length) {
@@ -131,6 +164,9 @@
                 } else {
                     this.categories.push(category.id);
                 }
+            },
+            assetPath(path) {
+                return '/assets/' + path;
             }
         },
         created() {

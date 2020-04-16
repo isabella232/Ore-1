@@ -73,9 +73,9 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
     * @param slug   Project slug
     * @return View of project
     */
-  def show(author: String, slug: String, vuePagE: String): Action[AnyContent] =
+  def show(author: String, slug: String, vuePage: String): Action[AnyContent] =
     ProjectAction(author, slug).asyncF { implicit request =>
-      stats.projectViewed(UIO.succeed(Ok(views.view(request.data))))
+      stats.projectViewed(UIO.succeed(Ok(_root_.views.html.home())))
     }
 
   /**

@@ -14,7 +14,6 @@ module.exports = {
     entry: {
         main: Path.resolve(resourcesDir, 'assets', 'scss', 'main.scss'),
         home: Path.resolve(entryDir, 'home.js'),
-        project: Path.resolve(entryDir, 'project.js'),
         'font-awesome': Path.resolve(entryDir, 'font-awesome.js'),
         'user-profile': Path.resolve(entryDir, 'user-profile.js'),
         'ore-client-fastopt': Path.resolve(entryDir, 'dummy.js'),

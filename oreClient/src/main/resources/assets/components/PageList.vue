@@ -1,7 +1,7 @@
 <template>
     <ul class="list-group" style="margin-bottom: 0px;">
         <li v-if="includeHome" class="list-group-item">
-            <router-link :to="{name: 'home', params: {project, permissions}}" v-slot="{ href, navigate }">
+            <router-link :to="{name: 'project_home', params: {project, permissions}}" v-slot="{ href, navigate }">
                 <a :href="href" @click="navigate">Home</a>
             </router-link>
         </li>
