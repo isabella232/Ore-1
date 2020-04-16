@@ -5,6 +5,7 @@ object NPMDeps {
 
   val vue                 = "vue"                   -> "2.6.11"
   val vueRouter           = "vue-router"            -> "3.1.4"
+  val vuex                = "vuex"                  -> "3.1.3"
   val vueLoader           = "vue-loader"            -> "15.9.0"
   val vueTemplateCompiler = "vue-template-compiler" -> "2.6.11"
   val vueStyleLoader      = "vue-style-loader"      -> "4.1.2"
@@ -27,6 +28,8 @@ object NPMDeps {
   val markdownItAnchor    = "markdown-it-anchor"     -> "5.2.5"
   val markdownItWikiLinks = "markdown-it-wikilinks"  -> "1.0.1"
   val markdownItTaskLists = "markdown-it-task-lists" -> "2.1.1"
+
+  val nProgress = "nprogress" -> "0.2.0"
 
   val webpack               = "4.42.0"
   val webpackDevServer      = "3.10.3"

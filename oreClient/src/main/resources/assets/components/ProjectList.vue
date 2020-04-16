@@ -71,6 +71,10 @@
     import Icon from "./Icon"
     import debounce from "lodash/debounce"
     import {API} from "../api";
+    import NProgress from "nprogress"
+    import npcss from "nprogress/nprogress.css";
+
+    console.log(npcss)
 
     export default {
         components: {
@@ -130,7 +134,9 @@
         },
         methods: {
             update() {
+                NProgress.start();
                 API.request("projects", "GET", clearFromEmpty(this.$props)).then((response) => {
+                    NProgress.done();
                     this.projects = response.result;
                     this.totalProjects = response.pagination.count;
                     this.loading = false;
