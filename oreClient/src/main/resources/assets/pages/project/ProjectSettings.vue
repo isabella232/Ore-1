@@ -270,9 +270,8 @@
                                 <p>Once you delete a project, it cannot be recovered.</p>
                             </div>
                             <div class="setting-content">
-                                <button class="btn btn-delete btn-danger btn-visibility-change"
-                                        :data-project="project.namespace.owner + '/' + project.namespace.slug" data-level="-99"
-                                        data-modal="true">
+                                <button class="btn btn-delete btn-danger btn-visibility-change" data-toggle="modal"
+                                        data-target="#modal-delete" @click="hardDelete = true">
                                     <strong>Hard Delete</strong>
                                 </button>
                             </div>
@@ -341,7 +340,7 @@
                     </div>
                     <div class="modal-footer">
                         <div class="form-inline">
-                            <button type="button" class="btn btn-default" data-dismiss="modal">
+                            <button @click="resetDeleteData" type="button" class="btn btn-default" data-dismiss="modal">
                                 Close
                             </button>
                             <button @click="deleteProject" name="delete" class="btn btn-danger">Delete</button>
@@ -387,7 +386,8 @@
                 showDeployKeySpinner: false,
                 sendingChanges: false,
                 selectedLogo: false,
-                deleteReason: ''
+                deleteReason: '',
+                hardDelete: false
             }
         },
         props: {
@@ -558,14 +558,26 @@
                     }
                 })
             },
+            resetDeleteData() {
+                this.hardDelete = false;
+                this.deleteReason = ''
+            },
             deleteProject() {
-                API.request('projects/' + this.plugin.plugin_id + '/visibility', 'POST', {
-                    visibility: 'softDelete',
-                    reason: this.deleteReason
-                }).then(res => {
-                    //TODO: Needs the merged Vue views to really make sense
-                    this.$router.push({to: 'home'})
-                })
+                if(this.hardDelete) {
+                    API.request('/projects/' + this.plugin.plugin_id, 'DELETE').then(res => {
+                        //TODO: Needs the merged Vue views to really make sense
+                        this.$router.push({to: 'home'})
+                    })
+                }
+                else {
+                    API.request('projects/' + this.plugin.plugin_id + '/visibility', 'POST', {
+                        visibility: 'softDelete',
+                        reason: this.deleteReason
+                    }).then(res => {
+                        //TODO: Needs the merged Vue views to really make sense
+                        this.$router.push({to: 'home'})
+                    })
+                }
             }
         }
     }

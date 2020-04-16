@@ -10,16 +10,18 @@ import play.api.mvc.{Action, AnyContent, Result}
 
 import controllers.OreControllerComponents
 import controllers.apiv2.helpers._
+import controllers.sugar.Requests.ApiRequest
 import db.impl.query.APIV2Queries
 import models.protocols.APIV2
 import models.querymodels.APIV2ProjectStatsQuery
 import models.viewhelper.ProjectData
 import ore.OreConfig
 import ore.data.project.Category
+import ore.db.Model
 import ore.db.access.ModelView
 import ore.models.Job
 import ore.models.project.factory.{ProjectFactory, ProjectTemplate}
-import ore.models.project.{ProjectSortingStrategy, Version, Visibility}
+import ore.models.project.{Project, ProjectSortingStrategy, Version, Visibility}
 import ore.models.user.{LoggedActionProject, LoggedActionType}
 import ore.permission.Permission
 import ore.util.OreMDC
@@ -35,7 +37,7 @@ import io.circe.syntax._
 import squeal.category._
 import squeal.category.macros.Derive
 import squeal.category.syntax.all._
-import zio.{IO, ZIO}
+import zio.{IO, UIO, ZIO}
 import zio.blocking.Blocking
 import zio.interop.catz._
 
@@ -305,7 +307,9 @@ class Projects(
 
           val permChecks = if (request.scopePermission.has(Permission.Reviewer)) ZIO.unit else nonReviewerChecks
 
-          val projectVisibility = project.setVisibility(newVisibility, request.body.comment, changerId)
+          val projectAction =
+            if (project.visibility == Visibility.New) doHardDeleteProject(project)
+            else project.setVisibility(newVisibility, request.body.comment, changerId)
 
           val log = UserActionLogger.logApi(
             request,
@@ -315,7 +319,7 @@ class Projects(
             Visibility.NeedsChanges.nameKey
           )(LoggedActionProject.apply)
 
-          permChecks *> (forumVisbility <&> projectVisibility) *> log.as(NoContent)
+          permChecks *> (forumVisbility <&> projectAction) *> log.as(NoContent)
         }
     }
 
@@ -336,6 +340,25 @@ class Projects(
           "lastVisibilityChangeUser" := data.lastVisibilityChangeUser
         )
       )
+    }
+
+  private def doHardDeleteProject(project: Model[Project])(implicit request: ApiRequest[_]): UIO[Unit] = {
+    projects.delete(project).unit <* UserActionLogger.logApiOption(
+      request,
+      LoggedActionType.ProjectVisibilityChange,
+      None,
+      "deleted",
+      project.visibility.nameKey
+    )(LoggedActionProject.apply)
+  }
+
+  def hardDeleteProject(pluginId: String): Action[AnyContent] =
+    ApiAction(Permission.HardDeleteProject, APIScope.ProjectScope(pluginId)).asyncF { implicit r =>
+      projects
+        .withPluginId(pluginId)
+        .someOrFail(NotFound)
+        .flatMap(doHardDeleteProject(_))
+        .as(NoContent)
     }
 }
 object Projects {

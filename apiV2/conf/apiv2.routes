@@ -338,6 +338,26 @@ GET     /projects/:pluginId                                  @controllers.apiv2.
 PATCH   /projects/:pluginId                                  @controllers.apiv2.Projects.editProject(pluginId)
 
 ###
+#  summary: Permanently deletes a project.
+#  description: >-
+#    Permanently deletes a project and everything associated with it.
+#    Requires the `hard_delete_project` permission.
+#  tags:
+#    - Projects
+#  parameters:
+#    - name: pluginId
+#      description: The plugin id of the project to delete
+#  responses:
+#    204:
+#      description: Deleted
+#    401:
+#      $ref: '#/components/responses/UnauthorizedError'
+#    403:
+#      $ref: '#/components/responses/ForbiddenError'
+###
+DELETE  /projects/:pluginId                                  @controllers.apiv2.Projects.hardDeleteProject(pluginId)
+
+###
 #  summary: Returns the description for a specific project
 #  description: >-
 #    Returns the long description shown on the home page for a project.
