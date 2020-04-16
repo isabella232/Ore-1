@@ -64,6 +64,11 @@ module.exports = {
                 test: /\.scss$/,
                 use: [MiniCssExtractPlugin.loader, 'css-loader', 'postcss-loader', 'sass-loader'],
             },
+            {
+                test: /\.json5$/i,
+                loader: 'json5-loader',
+                type: 'javascript/auto',
+            },
         ]
     },
     resolve: {

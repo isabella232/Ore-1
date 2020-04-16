@@ -391,6 +391,7 @@
     import Icon from "../../components/Icon";
     import {avatarUrl as avatarUrlUtils, clearFromDefaults} from "../../utils"
     import {Category} from "../../enums";
+    import config from "../../config.json5"
     import { mapState } from 'vuex'
 
     export default {
@@ -441,15 +442,7 @@
                 return jsRoutes.controllers
             },
             config() {
-                return {
-                    ore: {
-                        projects: {
-                            //TODO: Get this from someplace better
-                            maxDescLen: 120,
-                            maxNameLen: 25
-                        }
-                    }
-                }
+                return config
             },
             categories() {
                 return Category

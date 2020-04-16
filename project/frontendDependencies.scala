@@ -22,6 +22,7 @@ object NPMDeps {
   val babel          = "@babel/core"       -> "7.8.7"
   val babelLoader    = "babel-loader"      -> "8.0.6"
   val babelPresetEnv = "@babel/preset-env" -> "7.8.7"
+  val json5Loader    = "json5-loader"      -> "4.0.0"
 
   val markdownIt          = "markdown-it"            -> "10.0.0"
   val markdownItAnchor    = "markdown-it-anchor"     -> "5.2.5"
