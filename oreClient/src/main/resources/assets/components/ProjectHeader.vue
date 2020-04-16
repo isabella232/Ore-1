@@ -29,7 +29,7 @@
                     <div class="project-path">
                         <a :href="routes.Users.showProjects(project.namespace.owner).absoluteURL()">{{ project.namespace.owner }}</a>
                         /
-                        <router-link :to="{name: 'home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
+                        <router-link :to="{name: 'project_home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
                             <a class="project-name" :href="href" @click="navigate">{{ project.name }}</a>
                         </router-link>
                     </div>
@@ -182,7 +182,7 @@
                 <div class="navbar navbar-default project-navbar pull-left">
                     <div class="navbar-inner">
                         <ul class="nav navbar-nav">
-                            <router-link :to="{name: 'home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
+                            <router-link :to="{name: 'project_home', params: {project, permissions}}" v-slot="{ href, navigate, isExactActive }">
                                 <li :class="[isExactActive && 'active']">
                                     <a :href="href" @click="navigate"><font-awesome-icon :icon="['fas', 'book']" /> Docs</a>
                                 </li>

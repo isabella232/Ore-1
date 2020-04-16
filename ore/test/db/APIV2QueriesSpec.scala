@@ -66,7 +66,8 @@ class APIV2QueriesSpec extends DbSpec {
         Some("Foo"),
         canSeeHidden = false,
         owner = Some("Foo"),
-        currentUserId = Some(0L)
+        currentUserId = Some(0L),
+        exactSearch = false
       )
     )
   }

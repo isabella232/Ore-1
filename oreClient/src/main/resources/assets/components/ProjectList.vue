@@ -17,8 +17,12 @@
                                 <div class="col-xs-12 col-sm-11">
                                     <div class="row">
                                         <div class="col-sm-6">
-                                            <a :href="routes.Projects.show(project.namespace.owner, project.namespace.slug, '').absoluteURL()"
-                                               class="title">
+                                            <router-link v-if="useVueRouter" :to="routerLinkProject(project)" v-slot="{href, navigate}">
+                                                <a :href="href" class="title" @click="navigate">
+                                                    {{ project.name }}
+                                                </a>
+                                            </router-link>
+                                            <a v-else :href="routes.Projects.show(project.namespace.owner, project.namespace.slug, '').absoluteURL()" class="title">
                                                 {{ project.name }}
                                             </a>
                                         </div>
@@ -93,6 +97,10 @@
             offset: {
                 type: Number,
                 default: 0
+            },
+            useVueRouter: {
+                type: Boolean,
+                default: true
             }
         },
         data() {
@@ -162,6 +170,17 @@
             },
             formatStats(number) {
                 return numberWithCommas(number);
+            },
+            routerLinkProject(project) {
+                return {
+                    name: 'project_home',
+                    params: {
+                        pluginId: project.plugin_id,
+                        fetchedProject: project,
+                        owner: project.namespace.owner,
+                        slug: project.namespace.slug
+                    }
+                }
             }
         }
     }

@@ -105,7 +105,8 @@ object APIV2Queries extends DoobieOreProtocol {
       query: Option[String],
       owner: Option[String],
       canSeeHidden: Boolean,
-      currentUserId: Option[DbRef[User]]
+      currentUserId: Option[DbRef[User]],
+      exactSearch: Boolean
   ): Fragment = {
     val userActionsTaken = currentUserId.fold(fr"FALSE, FALSE,") { id =>
       fr"""|EXISTS(SELECT * FROM project_stars s WHERE s.project_id = p.id AND s.user_id = $id)    AS user_stared,
@@ -187,8 +188,12 @@ object APIV2Queries extends DoobieOreProtocol {
       query.map { q =>
         val trimmedQ = q.trim
 
-        if (q.endsWith(" ")) fr"p.search_words @@ websearch_to_tsquery('english', $trimmedQ)"
-        else fr"p.search_words @@ websearch_to_tsquery_postfix('english', $trimmedQ)"
+        if (exactSearch) {
+          fr"p.name = $trimmedQ"
+        } else {
+          if (q.endsWith(" ")) fr"p.search_words @@ websearch_to_tsquery('english', $trimmedQ)"
+          else fr"p.search_words @@ websearch_to_tsquery_postfix('english', $trimmedQ)"
+        }
       },
       owner.map(o => fr"p.owner_name = $o"),
       visibilityFrag
@@ -211,6 +216,7 @@ object APIV2Queries extends DoobieOreProtocol {
       currentUserId: Option[DbRef[User]],
       order: ProjectSortingStrategy,
       orderWithRelevance: Boolean,
+      exactSearch: Boolean,
       limit: Long,
       offset: Long
   )(
@@ -243,7 +249,17 @@ object APIV2Queries extends DoobieOreProtocol {
       }
     } else order.fragment
 
-    val select = projectSelectFrag(pluginId, category, platforms, stability, query, owner, canSeeHidden, currentUserId)
+    val select = projectSelectFrag(
+      pluginId,
+      category,
+      platforms,
+      stability,
+      query,
+      owner,
+      canSeeHidden,
+      currentUserId,
+      exactSearch
+    )
     (select ++ fr"ORDER BY" ++ ordering ++ fr"LIMIT $limit OFFSET $offset").query[APIV2QueryProject].map(_.asProtocol)
   }
 
@@ -267,6 +283,7 @@ object APIV2Queries extends DoobieOreProtocol {
       currentUserId,
       ProjectSortingStrategy.Default,
       orderWithRelevance = false,
+      false,
       1,
       0
     )
@@ -279,9 +296,20 @@ object APIV2Queries extends DoobieOreProtocol {
       query: Option[String],
       owner: Option[String],
       canSeeHidden: Boolean,
-      currentUserId: Option[DbRef[User]]
+      currentUserId: Option[DbRef[User]],
+      exactSearch: Boolean
   ): Query0[Long] = {
-    val select = projectSelectFrag(pluginId, category, platforms, stability, query, owner, canSeeHidden, currentUserId)
+    val select = projectSelectFrag(
+      pluginId,
+      category,
+      platforms,
+      stability,
+      query,
+      owner,
+      canSeeHidden,
+      currentUserId,
+      exactSearch
+    )
     (sql"SELECT COUNT(*) FROM " ++ Fragments.parentheses(select) ++ fr"sq").query[Long]
   }
 

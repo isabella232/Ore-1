@@ -6,5 +6,9 @@ Vue.component('font-awesome-icon', FontAwesomeIcon);
 const root = require('../pages/UserProfile.vue').default;
 const app = new Vue({
     el: '#user-profile',
-    render: createElement => createElement(root),
+    render: createElement => createElement(root, {
+        props: {
+            user: window.USERNAME,
+        }
+    }),
 });
