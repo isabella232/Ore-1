@@ -16,11 +16,14 @@ import models.querymodels.APIV2ProjectStatsQuery
 import models.viewhelper.ProjectData
 import ore.OreConfig
 import ore.data.project.Category
+import ore.db.access.ModelView
+import ore.models.Job
 import ore.models.project.factory.{ProjectFactory, ProjectTemplate}
-import ore.models.project.{ProjectSortingStrategy, Version}
+import ore.models.project.{ProjectSortingStrategy, Version, Visibility}
+import ore.models.user.{LoggedActionProject, LoggedActionType}
 import ore.permission.Permission
 import ore.util.OreMDC
-import util.{PartialUtils, PatchDecoder}
+import util.{PartialUtils, PatchDecoder, UserActionLogger}
 import util.syntax._
 
 import cats.data.{NonEmptyList, Validated, ValidatedNel}
@@ -32,7 +35,7 @@ import io.circe.syntax._
 import squeal.category._
 import squeal.category.macros.Derive
 import squeal.category.syntax.all._
-import zio.ZIO
+import zio.{IO, ZIO}
 import zio.blocking.Blocking
 import zio.interop.catz._
 
@@ -273,6 +276,49 @@ class Projects(
       } yield Ok(res.asJson)
     }
 
+  def setProjectVisibility(pluginId: String): Action[EditVisibility] =
+    ApiAction(Permission.None, APIScope.ProjectScope(pluginId)).asyncF(parseCirce.decodeJson[EditVisibility]) {
+      implicit request =>
+        val newVisibility = request.body.visibility
+        val changerId     = request.user.get.id
+
+        projects.withPluginId(pluginId).someOrFail(NotFound).flatMap { project =>
+          val forumVisbility =
+            if (Visibility.isPublic(newVisibility) != Visibility.isPublic(project.visibility))
+              service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob).unit
+            else IO.unit
+
+          if (request.scopePermission.has(Permission.Reviewer)) {
+            ZIO.succeed(true)
+          }
+
+          val nonReviewerChecks = newVisibility match {
+            case Visibility.NeedsApproval =>
+              val cond = project.visibility == Visibility.NeedsChanges &&
+                request.scopePermission.has(Permission.EditProjectSettings)
+              if (cond) ZIO.unit
+              else ZIO.fail(Forbidden)
+            case Visibility.SoftDelete =>
+              if (request.scopePermission.has(Permission.DeleteProject)) ZIO.unit else ZIO.fail(Forbidden)
+            case v => ZIO.fail(BadRequest(Json.obj("error" := s"Project can't be changed to $v")))
+          }
+
+          val permChecks = if (request.scopePermission.has(Permission.Reviewer)) ZIO.unit else nonReviewerChecks
+
+          val projectVisibility = project.setVisibility(newVisibility, request.body.comment, changerId)
+
+          val log = UserActionLogger.logApi(
+            request,
+            LoggedActionType.ProjectVisibilityChange,
+            project.id,
+            newVisibility.nameKey,
+            Visibility.NeedsChanges.nameKey
+          )(LoggedActionProject.apply)
+
+          permChecks *> (forumVisbility <&> projectVisibility) *> log.as(NoContent)
+        }
+    }
+
   def projectData(pluginId: String): Action[AnyContent] =
     ApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF { implicit r =>
       for {
@@ -293,7 +339,7 @@ class Projects(
     }
 }
 object Projects {
-  import APIV2.categoryCodec
+  import APIV2.{categoryCodec, visibilityCodec}
 
   @SnakeCaseJsonCodec case class PaginatedProjectResult(
       pagination: Pagination,
@@ -379,4 +425,9 @@ object Projects {
 
     def asFactoryTemplate: ProjectTemplate = ProjectTemplate(name, pluginId, category, description)
   }
+
+  @SnakeCaseJsonCodec case class EditVisibility(
+      visibility: Visibility,
+      comment: String
+  )
 }

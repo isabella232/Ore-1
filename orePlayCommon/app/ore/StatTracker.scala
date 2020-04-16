@@ -6,13 +6,12 @@ import play.api.mvc.{RequestHeader, Result}
 
 import controllers.sugar.Bakery
 import controllers.sugar.Requests.ProjectRequest
-import _root_.db.impl.access.UserBase
 import _root_.db.impl.query.StatTrackerQueries
 import ore.db._
 import ore.models.project.Version
 import ore.models.user.User
 
-import cats.{Monad, Parallel}
+import cats.Monad
 import cats.syntax.all._
 import cats.tagless.autoInvariantK
 import com.github.tminglei.slickpg.InetString
