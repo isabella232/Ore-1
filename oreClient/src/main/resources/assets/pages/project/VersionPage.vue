@@ -247,6 +247,7 @@
     import {API} from "../../api";
     import CSRFField from "../../components/CSRFField";
     import {Platform} from "../../enums";
+    import config from "../../config.json5"
 
     export default {
         components: {
@@ -285,11 +286,7 @@
                 return 10 //TODO
             },
             config() {
-                return {
-                    app: {
-                        baseUrl: "localhost:9000"
-                    }
-                }
+                return config
             },
             platforms() {
                 return Platform

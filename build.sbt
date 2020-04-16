@@ -166,6 +166,7 @@ lazy val oreClient = project
       NPMDeps.babelLoader,
       NPMDeps.babel,
       NPMDeps.babelPresetEnv,
+      NPMDeps.json5Loader,
       NPMDeps.webpackTerser,
       NPMDeps.miniCssExtractor,
       NPMDeps.optimizeCssAssets,

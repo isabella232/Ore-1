@@ -34,6 +34,8 @@ In a typical development environment, most of the defaults are fine. Here are a 
 For `ore`:
 * You can disable authentication by setting `application.fakeUser` to `true`.
 
+You also need to create a copy of `oreClient/src/main/resources/assets/config.json5.template` named `config.json5`. Try to mirror the values you used in the `application.conf` file here.
+
 ## Running
 
 Running Ore is relatively simple.
