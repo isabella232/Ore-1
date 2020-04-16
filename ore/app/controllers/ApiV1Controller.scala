@@ -12,7 +12,7 @@ import ore.auth.CryptoUtils
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.ProjectApiKeyTable
-import ore.db.{DbRef, Model, ObjId}
+import ore.db.{DbRef, Model, ModelQuery, ObjId}
 import ore.models.api.ProjectApiKey
 import ore.models.organization.Organization
 import ore.models.project.factory.ProjectFactory
@@ -81,6 +81,17 @@ final class ApiV1Controller(
     this.api.getProject(pluginId).map(ApiResult)
   }
 
+  def getKey(pluginId: String): Action[AnyContent] =
+    Action.andThen(AuthedProjectActionById(pluginId)).andThen(ProjectPermissionAction(Permission.EditApiKeys)).asyncF {
+      implicit request =>
+        ModelView
+          .now(ProjectApiKey)
+          .find(_.projectId === request.project.id.value)
+          .value
+          .someOrFail(NotFound)
+          .map(key => Ok(Json.obj("id" -> key.id.value, "key" -> key.value)))
+    }
+
   def createKey(pluginId: String): Action[AnyContent] =
     Action.andThen(AuthedProjectActionById(pluginId)).andThen(ProjectPermissionAction(Permission.EditApiKeys)).asyncF {
       implicit request =>
@@ -117,22 +128,21 @@ final class ApiV1Controller(
   def revokeKey(pluginId: String): Action[AnyContent] =
     AuthedProjectActionById(pluginId).andThen(ProjectPermissionAction(Permission.EditApiKeys)).asyncF {
       implicit request =>
-        val res = for {
-          optKey <- forms.ProjectApiKeyRevoke.bindOptionT[UIO]
-          key    <- optKey
-          if key.projectId == request.data.project.id.value
-          _ <- OptionT.liftF(service.delete(key))
-          _ <- OptionT.liftF(
-            UserActionLogger.log(
-              request.request,
-              LoggedActionType.ProjectSettingsChanged,
-              request.data.project.id,
-              s"${request.user.name} removed an ApiKey",
-              ""
-            )(LoggedActionProject.apply)
-          )
+        for {
+          optKey <- forms.ProjectApiKeyRevoke
+            .bindZIO(hasErrors => BadRequest(Json.obj("errors" -> hasErrors.errorsAsJson)))
+          key <- optKey.toZIO.asError(BadRequest(Json.obj("error" -> "Key not found")))
+          _ <- if (key.projectId == request.data.project.id.value) ZIO.unit
+          else ZIO.fail(BadRequest(Json.obj("error" -> "Wrong key")))
+          _ <- service.delete(key)
+          _ <- UserActionLogger.log(
+            request.request,
+            LoggedActionType.ProjectSettingsChanged,
+            request.data.project.id,
+            s"${request.user.name} removed an ApiKey",
+            ""
+          )(LoggedActionProject.apply)
         } yield Ok
-        res.getOrElse(BadRequest)
     }
 
   /**

@@ -239,18 +239,18 @@
                                     Generate a unique deployment key to enable build deployment from Gradle
                                     <a href="#"><font-awesome-icon :icon="['fas', 'question-circle']" /></a>
                                 </p>
-                                <input class="form-control input-key" type="text" :value="deployKey" readonly/>
+                                <input class="form-control input-key" type="text" :value="deployKey ? deployKey.key : ''" readonly/>
                             </div>
                             <div class="setting-content">
                                 <template v-if="deployKey !== null">
-                                    <button class="btn btn-danger btn-block btn-key-revoke" :data-key-id="deployKey">
-                                        <span class="spinner" style="display: none;"><font-awesome-icon :icon="['fas', 'spinner']" spin /></span>
+                                    <button class="btn btn-danger btn-block" @click="revokeDeployKey">
+                                        <span class="spinner" :style="{display: showDeployKeySpinner ? 'inline' : 'none'}"><font-awesome-icon :icon="['fas', 'spinner']" spin /></span>
                                         <span class="text">Revoke key</span>
                                     </button>
                                 </template>
                                 <template v-else>
-                                    <button class="btn btn-info btn-block btn-key-gen">
-                                        <span class="spinner" style="display: none;"><font-awesome-icon :icon="['fas', 'spinner']" spin /></span>
+                                    <button class="btn btn-info btn-block" @click="generateDeployKey">
+                                        <span class="spinner" :style="{display: showDeployKeySpinner ? 'inline' : 'none'}"><font-awesome-icon :icon="['fas', 'spinner']" spin /></span>
                                         <span class="text">Generate key</span>
                                     </button>
                                 </template>
@@ -409,8 +409,9 @@
                 forumSync: this.project.settings.forum_sync,
                 summary: this.project.summary,
                 iconUrl: this.project.icon_url,
-                deployKey: null, //TODO
-                sendingChanges: false
+                deployKey: null,
+                showDeployKeySpinner: false,
+                sendingChanges: false,
             }
         },
         props: {
@@ -466,6 +467,9 @@
                 return ['fas', this.sendingChanges ? 'spinner' : 'check']
             }
         },
+        created() {
+            this.getDeployKey()
+        },
         methods: {
             avatarUrl(name) {
                 return avatarUrlUtils(name)
@@ -479,6 +483,65 @@
                     this.sendingChanges = false;
                 }).catch(failed => {
                     //TODO
+                })
+            },
+            getDeployKey() {
+                fetch('/api/v1/projects/' + this.project.plugin_id + '/keys', {
+                    credentials: "same-origin"
+                }).then(res => {
+                    if(res.ok) {
+                        res.json().then(json => {
+                            this.deployKey = json;
+                        })
+                    }
+                    else if(res.status === 404) {
+                        //Do nothing
+                    }
+                    else {
+                        //TODO
+                    }
+                })
+            },
+            generateDeployKey() {
+                this.showDeployKeySpinner = true;
+                let data = new FormData()
+                data.append('csrfToken', window.csrf);
+                fetch('/api/v1/projects/' + this.project.plugin_id + '/keys/new', {
+                    method: 'POST',
+                    credentials: "same-origin",
+                    body: data
+                }).then(res => {
+                    this.showDeployKeySpinner = false;
+                    if(res.ok) {
+                        res.json().then(json => {
+                            this.deployKey = {
+                                key: json.value,
+                                id: json.id
+                            }
+                        })
+                    }
+                    else {
+                        //TODO
+                    }
+                })
+            },
+            revokeDeployKey() {
+                this.showDeployKeySpinner = true;
+                let data = new FormData();
+                data.append('id', this.deployKey.id);
+                data.append('csrfToken', window.csrf);
+                fetch('/api/v1/projects/' + this.project.plugin_id + '/keys/revoke', {
+                    method: 'POST',
+                    credentials: "same-origin",
+                    body: data
+                }).then(res => {
+                    this.showDeployKeySpinner = false;
+                    if(res.ok) {
+                        this.deployKey = null
+                    }
+                    else {
+                        //TODO
+                    }
                 })
             }
         }
