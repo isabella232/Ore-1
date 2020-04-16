@@ -75,7 +75,7 @@
         data() {
             return {
                 platforms: Platform.values.reduce((o, p) => ({...o, [p.id]: {name: '$all', versions: [p.id]}}), {}),
-                stability: [],
+                stability: ['recommended', 'stable', 'beta', 'alpha'],
                 minecraftVersions: true
             }
         },

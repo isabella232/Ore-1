@@ -68,7 +68,7 @@
                                 </div>
                                 <div class="col-xs-4">
                                     <div class="btn-group d-flex d-flex-space-between">
-                                        <router-link :to="{name: 'version', params: {'version': version.name}}" v-slot="{ href, navigate }">
+                                        <router-link :to="{name: 'version', params: {'version': version.name, 'fetchedVersionObj': version}}" v-slot="{ href, navigate }">
                                             <a :href="href" @click="navigate" class="btn btn-default mb-0"><font-awesome-icon :icon="['fas', 'info-circle']" /> Changelog</a>
                                         </router-link>
                                         <a v-if="project" :href="routes.Versions.download(project.namespace.owner, project.namespace.slug, version.name, null).absoluteURL()" class="btn btn-primary mb-0"><font-awesome-icon :icon="['fas', 'download']" /> Download</a>

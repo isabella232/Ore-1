@@ -593,6 +593,28 @@ PATCH   /projects/:pluginId/versions/:name                   @controllers.apiv2.
 GET     /projects/:pluginId/versions/:name/changelog          @controllers.apiv2.Versions.showVersionChangelog(pluginId, name)
 
 ###
+#  summary: Updates the changelog for a version
+#  description: >-
+#    Updates the changelog for a version. Requires the `edit_version`
+#    permission in the project or owning organization.
+#  tags:
+#    - Versions
+#  parameters:
+#    - name: pluginId
+#      description: The plugin id of the project to return the version for
+#    - name: name
+#      description: The name of the version to update the changelog for
+#  responses:
+#    204:
+#      description: Ok
+#    401:
+#      $ref: '#/components/responses/UnauthorizedError'
+#    403:
+#      $ref: '#/components/responses/ForbiddenError'
+###
+PUT     /projects/:pluginId/versions/:name/changelog          @controllers.apiv2.Versions.updateChangelog(pluginId, name)
+
+###
 #  summary: Returns the stats for a version
 #  description: >-
 #    Returns the stats(downloads) for a version per day for a certain

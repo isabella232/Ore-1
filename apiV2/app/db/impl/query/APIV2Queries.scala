@@ -488,7 +488,6 @@ object APIV2Queries extends DoobieOreProtocol {
 
   def updateVersion(pluginId: String, versionName: String, edits: Versions.DbEditableVersion): Update0 = {
     val versionColumns = Versions.DbEditableVersionF[Column](
-      Column.opt("description"),
       Column.arg("stability"),
       Column.opt("release_type"),
       Versions.VersionedPlatformF[Column](
