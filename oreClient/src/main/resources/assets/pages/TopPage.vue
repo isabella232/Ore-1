@@ -17,9 +17,6 @@
             </div>
         </div>
 
-        <button @click="$store.commit('addAlert', {level: 'info', message: 'Foobar'})">Add alert</button>
-        <button @click="$store.commit('dismissAlert', {level: 'info', index: '0'})">Remove alert</button>
-
         <router-view></router-view>
     </div>
 </template>
