@@ -142,7 +142,7 @@
     import MemberList from "../../components/MemberList";
     import {Category} from "../../enums";
     import PageList from "../../components/PageList";
-    import _ from 'lodash'
+    import isEqual from 'lodash/isEqual'
     import NProgress from "nprogress";
     import { mapState } from 'vuex'
 
@@ -212,7 +212,7 @@
                 return Array.isArray(this.page) ? this.page.join('/') : this.page
             },
             currentPage() {
-                return this.pages.filter(p => _.isEqual(p.slug, this.splitPage))[0]
+                return this.pages.filter(p => isEqual(p.slug, this.splitPage))[0]
             },
             ...mapState('project', [
                 'project',
