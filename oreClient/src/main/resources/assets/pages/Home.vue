@@ -16,7 +16,7 @@
                 <div class="col-md-3 sponsor">
                     <div class="panel sponsor-panel">
                         <span>Sponsored by</span>
-                        <div class="panel-body" :set="sponsor = randomSponsor()">
+                        <div class="panel-body" :set="sponsor = randomSponsor">
                             <a :href="sponsor.link">
                                 <img class="logo" :src="assetPath(sponsor.image)" alt="Sponsor" />
                             </a>
@@ -121,10 +121,10 @@
         },
         data: defaultData,
         computed: {
-            isDefault: function() {
+            isDefault() {
                 return Object.keys(clearFromDefaults(this.baseBinding, defaultData())).length === 0;
             },
-            baseBinding: function () {
+            baseBinding() {
                 return {
                     q: this.q,
                     sort: this.sort,
@@ -133,26 +133,30 @@
                     platforms: this.platforms
                 }
             },
-            listBinding: function () {
+            listBinding() {
                 return clearFromDefaults(Object.assign({}, this.baseBinding, {offset: (this.page - 1) * this.limit, limit: this.limit}), defaultData())
             },
-            urlBinding: function () {
+            urlBinding() {
                 return clearFromDefaults(Object.assign({}, this.baseBinding, {page: this.page}), defaultData())
             },
-            queryPlaceholder: function () {
+            queryPlaceholder() {
                 return `Search in ${this.projectCount === null ? "all" : this.projectCount} projects` +
                     `${!this.isDefault ? " matching your filters" : ""}` +
                     ", proudly made by the community...";
+            },
+            randomSponsor() {
+                let index = Math.floor(Math.random() * sponsors.length)
+                return sponsors[index]
             }
         },
         methods: {
-            reset: function() {
+            reset() {
                 Object.entries(defaultData()).forEach(([key, value]) => this.$data[key] = value)
             },
-            resetPage: function() {
+            resetPage() {
                 this.page = 1;
             },
-            changeCategory: function(category) {
+            changeCategory(category) {
                 if(this.categories.includes(category.id)) {
                     this.categories.splice(this.categories.indexOf(category.id), 1);
                 } else if(this.categories.length + 1 === Category.values.length) {
@@ -163,10 +167,6 @@
             },
             assetPath(path) {
                 return '/assets/' + path;
-            },
-            randomSponsor() {
-                let index = Math.floor(Math.random() * sponsors.length)
-                return sponsors[index]
             }
         },
         created() {
