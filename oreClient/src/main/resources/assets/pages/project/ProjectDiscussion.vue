@@ -4,7 +4,7 @@
         <div class="row">
             <div v-if="currentUser">
                 <div class="col-md-8">
-                    <div class="reply-box">
+                    <div v-if="project" class="reply-box">
                         <template v-if="permissions.includes('post_as_organization')">
                             <div class="pull-right push-down">
                                 <i class="minor">Posting as:</i>
@@ -38,6 +38,7 @@
 
 <script>
     import Editor from "../../components/Editor";
+    import { mapState } from 'vuex'
 
     //TODO
     let todo = `
@@ -55,14 +56,6 @@
 
     export default {
         components: {Editor},
-        props: {
-            currentUser: Object,
-            project: {
-                type: Object,
-                required: true
-            },
-            permissions: Array
-        },
         computed: {
             routes() {
                 return jsRoutes.controllers
@@ -72,7 +65,9 @@
                     discourseUrl: '@config.app.discourseUrl/',
                     topicId: project.topicId
                 }
-            }
+            },
+            ...mapState('user', ['currentUser']),
+            ...mapState('project', ['project', 'permissions'])
         },
         methods: {
             path() {

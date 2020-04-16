@@ -1,5 +1,5 @@
 <template>
-    <div v-if="this.versionObj">
+    <div v-if="project && this.versionObj">
         <!-- Version header -->
         <div class="row">
             <div class="col-md-12 version-header">
@@ -247,6 +247,7 @@
     import {API} from "../../api";
     import CSRFField from "../../components/CSRFField";
     import {Platform} from "../../enums";
+    import { mapState } from 'vuex'
 
     export default {
         components: {
@@ -261,14 +262,6 @@
             }
         },
         props: {
-            project: {
-                type: Object,
-                required: true
-            },
-            permissions: {
-                type: Array,
-                required: true
-            },
             version: {
                 type: String,
                 required: true
@@ -293,7 +286,11 @@
             },
             platforms() {
                 return Platform
-            }
+            },
+            ...mapState('project', [
+                'project',
+                'permissions'
+            ])
         },
         created() {
             this.updateVersion();

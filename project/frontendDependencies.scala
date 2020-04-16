@@ -5,6 +5,7 @@ object NPMDeps {
 
   val vue                 = "vue"                   -> "2.6.11"
   val vueRouter           = "vue-router"            -> "3.1.4"
+  val vuex                = "vuex"                  -> "3.1.3"
   val vueLoader           = "vue-loader"            -> "15.9.0"
   val vueTemplateCompiler = "vue-template-compiler" -> "2.6.11"
   val vueStyleLoader      = "vue-style-loader"      -> "4.1.2"
