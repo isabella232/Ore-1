@@ -3,7 +3,7 @@
         <div class="col-md-9">
             <div class="row">
                 <div class="col-md-12">
-                    <editor :enabled="permissions && permissions.includes('edit_page')"
+                    <editor :enabled="permissions.includes('edit_page')"
                             :raw="description"
                             subject="Page"
                             v-on:saved="savePage" />
@@ -13,7 +13,7 @@
 
         <div class="col-md-3">
 
-            <div class="stats minor">
+            <div v-if="project" class="stats minor">
                 <p>Category: {{ parseCategory(project.category) }}</p>
                 <p>Published on {{ parseDate(project.created_at) }}</p>
                 <p>{{ formatStats(project.stats.views) }} views</p>
@@ -29,7 +29,7 @@
                     <h3 class="panel-title">Promoted Versions</h3>
                 </div>
 
-                <ul class="list-group promoted-list">
+                <ul v-if="project" class="list-group promoted-list">
                     <li v-for="version in project.promoted_versions" class="list-group-item row row-no-gutters" style="line-height: 2.4em;">
                         <div class="col-lg-8 col-12">
                             <router-link :to="{name: 'version', params: {project, permissions, 'version': version.version}}"
@@ -126,12 +126,11 @@
                     </template>
                 </div>
 
-                <page-list :pages="groupedPages" :project="project" :permissions="permissions"
-                           :include-home="true" v-on:edit-page="startEditPage"></page-list>
+                <page-list :pages="groupedPages" :include-home="true" v-on:edit-page="startEditPage"></page-list>
             </div>
 
 
-            <member-list :members="members" :permissions="permissions" role-category="project" :settings-route="{name: 'settings'}" />
+            <member-list :permissions="permissions" :members="members" role-category="project" :settings-route="{name: 'settings'}" />
         </div>
     </div>
 </template>
@@ -144,6 +143,7 @@
     import {Category} from "../../enums";
     import PageList from "../../components/PageList";
     import _ from 'lodash'
+    import { mapState } from 'vuex'
 
     export default {
         components: {
@@ -160,20 +160,8 @@
             }
         },
         props: {
-            project: {
-                type: Object,
-                required: true
-            },
-            permissions: {
-                type: Array,
-                required: true
-            },
             page: {
                 type: [Array, String],
-                required: true
-            },
-            members: {
-                type: Array,
                 required: true
             }
         },
@@ -224,14 +212,26 @@
             },
             currentPage() {
                 return this.pages.filter(p => _.isEqual(p.slug, this.splitPage))[0]
-            }
+            },
+            ...mapState('project', [
+                'project',
+                'permissions',
+                'members'
+            ])
         },
         created() {
-            this.updatePage(true);
+            if(this.project) {
+                this.updatePage(true)
+            }
         },
         watch: {
             $route() {
                 this.updatePage(false)
+            },
+            project(val, oldVal) {
+                if(!oldVal || val.plugin_id !== oldVal.plugin_id) {
+                    this.updatePage(true)
+                }
             }
         },
         methods: {

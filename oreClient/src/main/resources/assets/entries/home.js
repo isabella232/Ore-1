@@ -1,5 +1,6 @@
 import Vue from 'vue'
 import VueRouter from 'vue-router'
+import Vuex from 'vuex'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 import TopPage from "../pages/TopPage";
@@ -13,8 +14,23 @@ import VersionPage from "../pages/project/VersionPage";
 import NewVersion from "../pages/project/NewVersion";
 import UserProfile from "../pages/UserProfile";
 
+import topStore from "../stores/top"
+import projectModule from "../stores/project"
+import userModule from "../stores/user"
+
 Vue.use(VueRouter);
+Vue.use(Vuex);
 Vue.component('font-awesome-icon', FontAwesomeIcon);
+
+const store = new Vuex.Store({
+    ...topStore,
+    modules: {
+        project: projectModule,
+        user: userModule
+    }
+});
+
+store.dispatch('user/loadUser');
 
 const router = new VueRouter({
     base: '/',
@@ -87,5 +103,6 @@ const router = new VueRouter({
 const app = new Vue({
     el: '#home',
     render: createElement => createElement(TopPage),
-    router
+    router,
+    store
 });

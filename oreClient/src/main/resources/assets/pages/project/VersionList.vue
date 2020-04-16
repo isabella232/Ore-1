@@ -2,7 +2,7 @@
     <div class="version-list">
         <div class="row text-center">
             <div class="col-xs-12">
-                <router-link :to="{name: 'new_version', params: {project, permissions}}" v-slot="{ href, navigate }">
+                <router-link :to="{name: 'new_version'}" v-slot="{ href, navigate }">
                     <a v-if="canUpload" class="btn yellow" :href="href" @click="navigate">Upload a New Version</a>
                 </router-link>
             </div>
@@ -68,10 +68,10 @@
                                 </div>
                                 <div class="col-xs-4">
                                     <div class="btn-group d-flex d-flex-space-between">
-                                        <router-link :to="{name: 'version', params: {project, permissions, 'version': version.name}}" v-slot="{ href, navigate }">
+                                        <router-link :to="{name: 'version', params: {'version': version.name}}" v-slot="{ href, navigate }">
                                             <a :href="href" @click="navigate" class="btn btn-default mb-0"><font-awesome-icon :icon="['fas', 'info-circle']" /> Changelog</a>
                                         </router-link>
-                                        <a :href="routes.Versions.download(project.namespace.owner, project.namespace.slug, version.name, null).absoluteURL()" class="btn btn-primary mb-0"><font-awesome-icon :icon="['fas', 'download']" /> Download</a>
+                                        <a v-if="project" :href="routes.Versions.download(project.namespace.owner, project.namespace.slug, version.name, null).absoluteURL()" class="btn btn-primary mb-0"><font-awesome-icon :icon="['fas', 'download']" /> Download</a>
                                     </div>
                                 </div>
                             </div>
@@ -90,6 +90,7 @@
     import Pagination from "../../components/Pagination";
     import {Visibility, Stability, ReleaseType, Platform} from "../../enums";
     import {API} from "../../api";
+    import { mapState } from 'vuex'
 
     export default {
         components: {
@@ -97,11 +98,6 @@
             Pagination
         },
         props: {
-            permissions: Array,
-            project: {
-                type: Object,
-                required: true
-            },
             stability: {
                 type: Array,
                 required: true
@@ -121,21 +117,30 @@
             }
         },
         created() {
-            this.update();
-            this.$watch(vm => vm.page, () => {
+            if(this.project) {
+                this.update()
+            }
+        },
+        watch: {
+            page() {
                 this.update();
                 window.scrollTo(0,0);
-            });
-            this.$watch(vm => vm.stability, () => {
+            },
+            stability() {
                 this.page = 1;
                 this.update();
                 window.scrollTo(0,0);
-            });
-            this.$watch(vm => vm.platforms, () => {
+            },
+            platforms() {
                 this.page = 1;
                 this.update();
                 window.scrollTo(0,0);
-            });
+            },
+            project(val, oldVal) {
+                if(!oldVal || val.plugin_id !== oldVal.plugin_id) {
+                    this.update()
+                }
+            }
         },
         methods: {
             update() {
@@ -145,6 +150,8 @@
                     platforms: this.platforms,
                     stability: this.stability
                 };
+
+
                 API.request("projects/" + this.project.plugin_id + "/versions", "GET", requestParams).then((response) => {
                     this.versions = response.result;
                     this.totalVersions = response.pagination.count;
@@ -219,7 +226,8 @@
             },
             releaseTypes() {
                 return ReleaseType
-            }
+            },
+            ...mapState('project', ['project', 'permissions'])
         }
     }
 </script>
