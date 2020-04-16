@@ -1,5 +1,5 @@
 import Vue from 'vue';
-import _ from 'lodash';
+import isEqual from 'lodash/isEqual';
 import {API} from "../api";
 
 const state = {
@@ -74,7 +74,7 @@ const actions = {
                 API.request("projects/" + project).then(res => context.dispatch('setActiveProjectFromFetched', res));
             }
         } else {
-            if (!context.state.project || !_.isEqual(context.state.project.namespace, project)) {
+            if (!context.state.project || !isEqual(context.state.project.namespace, project)) {
                 API.request('projects?exact=true&owner=' + project.owner + '&q=' + project.slug).then(res => {
                     if (res.result.length) {
                         context.dispatch('setActiveProjectFromFetched', res.result[0])
