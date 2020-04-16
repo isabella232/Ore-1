@@ -192,7 +192,6 @@
 
                         <button @click="sendProjectUpdate(dataToSend)" name="save" class="btn btn-success">
                             <font-awesome-icon :icon="saveChangesIcon" :spin="sendingChanges" /> Save changes
-                            {{ dataToSend }}
                         </button>
                     </div>
                 </div>
