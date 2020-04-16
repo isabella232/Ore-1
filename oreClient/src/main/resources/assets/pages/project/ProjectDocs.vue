@@ -144,6 +144,7 @@
     import {Category} from "../../enums";
     import PageList from "../../components/PageList";
     import _ from 'lodash'
+    import NProgress from "nprogress";
 
     export default {
         components: {
@@ -236,6 +237,7 @@
         },
         methods: {
             updatePage(fetchPages) {
+                NProgress.start();
                 API.request('projects/' + this.project.plugin_id + '/_pages/' + this.joinedPage).then((response) => {
                     if(response.content === null) {
                         this.description = ""
@@ -243,6 +245,7 @@
                     else {
                         this.description = response.content;
                     }
+                    NProgress.done();
                 }).catch((error) => {
                     this.description = "";
 
