@@ -14,6 +14,10 @@ import {
     faSadTear, faCheckCircle as farCheckCircle, faClock
 } from '@fortawesome/free-regular-svg-icons'
 
+import css from "@fortawesome/fontawesome-svg-core/styles.css"
+
+void(css);
+
 config.autoAddCss = false;
 
 library.add(fasStar, fasGem, faEye, faDownload, faServer, faComment, faWrench, faMoneyBillAlt, faPuzzlePiece, faGamepad,

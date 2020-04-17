@@ -74,7 +74,7 @@
     import NProgress from "nprogress"
     import npcss from "nprogress/nprogress.css";
 
-    console.log(npcss)
+    void(npcss);
 
     export default {
         components: {
