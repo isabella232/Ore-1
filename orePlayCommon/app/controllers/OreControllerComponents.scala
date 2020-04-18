@@ -2,8 +2,6 @@ package controllers
 
 import scala.language.higherKinds
 
-import javax.inject.Inject
-
 import scala.concurrent.ExecutionContext
 
 import play.api.http.FileMimeTypes
@@ -27,6 +25,7 @@ trait OreControllerComponents extends ControllerComponents {
   def config: OreConfig
   def projectFiles: ProjectFiles[ZIO[Blocking, Nothing, ?]]
   def zioRuntime: zio.Runtime[Blocking with Clock]
+  def assetsFinder: AssetsFinder
 }
 
 trait OreControllerEffects[F[_]] {
@@ -37,7 +36,7 @@ trait OreControllerEffects[F[_]] {
   def organizations: OrganizationBase[F]
 }
 
-case class DefaultOreControllerComponents @Inject()(
+case class DefaultOreControllerComponents(
     uioEffects: OreControllerEffects[UIO],
     bakery: Bakery,
     config: OreConfig,
@@ -48,10 +47,11 @@ case class DefaultOreControllerComponents @Inject()(
     fileMimeTypes: FileMimeTypes,
     executionContext: ExecutionContext,
     projectFiles: ProjectFiles[ZIO[Blocking, Nothing, ?]],
-    zioRuntime: zio.Runtime[Blocking with Clock]
+    zioRuntime: zio.Runtime[Blocking with Clock],
+    assetsFinder: AssetsFinder
 ) extends OreControllerComponents
 
-case class DefaultOreControllerEffects[F[_]] @Inject()(
+case class DefaultOreControllerEffects[F[_]](
     service: ModelService[F],
     sso: SSOApi[F],
     users: UserBase[F],

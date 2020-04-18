@@ -16,7 +16,7 @@ GET     /admin/flags/:id/resolve/:resolved                          @controllers
 GET     /admin/health                                               @controllers.Application.showHealth()
 GET     /admin/activities/:user                                     @controllers.Application.showActivities(user: String)
 GET     /admin/stats                                                @controllers.Application.showStats(from: Option[String], to: Option[String])
-GET     /admin/log                                                  @controllers.Application.showLog(page: Option[Int], userFilter: Option[DbRef[User]], projectFilter: Option[DbRef[Project]], versionFilter: Option[DbRef[Version]], pageFilter: Option[DbRef[Page]], actionFilter: Option[Int], subjectFilter: Option[DbRef[_]])
+GET     /admin/log                                                  @controllers.Application.showLog(page: Option[Int], userFilter: Option[String], projectFilter: Option[String], versionFilter: Option[String], pageFilter: Option[DbRef[Page]], actionFilter: Option[String], subjectFilter: Option[String])
 
 GET     /statusz                                                    @controllers.ApiV1Controller.showStatusZ()
 
@@ -93,7 +93,7 @@ POST    /notifications/read/:id                                     @controllers
 
 POST    /prompts/read/:id                                           @controllers.Users.markPromptRead(id: Int)
 
-GET     /:user                                                      @controllers.Users.showProjects(user, page: Option[Int])
+GET     /:user                                                      @controllers.Users.showProjects(user)
 GET     /:user/sitemap.xml                                          @controllers.Users.userSitemap(user)
 POST    /:user/settings/tagline                                     @controllers.Users.saveTagline(user)
 POST    /:user/settings/lock/:locked                                @controllers.Users.setLocked(user, locked: Boolean, sso: Option[String], sig: Option[String])

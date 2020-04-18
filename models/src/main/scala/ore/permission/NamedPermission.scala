@@ -13,6 +13,7 @@ object NamedPermission extends Enum[NamedPermission] {
   case object EditSubjectSettings  extends NamedPermission(Permission.EditSubjectSettings)
   case object ManageSubjectMembers extends NamedPermission(Permission.ManageSubjectMembers)
   case object IsSubjectOwner       extends NamedPermission(Permission.IsSubjectOwner)
+  case object IsSubjectMember      extends NamedPermission(Permission.IsSubjectMember)
 
   case object CreateProject extends NamedPermission(Permission.CreateProject)
   case object EditPage      extends NamedPermission(Permission.EditPage)

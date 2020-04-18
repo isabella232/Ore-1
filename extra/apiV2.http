@@ -26,10 +26,20 @@ Cookie: _oretoken={{ore_session}}
 > {% client.global.set("api_session", response.body.session); %}
 
 ### Authenticate fake
-POST http://localhost:9000/api/v2/authenticate?fake=true
+POST http://localhost:9000/api/v2/authenticate
 Accept: application/json
+Content-Type: application/json
+
+{"fake": true}
 
 > {% client.global.set("api_session", response.body.session); %}
+
+### Invalidate session
+DELETE http://localhost:9000/api/v2/sessions/current
+Authorization: OreApi session={{api_session}}
+Accept: application/json
+
+> {% client.global.clear("api_session"); %}
 
 ### Create a new key
 POST http://localhost:9000/api/v2/keys
@@ -75,6 +85,11 @@ GET http://localhost:9000/api/v2/projects/nucleus/members
 Authorization: OreApi session={{api_session}}
 Accept: application/json
 
+### Get project stats
+GET http://localhost:9000/api/v2/projects/nucleus/stats?fromDate=2019-06-01&toDate=2019-10-13
+Authorization: OreApi session={{api_session}}
+Accept: application/json
+
 ### Get project versions
 GET http://localhost:9000/api/v2/projects/nucleus/versions
 Authorization: OreApi session={{api_session}}
@@ -82,6 +97,11 @@ Accept: application/json
 
 ### Get single project versions
 GET http://localhost:9000/api/v2/projects/nucleus/versions/1.9.0-S7.1
+Authorization: OreApi session={{api_session}}
+Accept: application/json
+
+### Get version stats
+GET http://localhost:9000/api/v2/projects/nucleus/versions/1.9.0-S7.1/stats?fromDate=2019-06-01&toDate=2019-10-13
 Authorization: OreApi session={{api_session}}
 Accept: application/json
 

@@ -22,16 +22,16 @@ Documentation page within Project overview.
   page: Page,
   parentPage: Option[Page],
   pageCount: Int,
-  editorOpen: Boolean = false)(implicit messages: Messages, request: OreRequest[_], flash: Flash, config: OreConfig, renderer: MarkdownRenderer)
+  editorOpen: Boolean = false)(implicit messages: Messages, request: OreRequest[_], flash: Flash, config: OreConfig, renderer: MarkdownRenderer, assetsFinder: AssetsFinder)
 
 @canEditPages = @{
     sp.perms(Permission.EditPage)
 }
 
 @scripts = {
-    <script type="text/javascript" src="@controllers.routes.Assets.versioned("javascripts/pageCollapse.js")"></script>
-    <script type="text/javascript" src="@controllers.routes.Assets.versioned("javascripts/userSearch.js")"></script>
-    <script type="text/javascript" src="@controllers.routes.Assets.versioned("javascripts/memberList.js")"></script>
+    <script type="text/javascript" src="@assetsFinder.path("javascripts/pageCollapse.js")"></script>
+    <script type="text/javascript" src="@assetsFinder.path("javascripts/userSearch.js")"></script>
+    <script type="text/javascript" src="@assetsFinder.path("javascripts/memberList.js")"></script>
     <script @CSPNonce.attr>
             pluginId = '@p.project.pluginId';
             namespace = '@p.project.namespace';
@@ -63,15 +63,14 @@ Documentation page within Project overview.
             <div class="stats minor">
                 <p>@messages("project.category.info", p.project.category.title)</p>
                 <p>@messages("project.publishDate", prettifyDate(p.project.createdAt))</p>
-                <p>@p.project.viewCount views</p>
-                <p>@p.project.starCount <a href="@routes.Projects.showStargazers(p.project.ownerName, p.project.slug, None)">stars</a></p>
-                @* TODO Show count here too once API is released and we can start to break the old one *@
-                <p><a href="@routes.Projects.showWatchers(p.project.ownerName, p.project.slug, None)">watchers</a></p>
-                <p>@NumberFormat.getInstance.format(p.project.downloadCount) total downloads</p>
-                @p.settings.licenseName.map { licenseName =>
+                <p><span id="view-count"></span> views</p>
+                <p><span id="star-count"></span> <a href="@routes.Projects.showStargazers(p.project.ownerName, p.project.slug, None)">stars</a></p>
+                <p><span id="watcher-count"></span> <a href="@routes.Projects.showWatchers(p.project.ownerName, p.project.slug, None)">watchers</a></p>
+                <p><span id="download-count"></span> total downloads</p>
+                @p.project.settings.licenseName.map { licenseName =>
                     <p>
                         @Html(messages("project.license.link"))
-                    <a target="_blank" rel="noopener" href="@p.settings.licenseUrl">@licenseName</a>
+                    <a target="_blank" rel="noopener" href="@p.project.settings.licenseUrl">@licenseName</a>
                     </p>
                 }
             </div>

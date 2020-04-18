@@ -1,12 +1,12 @@
 package ore.permission.role
 
-import java.time.Instant
+import java.time.OffsetDateTime
 
 import scala.collection.immutable
 
 import ore.data.Color
 import ore.data.Color._
-import ore.db.{Model, ObjId, ObjInstant}
+import ore.db.{Model, ObjId, ObjOffsetDateTime}
 import ore.models.user.role.DbRole
 import ore.permission.{Permission => Perm}
 
@@ -34,7 +34,7 @@ sealed abstract case class Role(
         rank = rankOpt
       ),
       ObjId(roleId.toLong),
-      ObjInstant(Instant.EPOCH)
+      ObjOffsetDateTime(OffsetDateTime.MIN)
     )
 
   def rankOpt: Option[Int] = None
@@ -129,8 +129,17 @@ object Role extends StringEnum[Role] {
         "Developer",
         Transparent
       )
-  object ProjectEditor  extends Role("Project_Editor", 21, RoleCategory.Project, Perm.EditPage, "Editor", Transparent)
-  object ProjectSupport extends Role("Project_Support", 22, RoleCategory.Project, Perm.None, "Support", Transparent)
+  object ProjectEditor
+      extends Role(
+        "Project_Editor",
+        21,
+        RoleCategory.Project,
+        Perm(Perm.EditPage, ProjectSupport.permissions),
+        "Editor",
+        Transparent
+      )
+  object ProjectSupport
+      extends Role("Project_Support", 22, RoleCategory.Project, Perm.IsProjectMember, "Support", Transparent)
 
   object Organization
       extends Role(
@@ -196,7 +205,7 @@ object Role extends StringEnum[Role] {
         "Organization_Support",
         28,
         RoleCategory.Organization,
-        Perm.PostAsOrganization,
+        Perm(Perm.PostAsOrganization, Perm.IsOrganizationMember),
         "Support",
         Transparent
       )
@@ -208,9 +217,11 @@ object Role extends StringEnum[Role] {
   val organizationRoles: immutable.IndexedSeq[Role] = values.filter(_.category == RoleCategory.Organization)
 }
 
-sealed trait RoleCategory
-object RoleCategory {
-  case object Global       extends RoleCategory
-  case object Project      extends RoleCategory
-  case object Organization extends RoleCategory
+sealed abstract class RoleCategory(val value: String) extends StringEnumEntry
+object RoleCategory extends StringEnum[RoleCategory] {
+  override def values: immutable.IndexedSeq[RoleCategory] = findValues
+
+  case object Global       extends RoleCategory("global")
+  case object Project      extends RoleCategory("project")
+  case object Organization extends RoleCategory("organization")
 }

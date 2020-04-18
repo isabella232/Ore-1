@@ -2,16 +2,13 @@ package db.impl.access
 
 import scala.language.higherKinds
 
-import java.io.IOException
-import java.time.Instant
-
 import db.impl.query.SharedQueries
-import discourse.OreDiscourseApi
 import ore.OreConfig
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.schema.{PageTable, ProjectTableMain, VersionTable}
+import ore.db.impl.schema.{PageTable, ProjectTable, VersionTable}
 import ore.db.{Model, ModelService}
+import ore.models.Job
 import ore.models.project._
 import ore.models.project.io.ProjectFiles
 import ore.util.StringUtils._
@@ -34,13 +31,6 @@ trait ProjectBase[+F[_]] {
   def missingFile: F[Seq[Model[Version]]]
 
   def refreshHomePage(logger: LoggerTakingImplicit[OreMDC])(implicit mdc: OreMDC): F[Unit]
-
-  /**
-    * Returns projects that have not beein updated in a while.
-    *
-    * @return Stale projects
-    */
-  def stale: F[Seq[Model[Project]]]
 
   /**
     * Returns the Project with the specified owner name and name.
@@ -83,21 +73,12 @@ trait ProjectBase[+F[_]] {
   def exists(owner: String, name: String): F[Boolean]
 
   /**
-    * Saves any pending icon that has been uploaded for the specified [[Project]].
-    *
-    * FIXME: Weird behavior
-    *
-    * @param project Project to save icon for
-    */
-  def savePendingIcon(project: Project)(implicit mdc: OreMDC): F[Unit]
-
-  /**
     * Renames the specified [[Project]].
     *
     * @param project  Project to rename
     * @param name     New name to assign Project
     */
-  def rename(project: Model[Project], name: String): F[Boolean]
+  def rename(project: Model[Project], name: String): F[Unit]
 
   /**
     * Irreversibly deletes this channel and all version associated with it.
@@ -126,21 +107,20 @@ object ProjectBase {
   /**
     * Default live implementation of [[ProjectBase]]
     */
-  class ProjectBaseF[F[_], G[_]](
+  class ProjectBaseF[F[_]](
       implicit service: ModelService[F],
       config: OreConfig,
-      forums: OreDiscourseApi[F],
       fileManager: ProjectFiles[F],
       fileIO: FileIO[F],
       F: cats.effect.Effect[F],
-      par: Parallel[F, G]
+      par: Parallel[F]
   ) extends ProjectBase[F] {
 
     def missingFile: F[Seq[Model[Version]]] = {
       def allVersions =
         for {
           v <- TableQuery[VersionTable]
-          p <- TableQuery[ProjectTableMain] if v.projectId === p.id
+          p <- TableQuery[ProjectTable] if v.projectId === p.id
         } yield (p.ownerName, p.name, v)
 
       service.runDBIO(allVersions.result).flatMap { versions =>
@@ -148,13 +128,13 @@ object ProjectBase {
           .traverseLimited(versions.toVector) {
             case t @ (ownerNamer, name, version) =>
               val res = F
-                .bracket(F.delay(this.fileManager.getVersionDir(ownerNamer, name, version.name)))(
-                  versionDir => fileIO.notExists(versionDir.resolve(version.fileName))
-                )(_ => F.unit)
-                .recover {
-                  case _: IOException =>
-                    //Invalid file name
-                    false
+                .attempt(
+                  F.delay(this.fileManager.getVersionDir(ownerNamer, name, version.name))
+                    .flatMap(versionDir => fileIO.notExists(versionDir.resolve(version.fileName)))
+                )
+                .map {
+                  case Left(_)      => false //Invalid file name
+                  case Right(value) => value
                 }
 
               res.tupleLeft(t)
@@ -172,14 +152,6 @@ object ProjectBase {
         .runDbCon(SharedQueries.refreshHomeView.run)
         .runAsync(TaskUtils.logCallback("Failed to refresh home page", logger))
         .to[F]
-
-    def stale: F[Seq[Model[Project]]] =
-      service.runDBIO(
-        ModelView
-          .raw(Project)
-          .filter(_.lastUpdated > Instant.now().minusMillis(config.ore.projects.staleAge.toMillis))
-          .result
-      )
 
     def withName(owner: String, name: String): F[Option[Model[Project]]] =
       ModelView
@@ -202,44 +174,31 @@ object ProjectBase {
     def exists(owner: String, name: String): F[Boolean] =
       withName(owner, name).map(_.isDefined)
 
-    def savePendingIcon(project: Project)(implicit mdc: OreMDC): F[Unit] =
-      this.fileManager.getPendingIconPath(project).flatMap { optIconPath =>
-        optIconPath.fold(F.unit) { iconPath =>
-          val iconDir = this.fileManager.getIconDir(project.ownerName, project.name)
-
-          val notExists  = fileIO.notExists(iconDir)
-          val createDirs = fileIO.createDirectories(iconDir)
-          val cleanDir   = fileIO.executeBlocking(FileUtils.cleanDirectory(iconDir))
-          val moveDir    = fileIO.move(iconPath, iconDir.resolve(iconPath.getFileName))
-
-          notExists.ifM(createDirs, F.unit) *> cleanDir *> moveDir.void
-        }
-      }
-
     def rename(
         project: Model[Project],
         name: String
-    ): F[Boolean] = {
+    ): F[Unit] = {
       val newName = compact(name)
       val newSlug = slugify(newName)
       checkArgument(config.isValidProjectName(name), "invalid name", "")
       for {
         isAvailable <- this.isNamespaceAvailable(project.ownerName, newSlug)
         _ = checkArgument(isAvailable, "slug not available", "")
-        res <- {
+        _ <- {
           val fileOp      = this.fileManager.renameProject(project.ownerName, project.name, newName)
           val renameModel = service.update(project)(_.copy(name = newName, slug = newSlug))
+          val addForumJob = service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob)
 
           // Project's name alter's the topic title, update it
           val dbOp =
             if (project.topicId.isDefined)
-              forums.updateProjectTopic(project) <* renameModel
+              renameModel *> addForumJob.void
             else
-              renameModel.as(false)
+              renameModel.void
 
           dbOp <* fileOp
         }
-      } yield res
+      } yield ()
     }
 
     def deleteChannel(project: Model[Project], channel: Model[Channel]): F[Unit] = {
@@ -272,10 +231,20 @@ object ProjectBase {
     def prepareDeleteVersion(version: Model[Version]): F[Model[Project]] = {
       for {
         proj <- version.project
-        size <- proj.versions(ModelView.now(Version)).count(_.visibility === (Visibility.Public: Visibility))
-        _ = checkArgument(size > 1, "only one public version", "")
-        rv       <- proj.recommendedVersion(ModelView.now(Version)).sequence.subflatMap(identity).value
-        projects <- service.runDBIO(proj.versions(ModelView.raw(Version)).sortBy(_.createdAt.desc).result) // TODO optimize: only query one version
+        _ <- F
+          .pure(version.visibility != Visibility.SoftDelete)
+          .ifM(
+            proj
+              .versions(ModelView.now(Version))
+              .count(_.visibility === (Visibility.Public: Visibility))
+              .ensure(new IllegalStateException("only one public version"))(_ > 1)
+              .void,
+            F.unit
+          )
+        rv <- proj.recommendedVersion(ModelView.now(Version)).sequence.subflatMap(identity).value
+        projects <- service.runDBIO(
+          proj.versions(ModelView.raw(Version)).sortBy(_.createdAt.desc).result
+        ) // TODO optimize: only query one version
         res <- {
           if (rv.contains(version))
             service.update(proj)(
@@ -312,11 +281,9 @@ object ProjectBase {
       val fileEff = fileIO.executeBlocking(
         FileUtils.deleteDirectory(this.fileManager.getProjectDir(project.ownerName, project.name))
       )
-      val eff =
-        if (project.topicId.isDefined)
-          forums.deleteProjectTopic(project).void
-        else F.unit
-      // TODO: Instead, move to the "projects_deleted" table just in case we couldn't delete the topic
+      val addForumJob = (id: Int) => service.insert(Job.DeleteDiscourseTopic.newJob(id).toJob).void
+
+      val eff = project.topicId.fold(F.unit)(addForumJob)
       eff *> service.delete(project) <* fileEff
     }
 

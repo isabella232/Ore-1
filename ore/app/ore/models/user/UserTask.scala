@@ -1,8 +1,7 @@
 package ore.models.user
 
-import java.time.Instant
+import java.time.{Instant, OffsetDateTime, ZoneOffset}
 import java.util.concurrent.TimeUnit
-import javax.inject.{Inject, Singleton}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -17,10 +16,9 @@ import ore.util.OreMDC
 import com.typesafe.scalalogging
 import zio.clock.Clock
 import zio.duration.Duration
-import zio.{UIO, ZIO, ZSchedule}
+import zio.{Schedule, UIO, ZIO}
 
-@Singleton
-class UserTask @Inject()(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.Runtime[Clock])(
+class UserTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.Runtime[Clock])(
     implicit ec: ExecutionContext,
     service: ModelService[UIO]
 ) {
@@ -33,14 +31,15 @@ class UserTask @Inject()(config: OreConfig, lifecycle: ApplicationLifecycle, run
   private val action = ZIO
     .accessM[Clock](_.clock.currentTime(TimeUnit.MILLISECONDS))
     .map(Instant.ofEpochMilli)
+    .map(OffsetDateTime.ofInstant(_, ZoneOffset.UTC))
     .flatMap(now => service.deleteWhere(ApiSession)(_.expires < now))
     .unit
 
-  private val schedule: ZSchedule[Clock, Any, Int] = ZSchedule.fixed(interval)
+  private val schedule: Schedule[Clock, Any, Int] = Schedule.fixed(interval)
 
   Logger.info("DbUpdateTask starting")
   //TODO: Repeat in case of failure
-  private val task = runtime.unsafeRun(action.option.unit.repeat(schedule).fork)
+  private val task = runtime.unsafeRun(action.sandbox.option.unit.repeat(schedule).fork)
 
   lifecycle.addStopHook { () =>
     Future {

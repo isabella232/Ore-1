@@ -9,7 +9,7 @@
 @import util.syntax._
 @import views.html.helper.{CSRF, form}
 @import views.html.utils.editor
-@(v: VersionData, sp: ScopedProjectData)(implicit messages: Messages, request: OreRequest[_], flash: Flash, config: OreConfig, renderer: MarkdownRenderer)
+@(v: VersionData, sp: ScopedProjectData)(implicit messages: Messages, request: OreRequest[_], flash: Flash, config: OreConfig, renderer: MarkdownRenderer, assetsFinder: AssetsFinder)
 
 @projectRoutes = @{controllers.project.routes.Projects}
 @versionRoutes = @{controllers.project.routes.Versions}
@@ -29,7 +29,7 @@
 
                 <!-- User info -->
             <p class="user date pull-left">
-                <a href="@routes.Users.showProjects(v.p.project.ownerName, None)">
+                <a href="@routes.Users.showProjects(v.p.project.ownerName)">
                     <strong>@v.p.project.ownerName</strong>
                 </a>
                 released this version on @prettifyDate(v.v.createdAt)
@@ -72,7 +72,7 @@
 
                         @if(!v.isRecommended && sp.perms(Permission.EditVersion) && v.v.visibility != Visibility.SoftDelete) {
                             @form(action = versionRoutes.setRecommended(
-                                v.p.project.ownerName, v.p.project.slug, v.v.versionString), 'class -> "form-inline") {
+                                v.p.project.ownerName, v.p.project.slug, v.v.versionString), Symbol("class") -> "form-inline") {
                                 @CSRF.formField
                                 <button type="submit" class="btn btn-info">
                                     <i class="fas fa-gem"></i> Set recommended
@@ -133,12 +133,12 @@
                                     <span class="caret"></span>
                                 </button>
                                 <ul class="dropdown-menu" aria-labelledby="admin-version-actions">
-                                    <li><a href="@appRoutes.showLog(None, None, None, Some(v.v.id), None, None, None)">User Action Logs</a></li>
+                                    <li><a href="@appRoutes.showLog(None, None, None, Some(v.v.versionString), None, None, None)">User Action Logs</a></li>
                                     @if(request.headerData.globalPerm(Permission.Reviewer)) {
                                         @if(v.v.visibility == Visibility.SoftDelete) {
                                             <li><a href="#" data-toggle="modal" data-target="#modal-restore">Undo delete</a></li>
                                         }
-                                        @if(request.headerData.globalPerm(Permission.HardDeleteVersion) && !v.isRecommended) {
+                                        @if(request.headerData.globalPerm(Permission.HardDeleteVersion) && !v.isRecommended && (v.p.publicVersions > 1 || v.v.visibility == Visibility.SoftDelete)) {
                                             <li><a href="#" data-toggle="modal" data-target="#modal-harddelete" style="color: darkred">Hard delete</a></li>
                                         }
                                     }

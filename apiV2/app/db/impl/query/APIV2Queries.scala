@@ -3,7 +3,7 @@ package db.impl.query
 import scala.language.higherKinds
 
 import java.sql.Timestamp
-import java.time.LocalDateTime
+import java.time.{LocalDate, LocalDateTime}
 
 import play.api.mvc.RequestHeader
 
@@ -21,8 +21,8 @@ import ore.permission.Permission
 
 import cats.Reducible
 import cats.data.NonEmptyList
-import cats.syntax.all._
 import cats.instances.list._
+import cats.syntax.all._
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
@@ -63,6 +63,7 @@ object APIV2Queries extends WebDoobieOreProtocol {
           |       ak.owner_id,
           |       ak.token,
           |       ak.raw_key_permissions,
+          |       aks.token,
           |       aks.expires,
           |       CASE
           |           WHEN u.id IS NULL THEN 1::BIT(64)
@@ -119,7 +120,10 @@ object APIV2Queries extends WebDoobieOreProtocol {
             |       p.promoted_versions,
             |       p.views,
             |       p.downloads,
+            |       p.recent_views,
+            |       p.recent_downloads,
             |       p.stars,
+            |       p.watchers,
             |       p.category,
             |       p.description,
             |       COALESCE(p.last_updated, p.created_at) AS last_updated,
@@ -132,7 +136,7 @@ object APIV2Queries extends WebDoobieOreProtocol {
              |       ps.license_url,
              |       ps.forum_sync
              |  FROM home_projects p
-             |         JOIN project_settings ps ON p.id = ps.project_id""".stripMargin
+             |         JOIN projects ps ON p.id = ps.id""".stripMargin
 
     val visibilityFrag =
       if (canSeeHidden) None
@@ -161,7 +165,12 @@ object APIV2Queries extends WebDoobieOreProtocol {
         Some(fr"EXISTS" ++ Fragments.parentheses(jsSelect))
       } else
         None,
-      query.map(q => fr"p.search_words @@ websearch_to_tsquery($q)"),
+      query.map { q =>
+        val trimmedQ = q.trim
+
+        if (q.endsWith(" ")) fr"p.search_words @@ websearch_to_tsquery('english', $trimmedQ)"
+        else fr"p.search_words @@ websearch_to_tsquery_postfix('english', $trimmedQ)"
+      },
       owner.map(o => fr"p.owner_name = $o"),
       visibilityFrag
     )
@@ -188,15 +197,26 @@ object APIV2Queries extends WebDoobieOreProtocol {
   ): Query0[ZIO[Blocking, Nothing, APIV2.Project]] = {
     val ordering = if (orderWithRelevance && query.nonEmpty) {
       val relevance = query.fold(fr"1") { q =>
-        fr"ts_rank(p.search_words, websearch_to_tsquery($q)) DESC"
+        val trimmedQ = q.trim
+
+        if (q.endsWith(" ")) fr"ts_rank(p.search_words, websearch_to_tsquery('english', $trimmedQ)) DESC"
+        else fr"ts_rank(p.search_words, websearch_to_tsquery_postfix('english', $trimmedQ)) DESC"
       }
+
+      // 1483056000 is the Ore epoch
+      // 86400 seconds to days
+      // 604800‬ seconds to weeks
       order match {
-        case ProjectSortingStrategy.MostStars       => fr"p.stars *" ++ relevance
-        case ProjectSortingStrategy.MostDownloads   => fr"p.downloads*" ++ relevance
-        case ProjectSortingStrategy.MostViews       => fr"p.views *" ++ relevance
-        case ProjectSortingStrategy.Newest          => fr"extract(EPOCH from p.created_at) *" ++ relevance
-        case ProjectSortingStrategy.RecentlyUpdated => fr"extract(EPOCH from p.last_updated) *" ++ relevance
+        case ProjectSortingStrategy.MostStars     => fr"p.stars *" ++ relevance
+        case ProjectSortingStrategy.MostDownloads => fr"(p.downloads / 100) *" ++ relevance
+        case ProjectSortingStrategy.MostViews     => fr"(p.views / 200) *" ++ relevance
+        case ProjectSortingStrategy.Newest =>
+          fr"((EXTRACT(EPOCH FROM p.created_at) - 1483056000) / 86400) *" ++ relevance
+        case ProjectSortingStrategy.RecentlyUpdated =>
+          fr"((EXTRACT(EPOCH FROM p.last_updated) - 1483056000) / 604800) *" ++ relevance
         case ProjectSortingStrategy.OnlyRelevance   => relevance
+        case ProjectSortingStrategy.RecentViews     => fr"p.recent_views *" ++ relevance
+        case ProjectSortingStrategy.RecentDownloads => fr"p.recent_downloads*" ++ relevance
       }
     } else order.fragment
 
@@ -241,7 +261,7 @@ object APIV2Queries extends WebDoobieOreProtocol {
             |       pv.dependencies,
             |       pv.visibility,
             |       pv.description,
-            |       pv.downloads,
+            |       coalesce((SELECT sum(pvd.downloads) FROM project_versions_downloads pvd WHERE p.id = pvd.project_id AND pv.id = pvd.version_id), 0),
             |       pv.file_size,
             |       pv.hash,
             |       pv.file_name,
@@ -281,7 +301,7 @@ object APIV2Queries extends WebDoobieOreProtocol {
       visibilityFrag
     )
 
-    base ++ filters ++ fr"GROUP BY pv.id, u.id, pc.id"
+    base ++ filters ++ fr"GROUP BY p.id, pv.id, u.id, pc.id"
   }
 
   def versionQuery(
@@ -329,7 +349,10 @@ object APIV2Queries extends WebDoobieOreProtocol {
             |       p.promoted_versions,
             |       p.views,
             |       p.downloads,
+            |       p.recent_views,
+            |       p.recent_downloads,
             |       p.stars,
+            |       p.watchers,
             |       p.category,
             |       p.visibility
             |    FROM users u JOIN """.stripMargin ++ table ++
@@ -409,4 +432,30 @@ object APIV2Queries extends WebDoobieOreProtocol {
       canSeeHidden: Boolean,
       currentUserId: Option[DbRef[User]]
   ): Query0[Long] = actionCountQuery(Fragment.const("project_watchers"), user, canSeeHidden, currentUserId)
+
+  def projectStats(pluginId: String, startDate: LocalDate, endDate: LocalDate): Query0[APIV2ProjectStatsQuery] =
+    sql"""|SELECT CAST(dates.day as DATE), coalesce(sum(pvd.downloads), 0) AS downloads, coalesce(pv.views, 0) AS views
+          |    FROM projects p,
+          |         (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates
+          |             LEFT JOIN project_versions_downloads pvd ON dates.day = pvd.day
+          |             LEFT JOIN project_views pv ON dates.day = pv.day AND pvd.project_id = pv.project_id
+          |    WHERE p.plugin_id = $pluginId
+          |      AND (pvd IS NULL OR pvd.project_id = p.id)
+          |    GROUP BY pv.views, dates.day;""".stripMargin.query[APIV2ProjectStatsQuery]
+
+  def versionStats(
+      pluginId: String,
+      versionString: String,
+      startDate: LocalDate,
+      endDate: LocalDate
+  ): Query0[APIV2VersionStatsQuery] =
+    sql"""|SELECT CAST(dates.day as DATE), coalesce(pvd.downloads, 0) AS downloads
+          |    FROM projects p,
+          |         project_versions pv,
+          |         (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates
+          |             LEFT JOIN project_versions_downloads pvd ON dates.day = pvd.day
+          |    WHERE p.plugin_id = $pluginId
+          |      AND pv.version_string = $versionString
+          |      AND (pvd IS NULL OR (pvd.project_id = p.id AND pvd.version_id = pv.id));""".stripMargin
+      .query[APIV2VersionStatsQuery]
 }

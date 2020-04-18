@@ -71,6 +71,7 @@ admin.health.stale = Stale projects
 admin.health.topic = Failed discussion topic updates
 admin.health.platform = No platform detected
 admin.health.missingFile = Missing File
+admin.health.jobs = Failed jobs
 
 editor.deleteConfirm    =   Are you sure you want to delete {0}? This cannot be undone.
 
@@ -263,6 +264,10 @@ version.download.confirmPartial.api = \
   While the core plugin has been reviewed, other resources like shaded libraries have not. \n\
   Disclaimer: We disclaim all responsibility for any harm to your server or system should you choose not to heed this \
   warning.
+
+version.download.confirm.curl.nocsrf = \
+  Please POST to the attached link to acknowledge this disclaimer and continue to the download. \
+  curl -O -J -L -d -X "{0}"
 
 version.download.confirm.curl = \
   Please POST to the attached link to acknowledge this disclaimer and continue to the download. \

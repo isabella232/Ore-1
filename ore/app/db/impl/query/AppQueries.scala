@@ -7,13 +7,17 @@ import scala.concurrent.duration.FiniteDuration
 import models.querymodels._
 import ore.data.project.Category
 import ore.db.{DbRef, Model}
+import ore.models.Job
 import ore.models.admin.LoggedActionViewModel
+import ore.models.organization.Organization
 import ore.models.project._
 import ore.models.user.User
 
+import cats.data.NonEmptyList
 import cats.syntax.all._
 import doobie._
 import doobie.implicits._
+import doobie.postgres.implicits._
 
 object AppQueries extends WebDoobieOreProtocol {
 
@@ -60,7 +64,7 @@ object AppQueries extends WebDoobieOreProtocol {
           |  ORDER BY sq.project_name DESC, sq.version_string DESC""".stripMargin.query[UnsortedQueueEntry]
   }
 
-  def flags(userId: DbRef[User]): Query0[ShownFlag] = {
+  val flags: Query0[ShownFlag] = {
     sql"""|SELECT pf.id        AS flag_id,
           |       pf.created_at AS flag_creation_date,
           |       pf.reason    AS flag_reason,
@@ -77,14 +81,17 @@ object AppQueries extends WebDoobieOreProtocol {
   }
 
   def getUnhealtyProjects(staleTime: FiniteDuration): Query0[UnhealtyProject] = {
-    sql"""|SELECT p.owner_name, p.slug, p.topic_id, p.post_id, p.is_topic_dirty, p.last_updated, p.visibility
-          |  FROM projects p
+    sql"""|SELECT p.owner_name, p.slug, p.topic_id, p.post_id, coalesce(hp.last_updated, p.created_at), p.visibility
+          |  FROM projects p JOIN home_projects hp ON p.id = hp.id
           |  WHERE p.topic_id IS NULL
           |     OR p.post_id IS NULL
-          |     OR p.is_topic_dirty
-          |     OR p.last_updated > (now() - $staleTime::INTERVAL)
+          |     OR hp.last_updated > (now() - $staleTime::INTERVAL)
           |     OR p.visibility != 1""".stripMargin.query[UnhealtyProject]
   }
+
+  def erroredJobs: Query0[Job] =
+    sql"""|SELECT last_updated, retry_at, last_error, last_error_descriptor, state, job_type, 
+          |job_properties FROM jobs j WHERE j.state = 'fatal_failure'""".stripMargin.query[Job]
 
   def getReviewActivity(username: String): Query0[ReviewActivity] = {
     sql"""|SELECT pvr.ended_at, pvr.id, p.owner_name, p.slug
@@ -108,41 +115,41 @@ object AppQueries extends WebDoobieOreProtocol {
   def getStats(startDate: LocalDate, endDate: LocalDate): Query0[Stats] = {
     sql"""|SELECT (SELECT COUNT(*) FROM project_version_reviews WHERE CAST(ended_at AS DATE) = day)     AS review_count,
           |       (SELECT COUNT(*) FROM project_versions WHERE CAST(created_at AS DATE) = day)          AS created_projects,
-          |       (SELECT COUNT(*) FROM project_version_downloads WHERE CAST(created_at AS DATE) = day) AS download_count,
+          |       (SELECT COUNT(*) FROM project_versions_downloads_individual WHERE CAST(created_at AS DATE) = day) AS download_count,
           |       (SELECT COUNT(*)
-          |          FROM project_version_unsafe_downloads
-          |          WHERE CAST(created_at AS DATE) = day)                                              AS unsafe_download_count,
+          |            FROM project_version_unsafe_downloads
+          |            WHERE CAST(created_at AS DATE) = day)                                            AS unsafe_download_count,
           |       (SELECT COUNT(*)
-          |          FROM project_flags
-          |          WHERE CAST(created_at AS DATE) <= day
-          |            AND (CAST(resolved_at AS DATE) >= day OR resolved_at IS NULL))                   AS flags_created,
+          |            FROM project_flags
+          |            WHERE CAST(created_at AS DATE) <= day
+          |              AND (CAST(resolved_at AS DATE) >= day OR resolved_at IS NULL))                 AS flags_created,
           |       (SELECT COUNT(*) FROM project_flags WHERE CAST(resolved_at AS DATE) = day)            AS flags_resolved,
           |       CAST(day AS DATE)
-          |  FROM (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates
-          |  ORDER BY day ASC;""".stripMargin.query[Stats]
+          |    FROM (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates
+          |    ORDER BY day ASC;""".stripMargin.query[Stats]
   }
 
   def getLog(
       oPage: Option[Int],
-      userFilter: Option[DbRef[User]],
-      projectFilter: Option[DbRef[Project]],
-      versionFilter: Option[DbRef[Version]],
+      userFilter: Option[String],
+      projectFilter: Option[String],
+      versionFilter: Option[String],
       pageFilter: Option[DbRef[Page]],
-      actionFilter: Option[Int],
-      subjectFilter: Option[DbRef[_]]
+      actionFilter: Option[String],
+      subjectFilter: Option[String]
   ): Query0[Model[LoggedActionViewModel[Any]]] = {
     val pageSize = 50L
     val page     = oPage.getOrElse(1)
     val offset   = (page - 1) * pageSize
 
     val frags = sql"SELECT * FROM v_logged_actions la " ++ Fragments.whereAndOpt(
-      userFilter.map(id => fr"la.user_id = $id"),
-      projectFilter.map(id => fr"la.filter_project = $id"),
-      versionFilter.map(id => fr"la.filter_version = $id"),
-      pageFilter.map(id => fr"la.filter_page = $id"),
-      actionFilter.map(i => fr"la.filter_action = $i"),
-      subjectFilter.map(id => fr"la.filter_subject = $id")
-    ) ++ fr"ORDER BY la.id DESC OFFSET $offset LIMIT $pageSize"
+      userFilter.map(name => fr"la.user_name = $name"),
+      projectFilter.map(id => fr"la.p_plugin_id = $id"),
+      versionFilter.map(id => fr"la.pv_version_string = $id"),
+      pageFilter.map(id => fr"la.pp_id = $id"),
+      actionFilter.map(action => fr"la.action = $action::LOGGED_ACTION_TYPE"),
+      subjectFilter.map(subject => fr"la.s_name = $subject")
+    ) ++ fr"ORDER BY la.created_at DESC OFFSET $offset LIMIT $pageSize"
 
     frags.query[Model[LoggedActionViewModel[Any]]]
   }
@@ -183,5 +190,29 @@ object AppQueries extends WebDoobieOreProtocol {
           |    FROM users u
           |    ORDER BY (SELECT COUNT(*) FROM project_members_all pma WHERE pma.user_id = u.id) DESC
           |    LIMIT 49000""".stripMargin.query[String]
+  }
+
+  def apiV1IdSearch(
+      q: Option[String],
+      categories: List[Category],
+      ordering: ProjectSortingStrategy,
+      limit: Int,
+      offset: Int
+  ): Query0[DbRef[Project]] = {
+    val query = s"%${q.getOrElse("")}%"
+    val queryFilter =
+      fr"p.name ILIKE $query OR p.description ILIKE $query OR p.owner_name ILIKE $query OR p.plugin_id ILIKE $query"
+    val catFilter = NonEmptyList.fromList(categories).map(Fragments.in(fr"p.category", _))
+
+    val res = (
+      sql"SELECT p.id FROM home_projects p " ++
+        Fragments.whereAndOpt(Some(queryFilter), catFilter) ++
+        fr"ORDER BY" ++
+        ordering.fragment ++
+        fr"LIMIT $limit OFFSET $offset"
+    ).query[DbRef[Project]]
+
+    println(res.sql)
+    res
   }
 }

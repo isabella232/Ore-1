@@ -1,9 +1,7 @@
 package ore
 
-import javax.inject.{Inject, Singleton}
-
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import play.api.{ConfigLoader, Configuration}
 
@@ -18,16 +16,17 @@ import ore.util.StringUtils._
   *
   * @param config Base configuration file
   */
-@Singleton
-final class OreConfig @Inject()(config: Configuration) {
+final class OreConfig(config: Configuration) {
 
   // Sub-configs
   val root: Configuration = this.config
 
   object app extends ConfigCategory {
-    val raw: Configuration = root.get[Configuration]("application")
-    val baseUrl: String    = raw.get[String]("baseUrl")
-    val uploadsDir: String = raw.get[String]("uploadsDir")
+    val raw: Configuration      = root.get[Configuration]("application")
+    val baseUrl: String         = raw.get[String]("baseUrl")
+    val discourseUrl: String    = raw.get[String]("discourse-url")
+    val discourseCdnUrl: String = raw.get[String]("discourse-cdn-url")
+    val uploadsDir: String      = raw.get[String]("uploadsDir")
 
     val trustedUrlHosts: Seq[String] = raw.get[Seq[String]]("trustedUrlHosts")
 
@@ -124,29 +123,6 @@ final class OreConfig @Inject()(config: Configuration) {
     }
   }
 
-  object forums extends ConfigCategory {
-    val raw: Configuration        = root.get[Configuration]("discourse")
-    val baseUrl: String           = raw.get[String]("baseUrl")
-    val cdnUrl: String            = raw.get[String]("cdnUrl")
-    val categoryDefault: Int      = raw.get[Int]("categoryDefault")
-    val categoryDeleted: Int      = raw.get[Int]("categoryDeleted")
-    val retryRate: FiniteDuration = raw.get[FiniteDuration]("retryRate")
-
-    object api extends ConfigCategory {
-      val raw: Configuration = forums.raw.get[Configuration]("api")
-      val enabled: Boolean   = raw.get[Boolean]("enabled")
-      val key: String        = raw.get[String]("key")
-      val admin: String      = raw.get[String]("admin")
-
-      object breaker extends ConfigCategory {
-        val raw: Configuration      = api.raw.get[Configuration]("breaker")
-        val maxFailures: Int        = raw.get[Int]("max-failures")
-        val reset: FiniteDuration   = raw.get[FiniteDuration]("reset")
-        val timeout: FiniteDuration = raw.get[FiniteDuration]("timeout")
-      }
-    }
-  }
-
   object sponge extends ConfigCategory {
     val raw: Configuration  = root.get[Configuration]("sponge")
     val logo: String        = raw.get[String]("logo")
@@ -200,8 +176,8 @@ final class OreConfig @Inject()(config: Configuration) {
   }
 
   object performance extends ConfigCategory {
-    val raw: Configuration      = root.get[Configuration]("performance")
-    val nioBlockingFibers: Long = raw.get[Long]("nio-blocking-fibers")
+    val raw: Configuration     = root.get[Configuration]("performance")
+    val nioBlockingFibers: Int = raw.get[Int]("nio-blocking-fibers")
   }
 
   app.load()
@@ -217,8 +193,6 @@ final class OreConfig @Inject()(config: Configuration) {
   ore.queue.load()
   ore.api.load()
   ore.api.session.load()
-  forums.load()
-  forums.api.load()
   sponge.load()
   security.load()
   security.api.load()
@@ -258,18 +232,6 @@ final class OreConfig @Inject()(config: Configuration) {
     name.length >= 1 && name.length <= c.maxNameLen && name.matches(c.nameRegex)
   }
 
-  /**
-    * Attempts to determine a Channel name from the specified version string.
-    * This is attained using a ComparableVersion and finding the first
-    * StringItem within the parsed version. (e.g. 1.0.0-alpha) would return
-    * "alpha".
-    *
-    * @param version  Version string to parse
-    * @return         Suggested channel name
-    */
-  def getSuggestedNameForVersion(version: String): String =
-    this.defaultChannelName
-
   /** Returns true if the application is running in debug mode. */
   def isDebug: Boolean = this.ore.debug
 
@@ -287,12 +249,17 @@ trait ConfigCategory {
 case class Logo(name: String, image: String, link: String)
 object Logo {
   implicit val configSeqLoader: ConfigLoader[Seq[Logo]] = ConfigLoader { cfg => path =>
-    cfg.getConfigList(path).asScala.map { innerCfg =>
-      Logo(
-        innerCfg.getString("name"),
-        innerCfg.getString("image"),
-        innerCfg.getString("link")
-      )
-    }
+    cfg
+      .getConfigList(path)
+      .asScala
+      .view
+      .map { innerCfg =>
+        Logo(
+          innerCfg.getString("name"),
+          innerCfg.getString("image"),
+          innerCfg.getString("link")
+        )
+      }
+      .to(Seq)
   }
 }

@@ -31,9 +31,9 @@
                                                     </a>
                                                 </span>
 
-                                                <span class="stat" title="Views"><i class="fas fa-eye"></i> {{ project.stats.views }}</span>
-                                                <span class="stat" title="Download"><i class="fas fa-download"></i> {{ project.stats.downloads }}</span>
-                                                <span class="stat" title="Stars"><i class="fas fa-star"></i> {{ project.stats.stars }}</span>
+                                                <span class="stat" title="Views"><i class="fas fa-eye"></i> {{ formatStats(project.stats.views) }}</span>
+                                                <span class="stat" title="Download"><i class="fas fa-download"></i> {{ formatStats(project.stats.downloads) }}</span>
+                                                <span class="stat" title="Stars"><i class="fas fa-star"></i> {{ formatStats(project.stats.stars) }}</span>
 
                                                 <span :title="categoryFromId(project.category).name" class="stat">
                                                     <i :class="'fa-' + categoryFromId(project.category).icon" class="fas"></i>
@@ -56,7 +56,7 @@
                     </li>
                 </ul>
                 <Pagination :current="current" :total="total" @jumpTo="$emit('jumpToPage', $event)" @next="$emit('nextPage')"
-                            @prev="$emit('prevPage')" class="project-pagination"></Pagination>
+                            @prev="$emit('prevPage')"></Pagination>
             </div>
             <div v-else class="list-group-item empty-project-list">
                 <i class="far fa-2x fa-sad-tear"></i>
@@ -122,13 +122,13 @@
         },
         created() {
             this.update();
-            this.deboundedUpdateProps = debounce(this.update, 500);
+            this.debouncedUpdateProps = debounce(this.update, 500);
             this.$watch(vm => [vm.q, vm.categories, vm.tags, vm.owner, vm.sort, vm.relevance, vm.limit, vm.offset].join(), () => {
-                this.deboundedUpdateProps();
+                this.debouncedUpdateProps();
             });
         },
         methods: {
-            update: function () {
+            update() {
                 API.request("projects", "GET", clearFromEmpty(this.$props)).then((response) => {
                     this.projects = response.result;
                     this.totalProjects = response.pagination.count;
@@ -136,13 +136,13 @@
                     this.$emit('update:projectCount', this.totalProjects);
                 });
             },
-            categoryFromId: function (id) {
+            categoryFromId(id) {
                 return Category.fromId(id);
             },
-            visibilityFromName: function(name) {
+            visibilityFromName(name) {
                 return Visibility.fromName(name);
             },
-            tagsFromPromoted: function (promotedVersions) {
+            tagsFromPromoted(promotedVersions) {
                 let tagsArray = [];
                 promotedVersions
                     .map(version => version.tags)
@@ -166,6 +166,9 @@
                 });
 
                 return reducedTags;
+            },
+            formatStats(number) {
+                return numberWithCommas(number);
             }
         }
     }
@@ -258,32 +261,6 @@
                 &.recommended-version a {
                     font-weight: bold;
                     color: #636363;
-                }
-            }
-        }
-    }
-    .project-pagination {
-        li {
-            margin-right: 1rem;
-
-            &:last-child {
-                margin-right: 0;
-            }
-
-            &.disabled a, &.disabled a:hover {
-                background: transparent;
-                border: 1px solid #ddd;
-                color: inherit;
-            }
-
-            a {
-                border: 1px solid #ddd;
-                padding: 0.85rem 1.6rem;
-                background: #ffffff;
-                color: $sponge_grey;
-
-                &:first-child, &:last-child {
-                    border-radius: 0;
                 }
             }
         }

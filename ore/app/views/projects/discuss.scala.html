@@ -8,19 +8,19 @@ Discussion page within Project overview.
 @import views.html.helper.CSPNonce
 @import views.html.utils
 
-@(p: ProjectData, sp: ScopedProjectData, forumsAvailable: Boolean)(implicit messages: Messages, request: OreRequest[_],
-        flash: Flash, config: OreConfig, renderer: MarkdownRenderer)
+@(p: ProjectData, sp: ScopedProjectData)(implicit messages: Messages, request: OreRequest[_],
+        flash: Flash, config: OreConfig, renderer: MarkdownRenderer, assetsFinder: AssetsFinder)
 
 @projectRoutes = @{controllers.project.routes.Projects}
 
 @scripts = {
     <script @CSPNonce.attr>
             DiscourseEmbed = {
-                discourseUrl: '@config.forums.baseUrl/',
+                discourseUrl: '@config.app.discourseUrl/',
                 topicId: @p.project.topicId
             };
     </script>
-    <script type="text/javascript" src="@routes.Assets.versioned("javascripts/projectDiscuss.js")"></script>
+    <script type="text/javascript" src="@assetsFinder.path("javascripts/projectDiscuss.js")"></script>
     <script @CSPNonce.attr>$(function() { $('.btn-edit').click(); });</script>
 }
 
@@ -31,32 +31,28 @@ Discussion page within Project overview.
     @if(request.headerData.currentUser.isDefined) {
         <div class="col-md-8">
             <div class="reply-box">
-                @if(forumsAvailable) {
-                    @if(sp.canPostAsOwnerOrga) {
-                        <div class="pull-right push-down">
-                            <i class="minor">@messages("project.discuss.postAs")</i>
-                            <select name="poster" form="form-editor-save">
-                                <option selected>@request.headerData.currentUser.get.name</option>
-                                <option>@p.projectOwner.name</option>
-                            </select>
-                        </div>
+                @if(sp.canPostAsOwnerOrga) {
+                <div class="pull-right push-down">
+                    <i class="minor">@messages("project.discuss.postAs")</i>
+                    <select name="poster" form="form-editor-save">
+                        <option selected>@request.headerData.currentUser.get.name</option>
+                        <option>@p.projectOwner.name</option>
+                    </select>
+                </div>
                         <div class="clearfix"></div>
-                    }
-
-                    <div class="push-down">
-                    @utils.editor(
-                        saveCall = projectRoutes.postDiscussionReply(p.project.ownerName, p.project.slug),
-                        cancellable = false,
-                        enabled = true
-                    )
-                    </div>
-                } else {
-                    <i class="minor">@messages("general.forumsUnavailable")</i>
                 }
+
+                <div class="push-down">
+                    @utils.editor(
+                    saveCall = projectRoutes.postDiscussionReply(p.project.ownerName, p.project.slug),
+                    cancellable = false,
+                    enabled = true
+                    )
+                </div>
             </div>
             <div class="reply-controls">
                 <a class="forums" target="_blank" rel="noopener"
-                href="@config.forums.baseUrl/t/@p.project.topicId">
+                href="@config.app.discourseUrl/t/@p.project.topicId">
                 @messages("general.viewOnForums")
                 </a>
             </div>

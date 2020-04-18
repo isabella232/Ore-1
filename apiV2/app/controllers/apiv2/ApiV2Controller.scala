@@ -1,16 +1,14 @@
 package controllers.apiv2
 
-import scala.language.higherKinds
-
 import java.nio.file.Path
-import java.time.{Instant, LocalDateTime, ZoneOffset}
+import java.time.format.DateTimeParseException
+import java.time.{LocalDate, OffsetDateTime}
 import java.util.UUID
-import javax.inject.{Inject, Singleton}
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 import play.api.http.{HttpErrorHandler, Writeable}
 import play.api.i18n.Lang
@@ -24,10 +22,10 @@ import controllers.sugar.Requests.ApiRequest
 import controllers.{OreBaseController, OreControllerComponents}
 import db.impl.query.APIV2Queries
 import models.protocols.APIV2
-import models.querymodels.{APIV2QueryVersion, APIV2QueryVersionTag}
+import models.querymodels.{APIV2ProjectStatsQuery, APIV2QueryVersion, APIV2QueryVersionTag, APIV2VersionStatsQuery}
 import ore.data.project.Category
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.schema.{ApiKeyTable, OrganizationTable, ProjectTableMain}
+import ore.db.impl.schema.{ApiKeyTable, OrganizationTable, ProjectTable, UserTable}
 import ore.db.{DbRef, Model}
 import ore.models.api.ApiSession
 import ore.models.project.factory.ProjectFactory
@@ -39,18 +37,18 @@ import ore.permission.{NamedPermission, Permission}
 import _root_.util.syntax._
 
 import akka.http.scaladsl.model.headers.{Authorization, HttpCredentials}
-import cats.data.NonEmptyList
+import cats.data.{NonEmptyList, Validated}
+import cats.kernel.Semigroup
 import cats.syntax.all._
 import enumeratum._
-import io.circe._
-import io.circe.generic.extras._
+import io.circe.derivation.annotations.SnakeCaseJsonCodec
 import io.circe.syntax._
+import io.circe.{Codec => CirceCodec, _}
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.{IO, Task, UIO, ZIO}
 
-@Singleton
-class ApiV2Controller @Inject()(
+class ApiV2Controller(
     factory: ProjectFactory,
     val errorHandler: HttpErrorHandler,
     fakeUser: FakeUser,
@@ -60,10 +58,10 @@ class ApiV2Controller @Inject()(
 ) extends OreBaseController
     with CircePlayController {
 
-  implicit def zioMode[R]: scalacache.Mode[ZIO[R, Throwable, ?]] =
-    scalacache.CatsEffect.modes.async[ZIO[R, Throwable, ?]]
+  implicit def zioMode[R]: scalacache.Mode[ZIO[R, Throwable, *]] =
+    scalacache.CatsEffect.modes.async[ZIO[R, Throwable, *]]
 
-  private val resultCache = scalacache.caffeine.CaffeineCache[Either[Result, Result]]
+  private val resultCache = scalacache.caffeine.CaffeineCache[IO[Result, Result]]
 
   lifecycle.addStopHook(() => zioRuntime.unsafeRunToFuture(resultCache.close[Task]()))
 
@@ -71,16 +69,15 @@ class ApiV2Controller @Inject()(
   private def offsetOrZero(offset: Long)                         = math.max(offset, 0)
 
   private def parseAuthHeader(request: Request[_]): IO[Either[Unit, Result], HttpCredentials] = {
-    lazy val authUrl                 = routes.ApiV2Controller.authenticate().absoluteURL()(request)
-    def unAuth[A: Writeable](msg: A) = Unauthorized(msg).withHeaders(WWW_AUTHENTICATE -> authUrl)
+    def unAuth[A: Writeable](msg: A) = Unauthorized(msg).withHeaders(WWW_AUTHENTICATE -> "OreApi")
 
     for {
       stringAuth <- ZIO.fromOption(request.headers.get(AUTHORIZATION)).mapError(Left.apply)
       parsedAuth = Authorization.parseFromValueString(stringAuth).leftMap { es =>
         NonEmptyList
           .fromList(es)
-          .fold(Right(unAuth(ApiError("Could not parse authorization header"))))(
-            es2 => Right(unAuth(ApiErrors(es2.map(_.summary))))
+          .fold(Right(unAuth(ApiError("Could not parse authorization header"))))(es2 =>
+            Right(unAuth(ApiErrors(es2.map(_.summary))))
           )
       }
       auth <- ZIO.fromEither(parsedAuth)
@@ -97,21 +94,20 @@ class ApiV2Controller @Inject()(
   def apiAction: ActionRefiner[Request, ApiRequest] = new ActionRefiner[Request, ApiRequest] {
     def executionContext: ExecutionContext = ec
     override protected def refine[A](request: Request[A]): Future[Either[Result, ApiRequest[A]]] = {
-      lazy val authUrl        = routes.ApiV2Controller.authenticate().absoluteURL()(request)
-      def unAuth(msg: String) = Unauthorized(ApiError(msg)).withHeaders(WWW_AUTHENTICATE -> authUrl)
+      def unAuth(msg: String) = Unauthorized(ApiError(msg)).withHeaders(WWW_AUTHENTICATE -> "OreApi")
 
       val authRequest = for {
         creds <- parseAuthHeader(request)
           .mapError(_.leftMap(_ => unAuth("No authorization specified")).merge)
         token <- ZIO
           .fromOption(creds.params.get("session"))
-          .constError(unAuth("No session specified"))
+          .asError(unAuth("No session specified"))
         info <- service
           .runDbCon(APIV2Queries.getApiAuthInfo(token).option)
           .get
-          .constError(unAuth("Invalid session"))
+          .asError(unAuth("Invalid session"))
         res <- {
-          if (info.expires.isBefore(Instant.now())) {
+          if (info.expires.isBefore(OffsetDateTime.now())) {
             service.deleteWhere(ApiSession)(_.token === token) *> IO.fail(unAuth("Api session expired"))
           } else ZIO.succeed(ApiRequest(info, request))
         }
@@ -126,7 +122,7 @@ class ApiV2Controller @Inject()(
     case APIScope.ProjectScope(pluginId) =>
       service
         .runDBIO(
-          TableQuery[ProjectTableMain]
+          TableQuery[ProjectTable]
             .filter(_.pluginId === pluginId)
             .map(_.id)
             .result
@@ -135,14 +131,14 @@ class ApiV2Controller @Inject()(
         .get
         .map(ProjectScope)
     case APIScope.OrganizationScope(organizationName) =>
+      val q = for {
+        u <- TableQuery[UserTable]
+        if u.name === organizationName
+        o <- TableQuery[OrganizationTable] if u.id === o.id
+      } yield o.id
+
       service
-        .runDBIO(
-          TableQuery[OrganizationTable]
-            .filter(_.name === organizationName)
-            .map(_.id)
-            .result
-            .headOption
-        )
+        .runDBIO(q.result.headOption)
         .get
         .map(OrganizationScope)
   }
@@ -154,8 +150,8 @@ class ApiV2Controller @Inject()(
       //Techically we could make this faster by first checking if the global perms have the needed perms,
       //but then we wouldn't get the 404 on a non existent scope.
       val scopePerms: IO[Unit, Permission] =
-        apiScopeToRealScope(scope).flatMap(request.permissionIn[Scope, IO[Unit, ?]](_))
-      val res = scopePerms.constError(NotFound).ensure(Forbidden)(_.has(perms))
+        apiScopeToRealScope(scope).flatMap(request.permissionIn[Scope, IO[Unit, *]](_))
+      val res = scopePerms.asError(NotFound).ensure(Forbidden)(_.has(perms))
 
       zioToFuture(res.either.map(_.swap.toOption))
     }
@@ -164,10 +160,16 @@ class ApiV2Controller @Inject()(
   def ApiAction(perms: Permission, scope: APIScope): ActionBuilder[ApiRequest, AnyContent] =
     Action.andThen(apiAction).andThen(permApiAction(perms, scope))
 
-  private def expiration(duration: FiniteDuration) = Instant.now().plusSeconds(duration.toSeconds)
+  private def expiration(duration: FiniteDuration, userChoice: Option[Long]) = {
+    val durationSeconds = duration.toSeconds
+
+    userChoice
+      .fold[Option[Long]](Some(durationSeconds))(d => if (d > durationSeconds) None else Some(d))
+      .map(OffsetDateTime.now().plusSeconds)
+  }
 
   def authenticateUser(): Action[AnyContent] = Authenticated.asyncF { implicit request =>
-    val sessionExpiration = expiration(config.ore.api.session.expiration)
+    val sessionExpiration = expiration(config.ore.api.session.expiration, None).get //Safe because user choice is None
     val uuidToken         = UUID.randomUUID().toString
     val sessionToInsert   = ApiSession(uuidToken, None, Some(request.user.id), sessionExpiration)
 
@@ -175,7 +177,7 @@ class ApiV2Controller @Inject()(
       Ok(
         ReturnedApiSession(
           key.token,
-          LocalDateTime.ofInstant(key.expires, ZoneOffset.UTC),
+          key.expires,
           SessionType.User
         )
       )
@@ -186,12 +188,11 @@ class ApiV2Controller @Inject()(
   private val ApiKeyRegex =
     s"""($uuidRegex).($uuidRegex)""".r
 
-  def authenticateKeyPublic(): Action[AnyContent] = Action.asyncF { implicit request =>
-    lazy val sessionExpiration       = expiration(config.ore.api.session.expiration)
-    lazy val publicSessionExpiration = expiration(config.ore.api.session.publicExpiration)
+  def authenticateKeyPublic(implicit request: Request[ApiSessionProperties]): ZIO[Any, Result, Result] = {
+    lazy val sessionExpiration       = expiration(config.ore.api.session.expiration, request.body.expiresIn)
+    lazy val publicSessionExpiration = expiration(config.ore.api.session.publicExpiration, request.body.expiresIn)
 
-    lazy val authUrl        = routes.ApiV2Controller.authenticate().absoluteURL()(request)
-    def unAuth(msg: String) = Unauthorized(ApiError(msg)).withHeaders(WWW_AUTHENTICATE -> authUrl)
+    def unAuth(msg: String) = Unauthorized(ApiError(msg)).withHeaders(WWW_AUTHENTICATE -> "OreApi")
 
     val uuidToken = UUID.randomUUID().toString
 
@@ -199,21 +200,28 @@ class ApiV2Controller @Inject()(
       .flatMap { creds =>
         creds.params.get("apikey") match {
           case Some(ApiKeyRegex(identifier, token)) =>
-            service
-              .runDbCon(APIV2Queries.findApiKey(identifier, token).option)
-              .get
-              .constError(Right(unAuth("Invalid api key")))
-              .map {
-                case (keyId, keyOwnerId) =>
-                  SessionType.Key -> ApiSession(uuidToken, Some(keyId), Some(keyOwnerId), sessionExpiration)
-              }
+            for {
+              expiration <- ZIO
+                .succeed(sessionExpiration)
+                .get
+                .asError(Right(BadRequest("The requested expiration can't be used")))
+              t <- service
+                .runDbCon(APIV2Queries.findApiKey(identifier, token).option)
+                .get
+                .asError(Right(unAuth("Invalid api key")))
+              (keyId, keyOwnerId) = t
+            } yield SessionType.Key -> ApiSession(uuidToken, Some(keyId), Some(keyOwnerId), expiration)
           case _ =>
             ZIO.fail(Right(unAuth("No apikey parameter found in Authorization")))
         }
       }
       .catchAll {
         case Left(_) =>
-          ZIO.succeed(SessionType.Public -> ApiSession(uuidToken, None, None, publicSessionExpiration))
+          ZIO
+            .succeed(publicSessionExpiration)
+            .get
+            .asError(BadRequest("The requested expiration can't be used"))
+            .map(expiration => SessionType.Public -> ApiSession(uuidToken, None, None, expiration))
         case Right(e) => ZIO.fail(e)
       }
 
@@ -224,18 +232,18 @@ class ApiV2Controller @Inject()(
           Ok(
             ReturnedApiSession(
               key.token,
-              LocalDateTime.ofInstant(key.expires, ZoneOffset.UTC),
+              key.expires,
               tpe
             )
           )
       }
   }
 
-  def authenticateDev(): Action[AnyContent] = Action.asyncF {
+  def authenticateDev: ZIO[Any, Result, Result] = {
     if (fakeUser.isEnabled) {
       config.checkDebug()
 
-      val sessionExpiration = expiration(config.ore.api.session.expiration)
+      val sessionExpiration = expiration(config.ore.api.session.expiration, None).get //Safe because userChoice is None
       val uuidToken         = UUID.randomUUID().toString
       val sessionToInsert   = ApiSession(uuidToken, None, Some(fakeUser.id), sessionExpiration)
 
@@ -243,7 +251,7 @@ class ApiV2Controller @Inject()(
         Ok(
           ReturnedApiSession(
             key.token,
-            LocalDateTime.ofInstant(key.expires, ZoneOffset.UTC),
+            key.expires,
             SessionType.Dev
           )
         )
@@ -253,7 +261,25 @@ class ApiV2Controller @Inject()(
     }
   }
 
-  def authenticate(fake: Boolean): Action[AnyContent] = if (fake) authenticateDev() else authenticateKeyPublic()
+  def defaultBody[A](parser: BodyParser[A], default: => A): BodyParser[A] = parse.using { request =>
+    if (request.hasBody) parser
+    else parse.ignore(default)
+  }
+
+  def authenticate(): Action[ApiSessionProperties] =
+    Action.asyncF(defaultBody(parseCirce.decodeJson[ApiSessionProperties], ApiSessionProperties(None, None))) {
+      implicit request => if (request.body._fake.getOrElse(false)) authenticateDev else authenticateKeyPublic
+    }
+
+  def deleteSession(): Action[AnyContent] = ApiAction(Permission.None, APIScope.GlobalScope).asyncF {
+    implicit request =>
+      ZIO
+        .succeed(request.apiInfo.session)
+        .get
+        .asError(BadRequest("This request was not made with a session"))
+        .flatMap(session => service.deleteWhere(ApiSession)(_.token === session))
+        .as(NoContent)
+  }
 
   def createKey(): Action[KeyToCreate] =
     ApiAction(Permission.EditApiKeys, APIScope.GlobalScope)(parseCirce.decodeJson[KeyToCreate]).asyncF {
@@ -296,7 +322,7 @@ class ApiV2Controller @Inject()(
       for {
         user <- ZIO
           .fromOption(request.user)
-          .constError(BadRequest(ApiError("Public keys can't be used to delete")))
+          .asError(BadRequest(ApiError("Public keys can't be used to delete")))
         rowsAffected <- service.runDbCon(APIV2Queries.deleteApiKey(name, user.id.value).run)
       } yield if (rowsAffected == 0) NotFound else NoContent
     }
@@ -315,7 +341,7 @@ class ApiV2Controller @Inject()(
   ): IO[Result, (APIScope, Permission)] =
     for {
       apiScope <- ZIO.fromEither(createApiScope(pluginId, organizationName))
-      scope    <- apiScopeToRealScope(apiScope).constError(NotFound)
+      scope    <- apiScopeToRealScope(apiScope).asError(NotFound)
       perms    <- request.permissionIn(scope)
     } yield (apiScope, perms)
 
@@ -323,7 +349,7 @@ class ApiV2Controller @Inject()(
       cacheKey: String
   )(parts: Any*)(fa: ZIO[R, Result, Result])(implicit request: ApiRequest[B]): ZIO[R, Result, Result] =
     resultCache
-      .cachingF[ZIO[R, Throwable, ?]](
+      .cachingF[ZIO[R, Throwable, *]](
         cacheKey +: parts :+
           request.apiInfo.key.map(_.tokenIdentifier) :+
           //We do both the user and the token for authentication methods that don't use a token
@@ -331,9 +357,9 @@ class ApiV2Controller @Inject()(
           request.body
       )(
         Some(1.minute)
-      )(fa.either)
-      .constError(InternalServerError)
-      .absolve
+      )(fa.memoize)
+      .asError(InternalServerError)
+      .flatten
 
   def showPermissions(pluginId: Option[String], organizationName: Option[String]): Action[AnyContent] =
     ApiAction(Permission.None, APIScope.GlobalScope).asyncF { implicit request =>
@@ -479,6 +505,29 @@ class ApiV2Controller @Inject()(
       }
     }
 
+  def showProjectStats(pluginId: String, fromDateString: String, toDateString: String): Action[AnyContent] =
+    ApiAction(Permission.IsProjectMember, APIScope.ProjectScope(pluginId)).asyncF { implicit request =>
+      cachingF("projectStats")(pluginId, fromDateString, toDateString) {
+        import Ordering.Implicits._
+
+        def parseDate(dateStr: String) =
+          Validated
+            .catchOnly[DateTimeParseException](LocalDate.parse(dateStr))
+            .leftMap(_ => ApiErrors(NonEmptyList.one(s"Badly formatted date $dateStr")))
+
+        for {
+          t <- ZIO
+            .fromEither(parseDate(fromDateString).product(parseDate(toDateString)).toEither)
+            .mapError(BadRequest(_))
+          (fromDate, toDate) = t
+          _ <- ZIO.unit.filterOrFail(_ => fromDate < toDate)(BadRequest(ApiError("From date is after to date")))
+          res <- service.runDbCon(
+            APIV2Queries.projectStats(pluginId, fromDate, toDate).to[Vector].map(APIV2ProjectStatsQuery.asProtocol)
+          )
+        } yield Ok(res.asJson)
+      }
+    }
+
   def listVersions(
       pluginId: String,
       tags: Seq[String],
@@ -542,6 +591,37 @@ class ApiV2Controller @Inject()(
       }
     }
 
+  def showVersionStats(
+      pluginId: String,
+      version: String,
+      fromDateString: String,
+      toDateString: String
+  ): Action[AnyContent] =
+    ApiAction(Permission.IsProjectMember, APIScope.ProjectScope(pluginId)).asyncF { implicit request =>
+      cachingF("versionStats")(pluginId, version, fromDateString, toDateString) {
+        import Ordering.Implicits._
+
+        def parseDate(dateStr: String) =
+          Validated
+            .catchOnly[DateTimeParseException](LocalDate.parse(dateStr))
+            .leftMap(_ => ApiErrors(NonEmptyList.one(s"Badly formatted date $dateStr")))
+
+        for {
+          t <- ZIO
+            .fromEither(parseDate(fromDateString).product(parseDate(toDateString)).toEither)
+            .mapError(BadRequest(_))
+          (fromDate, toDate) = t
+          _ <- ZIO.unit.filterOrFail(_ => fromDate < toDate)(BadRequest(ApiError("From date is after to date")))
+          res <- service.runDbCon(
+            APIV2Queries
+              .versionStats(pluginId, version, fromDate, toDate)
+              .to[Vector]
+              .map(APIV2VersionStatsQuery.asProtocol)
+          )
+        } yield Ok(res.asJson)
+      }
+    }
+
   //TODO: Do the async part at some point
   private def readFileAsync(file: Path): ZIO[Blocking, Throwable, String] = {
     import zio.blocking._
@@ -570,7 +650,7 @@ class ApiV2Controller @Inject()(
 
         val dataF = dataStringF
           .flatMap(s => ZIO.fromEither(parser.decode[DeployVersionInfo](s).leftMap(_.show)))
-          .ensure("Description too long")(_.description.forall(_.length > Page.maxLength))
+          .ensure("Description too long")(_.description.forall(_.length < Page.maxLength))
           .mapError(e => BadRequest(ApiError(e)))
 
         val fileF = ZIO.fromEither(
@@ -588,12 +668,11 @@ class ApiV2Controller @Inject()(
         }
 
         for {
-          user            <- ZIO.fromOption(request.user).constError(BadRequest(ApiError("No user found for session")))
-          _               <- uploadErrors(user)
-          project         <- projects.withPluginId(pluginId).get.constError(NotFound)
-          projectSettings <- project.settings[Task].orDie
-          data            <- dataF
-          file            <- fileF
+          user    <- ZIO.fromOption(request.user).asError(BadRequest(ApiError("No user found for session")))
+          _       <- uploadErrors(user)
+          project <- projects.withPluginId(pluginId).get.asError(NotFound)
+          data    <- dataF
+          file    <- fileF
           pendingVersion <- factory
             .processSubsequentPluginUpload(PluginUpload(file.ref, file.filename), user, project)
             .leftMap { s =>
@@ -602,19 +681,16 @@ class ApiV2Controller @Inject()(
             }
             .map { v =>
               v.copy(
-                createForumPost = data.create_forum_post.getOrElse(projectSettings.forumSync),
-                channelName = data.tags.getOrElse("Channel", v.channelName),
+                createForumPost = data.createForumPost.getOrElse(project.settings.forumSync),
+                channelName =
+                  data.tags.getOrElse(Map.empty).view.mapValues(_.first).getOrElse("Channel", v.channelName),
                 description = data.description
               )
             }
           t <- pendingVersion.complete(project, factory)
-          (project, version, channel, tags) = t
-          _ <- {
-            if (data.recommended.exists(identity))
-              service.update(project)(_.copy(recommendedVersionId = Some(version.id)))
-            else IO.unit
-          }
         } yield {
+          val (_, version, channel, tags) = t
+
           val normalApiTags = tags.map(tag => APIV2QueryVersionTag(tag.name, tag.data, tag.color)).toList
           val channelApiTag = APIV2QueryVersionTag(
             "Channel",
@@ -623,12 +699,12 @@ class ApiV2Controller @Inject()(
           )
           val apiTags = channelApiTag :: normalApiTags
           val apiVersion = APIV2QueryVersion(
-            LocalDateTime.ofInstant(version.createdAt, ZoneOffset.UTC),
+            version.createdAt,
             version.versionString,
             version.dependencyIds,
             version.visibility,
             version.description,
-            version.downloadCount,
+            0,
             version.fileSize,
             version.hash,
             version.fileName,
@@ -725,8 +801,6 @@ class ApiV2Controller @Inject()(
 }
 object ApiV2Controller {
 
-  import APIV2.config
-
   sealed abstract class APIScope(val tpe: APIScopeType)
   object APIScope {
     case object GlobalScope                                extends APIScope(APIScopeType.Global)
@@ -742,8 +816,7 @@ object ApiV2Controller {
 
     val values: immutable.IndexedSeq[APIScopeType] = findValues
 
-    implicit val encoder: Encoder[APIScopeType] = APIV2.enumEncoder(APIScopeType)(_.entryName)
-    implicit val decoder: Decoder[APIScopeType] = APIV2.enumDecoder(APIScopeType)(_.entryName)
+    implicit val codec: CirceCodec[APIScopeType] = APIV2.enumCodec(APIScopeType)(_.entryName)
   }
 
   sealed abstract class SessionType extends EnumEntry with EnumEntry.Snakecase
@@ -755,61 +828,86 @@ object ApiV2Controller {
 
     val values: immutable.IndexedSeq[SessionType] = findValues
 
-    implicit val encoder: Encoder[SessionType] = APIV2.enumEncoder(SessionType)(_.entryName)
-    implicit val decoder: Decoder[SessionType] = APIV2.enumDecoder(SessionType)(_.entryName)
+    implicit val codec: CirceCodec[SessionType] = APIV2.enumCodec(SessionType)(_.entryName)
   }
 
-  @ConfiguredJsonCodec case class ApiError(error: String)
-  @ConfiguredJsonCodec case class ApiErrors(errors: NonEmptyList[String])
-  @ConfiguredJsonCodec case class UserError(user_error: String)
+  @SnakeCaseJsonCodec case class ApiError(error: String)
+  @SnakeCaseJsonCodec case class ApiErrors(errors: NonEmptyList[String])
+  object ApiErrors {
+    implicit val semigroup: Semigroup[ApiErrors] = (x: ApiErrors, y: ApiErrors) =>
+      ApiErrors(x.errors.concatNel(y.errors))
+  }
+  @SnakeCaseJsonCodec case class UserError(userError: String)
 
-  @ConfiguredJsonCodec case class KeyToCreate(name: String, permissions: Seq[String])
-  @ConfiguredJsonCodec case class CreatedApiKey(key: String, perms: Seq[NamedPermission])
+  @SnakeCaseJsonCodec case class KeyToCreate(name: String, permissions: Seq[String])
+  @SnakeCaseJsonCodec case class CreatedApiKey(key: String, perms: Seq[NamedPermission])
 
-  @ConfiguredJsonCodec case class DeployVersionInfo(
-      recommended: Option[Boolean],
-      create_forum_post: Option[Boolean],
+  @SnakeCaseJsonCodec case class DeployVersionInfo(
+      createForumPost: Option[Boolean],
       description: Option[String],
-      tags: Map[String, String]
+      tags: Option[Map[String, StringOrArrayString]]
   )
 
-  @ConfiguredJsonCodec case class ReturnedApiSession(
+  sealed trait StringOrArrayString {
+    def first: String
+  }
+  object StringOrArrayString {
+    case class AsString(s: String) extends StringOrArrayString {
+      def first: String = s
+    }
+    case class AsArray(ss: Seq[String]) extends StringOrArrayString {
+      override def first: String = ss.head
+    }
+
+    implicit val codec: CirceCodec[StringOrArrayString] = CirceCodec.from(
+      (c: HCursor) => c.as[String].map(AsString).orElse(c.as[Seq[String]].map(AsArray)), {
+        case AsString(s) => s.asJson
+        case AsArray(ss) => ss.asJson
+      }
+    )
+  }
+
+  @SnakeCaseJsonCodec case class ApiSessionProperties(
+      _fake: Option[Boolean],
+      expiresIn: Option[Long]
+  )
+
+  @SnakeCaseJsonCodec case class ReturnedApiSession(
       session: String,
-      expires: LocalDateTime,
-      @JsonKey("type") tpe: SessionType
+      expires: OffsetDateTime,
+      `type`: SessionType
   )
 
-  @ConfiguredJsonCodec case class PaginatedProjectResult(
+  @SnakeCaseJsonCodec case class PaginatedProjectResult(
       pagination: Pagination,
       result: Seq[APIV2.Project]
   )
 
-  @ConfiguredJsonCodec case class PaginatedCompactProjectResult(
+  @SnakeCaseJsonCodec case class PaginatedCompactProjectResult(
       pagination: Pagination,
       result: Seq[APIV2.CompactProject]
   )
 
-  @ConfiguredJsonCodec case class PaginatedVersionResult(
+  @SnakeCaseJsonCodec case class PaginatedVersionResult(
       pagination: Pagination,
       result: Seq[APIV2.Version]
   )
 
-  @ConfiguredJsonCodec case class Pagination(
+  @SnakeCaseJsonCodec case class Pagination(
       limit: Long,
       offset: Long,
       count: Long
   )
 
-  implicit val namedPermissionEncoder: Encoder[NamedPermission] = APIV2.enumEncoder(NamedPermission)(_.entryName)
-  implicit val namedPermissionDecoder: Decoder[NamedPermission] = APIV2.enumDecoder(NamedPermission)(_.entryName)
+  implicit val namedPermissionCodec: CirceCodec[NamedPermission] = APIV2.enumCodec(NamedPermission)(_.entryName)
 
-  @ConfiguredJsonCodec case class KeyPermissions(
-      @JsonKey("type") tpe: APIScopeType,
+  @SnakeCaseJsonCodec case class KeyPermissions(
+      `type`: APIScopeType,
       permissions: List[NamedPermission]
   )
 
-  @ConfiguredJsonCodec case class PermissionCheck(
-      @JsonKey("type") tpe: APIScopeType,
+  @SnakeCaseJsonCodec case class PermissionCheck(
+      `type`: APIScopeType,
       result: Boolean
   )
 }

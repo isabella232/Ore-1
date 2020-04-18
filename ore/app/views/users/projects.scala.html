@@ -1,15 +1,14 @@
 @import controllers.project.{routes => projectRoutes}
 @import controllers.routes.{Users => userRoutes}
 @import controllers.sugar.Requests.OreRequest
-@import models.querymodels.ProjectListEntryWithIcon
 @import models.viewhelper.{OrganizationData, ScopedOrganizationData, UserData}
 @import ore.OreConfig
 @import ore.permission.Permission
 @import ore.permission.role.Role
 @import util.syntax._
 @import views.html.utils.userAvatar
-@(u: UserData, o: Option[(OrganizationData, ScopedOrganizationData)],
-        page: Int)(implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig)
+@(u: UserData, o: Option[(OrganizationData, ScopedOrganizationData)])(
+        implicit messages: Messages, flash: Flash, request: OreRequest[_], config: OreConfig, assetsFinder: AssetsFinder)
 
 @canEditOrgMembers = @{
     u.isOrga &&
@@ -19,12 +18,12 @@
 }
 
 @scripts = {
-  <script type="text/javascript" src="@routes.Assets.versioned("build/user-profile.js")"></script>
+  <script type="text/javascript" src="@assetsFinder.path("build/user-profile.js")"></script>
   @if(u.isOrga && o.isDefined && canEditOrgMembers) {
-      <script type="text/javascript" src="@routes.Assets.versioned("javascripts/orgInvites.js")"></script>
+      <script type="text/javascript" src="@assetsFinder.path("javascripts/orgInvites.js")"></script>
   }
-  <script type="text/javascript" src="@routes.Assets.versioned("javascripts/userSearch.js")"></script>
-  <script type="text/javascript" src="@routes.Assets.versioned("javascripts/memberList.js")"></script>
+  <script type="text/javascript" src="@assetsFinder.path("javascripts/userSearch.js")"></script>
+  <script type="text/javascript" src="@assetsFinder.path("javascripts/memberList.js")"></script>
 }
 
 @users.view(u, o, additionalScripts = scripts) {
@@ -76,7 +75,7 @@
                             <tr>
                                 <td>
                                     @userAvatar(Some(organization.name), user.avatarUrl, clazz = "user-avatar-xxs")
-                                <a href="@userRoutes.showProjects(organization.name, None)">
+                                <a href="@userRoutes.showProjects(organization.name)">
                                 @organization.name
                                 </a>
                                 <div class="pull-right">

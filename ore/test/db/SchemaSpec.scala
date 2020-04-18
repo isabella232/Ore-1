@@ -1,6 +1,7 @@
 package db
 
 import ore.db.DbRef
+import ore.models.Job
 import ore.models.admin._
 import ore.models.api.ProjectApiKey
 import ore.models.organization.Organization
@@ -20,21 +21,13 @@ class SchemaSpec extends DbSpec {
 
   test("Project") {
     check(sql"""|SELECT plugin_id, owner_name, owner_id, name, slug, recommended_version_id,
-                |category, description, stars, views, downloads, topic_id, post_id, is_topic_dirty, visibility,
-                |last_updated, notes, keywords FROM projects""".stripMargin.query[Project])
-  }
-
-  test("Project settings") {
-    check(sql"""|SELECT project_id, homepage, issues, source, support, license_name, license_url,
-                |forum_sync FROM project_settings""".stripMargin.query[ProjectSettings])
+                |category, description, topic_id, post_id, visibility,
+                |notes, keywords, homepage, issues, source, support, license_name, license_url, 
+                |forum_sync FROM projects""".stripMargin.query[Project])
   }
 
   test("Project watchers") {
     check(sql"""SELECT project_id, user_id FROM project_watchers""".query[(DbRef[Project], DbRef[User])])
-  }
-
-  test("Project views") {
-    check(sql"""|SELECT project_id, address, cookie, user_id from project_views""".stripMargin.query[ProjectView])
   }
 
   test("Project stars") {
@@ -58,8 +51,8 @@ class SchemaSpec extends DbSpec {
   test("Version") {
     check(
       sql"""|SELECT project_id, version_string, dependencies, channel_id, file_size, hash,
-            |author_id, description, downloads, review_state, reviewer_id, approved_at, visibility, file_name,
-            |create_forum_post, post_id, is_post_dirty FROM project_versions""".stripMargin
+            |author_id, description, review_state, reviewer_id, approved_at, visibility, file_name,
+            |create_forum_post, post_id FROM project_versions""".stripMargin
         .query[Version]
     )
   }
@@ -76,13 +69,6 @@ class SchemaSpec extends DbSpec {
     )
   }
 
-  test("VersionDownloads") {
-    check(
-      sql"""|SELECT version_id, address, cookie, user_id FROM project_version_downloads""".stripMargin
-        .query[VersionDownload]
-    )
-  }
-
   /* Can't check this because id in user is private
   test("User") {
     check(
@@ -93,7 +79,7 @@ class SchemaSpec extends DbSpec {
    */
 
   test("Session") {
-    check(sql"""SELECT expiration, username, token FROM user_sessions""".query[Session])
+    check(sql"""SELECT expiration, user_id, token FROM user_sessions""".query[Session])
   }
 
   test("SignOn") {
@@ -149,10 +135,38 @@ class SchemaSpec extends DbSpec {
                 |visibility FROM project_visibility_changes""".stripMargin.query[ProjectVisibilityChange])
   }
 
-  test("LoggedAction") {
+  test("LoggedActionProject") {
     check(
-      sql"""|SELECT user_id, address, action, action_context, action_context_id, new_state,
-            |old_state FROM logged_actions""".stripMargin.query[LoggedActionModel[Any]]
+      sql"""|SELECT user_id, address, action, project_id, new_state,
+            |old_state FROM logged_actions_project""".stripMargin.query[LoggedActionProject]
+    )
+  }
+
+  test("LoggedActionVersion") {
+    check(
+      sql"""|SELECT user_id, address, action, version_id, new_state,
+            |old_state, project_id FROM logged_actions_version""".stripMargin.query[LoggedActionVersion]
+    )
+  }
+
+  test("LoggedActionPage") {
+    check(
+      sql"""|SELECT user_id, address, action, page_id, new_state,
+            |old_state, project_id FROM logged_actions_page""".stripMargin.query[LoggedActionPage]
+    )
+  }
+
+  test("LoggedActionUser") {
+    check(
+      sql"""|SELECT user_id, address, action, subject_id, new_state,
+            |old_state FROM logged_actions_user""".stripMargin.query[LoggedActionUser]
+    )
+  }
+
+  test("LoggedActionOrganization") {
+    check(
+      sql"""|SELECT user_id, address, action, organization_id, new_state,
+            |old_state FROM logged_actions_organization""".stripMargin.query[LoggedActionOrganization]
     )
   }
 
@@ -183,5 +197,12 @@ class SchemaSpec extends DbSpec {
 
   test("UserGlobalRoles") {
     check(sql"""SELECT user_id, role_id FROM user_global_roles""".query[(DbRef[User], DbRef[DbRole])])
+  }
+
+  test("Job") {
+    check(
+      sql"""|SELECT last_updated, retry_at, last_error, last_error_descriptor, state, 
+            |job_type, job_properties FROM jobs""".stripMargin.query[Job]
+    )
   }
 }

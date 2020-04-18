@@ -1,20 +1,18 @@
 package ore.models.project.factory
 
-import javax.inject.{Inject, Singleton}
-
 import scala.util.matching.Regex
 
 import play.api.cache.SyncCacheApi
 import play.api.i18n.Messages
 
 import db.impl.access.ProjectBase
-import discourse.OreDiscourseApi
 import ore.data.user.notification.NotificationType
 import ore.data.{Color, Platform}
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.{DbRef, Model, ModelService}
 import ore.member.MembershipDossier
+import ore.models.{Job, JobInfo}
 import ore.models.project._
 import ore.models.project.io._
 import ore.models.user.role.ProjectUserRole
@@ -26,7 +24,6 @@ import ore.{OreConfig, OreEnv}
 import util.FileIO
 import util.syntax._
 
-import cats.Parallel
 import cats.data.NonEmptyList
 import cats.syntax.all._
 import com.google.common.base.Preconditions._
@@ -47,16 +44,12 @@ trait ProjectFactory {
   type ParUIO[+A]  = zio.interop.ParIO[Any, Nothing, A]
   type RIO[-R, +A] = ZIO[R, Nothing, A]
 
-  implicit val parUIO: Parallel[UIO, ParUIO]    = parallelInstance[Any, Nothing]
-  implicit val parTask: Parallel[Task, ParTask] = parallelInstance[Any, Throwable]
-
-  protected def fileIO: FileIO[ZIO[Blocking, Nothing, ?]]
-  protected def fileManager: ProjectFiles[ZIO[Blocking, Nothing, ?]]
+  protected def fileIO: FileIO[ZIO[Blocking, Nothing, *]]
+  protected def fileManager: ProjectFiles[ZIO[Blocking, Nothing, *]]
   protected def cacheApi: SyncCacheApi
   protected val dependencyVersionRegex: Regex = """^[0-9a-zA-Z.,\[\]()-]+$""".r
 
   implicit protected def config: OreConfig
-  implicit protected def forums: OreDiscourseApi[UIO]
   implicit protected def env: OreEnv
 
   private val Logger    = scalalogging.Logger("Projects")
@@ -88,7 +81,7 @@ trait ProjectFactory {
       }
 
       val moveToNewPluginPath = fileIO.executeBlocking(
-        uploadData.pluginFile.moveFileTo(tmpDir.resolve(pluginFileName), replace = true)
+        uploadData.pluginFile.moveTo(tmpDir.resolve(pluginFileName), replace = true)
       )
 
       val loadData = createDirs *> moveToNewPluginPath.flatMap { newPluginPath =>
@@ -101,35 +94,30 @@ trait ProjectFactory {
     }
   }
 
-  def processSubsequentPluginUpload(uploadData: PluginUpload, owner: Model[User], project: Model[Project])(
+  def processSubsequentPluginUpload(uploadData: PluginUpload, uploader: Model[User], project: Model[Project])(
       implicit messages: Messages
   ): ZIO[Blocking, String, PendingVersion] =
     for {
-      plugin <- processPluginUpload(uploadData, owner)
+      plugin <- processPluginUpload(uploadData, uploader)
         .ensure("error.version.invalidPluginId")(_.data.id.contains(project.pluginId))
         .ensure("error.version.illegalVersion")(!_.data.version.contains("recommended"))
-      t <- (
-        project
-          .channels(ModelView.now(Channel))
-          .one
-          .getOrElseF(UIO.die(new IllegalStateException("No channel found for project"))),
-        project.settings[Task].orDie
-      ).parTupled
-      (headChannel, settings) = t
+      headChannel <- project
+        .channels(ModelView.now(Channel))
+        .one
+        .getOrElseF(UIO.die(new IllegalStateException("No channel found for project")))
       version <- IO.fromEither(
         this.startVersion(
           plugin,
           project.pluginId,
-          Some(project.id),
-          project.url,
-          settings.forumSync,
+          project.id,
+          project.settings.forumSync,
           headChannel.name
         )
       )
       modelExists <- version.exists[Task].orDie
       res <- {
         if (modelExists && this.config.ore.projects.fileValidate) IO.fail("error.version.duplicate")
-        else version.cache[Task].const(version).orDie
+        else version.cache[Task].as(version).orDie
       }
     } yield res
 
@@ -155,21 +143,19 @@ trait ProjectFactory {
   def createProject(
       owner: Model[User],
       template: ProjectTemplate
-  ): IO[String, (Model[Project], Model[ProjectSettings])] = {
+  ): IO[String, Model[Project]] = {
     val name = template.name
     val slug = slugify(name)
     val project = Project(
       pluginId = template.pluginId,
-      ownerName = owner.name,
       ownerId = owner.id,
+      ownerName = owner.name,
       name = name,
       slug = slug,
       category = template.category,
       description = template.description,
       visibility = Visibility.New
     )
-
-    val projectSettings: DbRef[Project] => ProjectSettings = ProjectSettings(_)
 
     val channel: DbRef[Project] => Channel = Channel(_, config.defaultChannelName, config.defaultChannelColor)
 
@@ -182,13 +168,12 @@ trait ProjectFactory {
         this.projects.isNamespaceAvailable(owner.name, slug)
       ).parTupled
       (existsId, existsName, available) = t
-      _           <- cond(!existsName, "project with that name already exists")
-      _           <- cond(!existsId, "project with that plugin id already exists")
-      _           <- cond(available, "slug not available")
-      _           <- cond(config.isValidProjectName(name), "invalid name")
-      newProject  <- service.insert(project)
-      newSettings <- service.insert(projectSettings(newProject.id.value))
-      _           <- service.insert(channel(newProject.id.value))
+      _          <- cond(!existsName, "project with that name already exists")
+      _          <- cond(!existsId, "project with that plugin id already exists")
+      _          <- cond(available, "slug not available")
+      _          <- cond(config.isValidProjectName(name), "invalid name")
+      newProject <- service.insert(project)
+      _          <- service.insert(channel(newProject.id.value))
       _ <- {
         MembershipDossier
           .projectHasMemberships[UIO]
@@ -197,21 +182,19 @@ trait ProjectFactory {
             ProjectUserRole(owner.id, newProject.id, Role.ProjectOwner, isAccepted = true)
           )
       }
-    } yield (newProject, newSettings)
+    } yield newProject
   }
 
   /**
     * Starts the construction process of a [[Version]].
     *
     * @param plugin  Plugin file
-    * @param project Parent project
     * @return PendingVersion instance
     */
   def startVersion(
       plugin: PluginFileWithData,
       pluginId: String,
-      projectId: Option[DbRef[Project]],
-      projectUrl: String,
+      projectId: DbRef[Project],
       forumSync: Boolean,
       channelName: String
   ): Either[String, PendingVersion] = {
@@ -234,7 +217,6 @@ trait ProjectFactory {
           hash = plugin.md5,
           fileName = path.getFileName.toString,
           authorId = plugin.user.id,
-          projectUrl = projectUrl,
           channelName = channelName,
           channelColor = this.config.defaultChannelColor,
           plugin = plugin,
@@ -249,13 +231,12 @@ trait ProjectFactory {
     * Returns the pending version for the specified owner, name, channel, and
     * version string.
     *
-    * @param owner   Name of owner
-    * @param slug    Project slug
+    * @param project Project for version
     * @param version Name of version
     * @return PendingVersion, if present, None otherwise
     */
-  def getPendingVersion(owner: String, slug: String, version: String): Option[PendingVersion] =
-    this.cacheApi.get[PendingVersion](owner + '/' + slug + '/' + version)
+  def getPendingVersion(project: Model[Project], version: String): Option[PendingVersion] =
+    this.cacheApi.get[PendingVersion](s"${project.id}/$version")
 
   /**
     * Creates a new release channel for the specified [[Project]].
@@ -327,22 +308,23 @@ trait ProjectFactory {
       _ <- uploadPlugin(project, pending.plugin, version).orDieWith(s => new Exception(s))
       firstTimeUploadProject <- {
         if (project.visibility == Visibility.New) {
-          val setVisibility = (project: Model[Project]) => {
-            project.setVisibility(Visibility.Public, "First upload", version.authorId).map(_._1)
-          }
+          val setVisibility = project
+            .setVisibility(Visibility.Public, "First upload", version.authorId.getOrElse(project.ownerId))
+            .map(_._1)
+
+          val addForumJob = service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob)
 
           val initProject =
-            if (project.topicId.isEmpty) this.forums.createProjectTopic(project).flatMap(setVisibility)
-            else setVisibility(project)
+            if (project.topicId.isEmpty) addForumJob *> setVisibility
+            else setVisibility
 
           initProject <* projects.refreshHomePage(MDCLogger)(OreMDC.NoMDC)
-
         } else UIO.succeed(project)
       }
-      withTopicId <- if (firstTimeUploadProject.topicId.isDefined && pending.createForumPost)
-        this.forums.createVersionPost(firstTimeUploadProject, version)
-      else UIO.succeed(version)
-    } yield (firstTimeUploadProject, withTopicId, channel, tags)
+      _ <- if (pending.createForumPost) {
+        service.insert(Job.UpdateDiscourseVersionPost.newJob(version.id).toJob).unit
+      } else UIO.unit
+    } yield (firstTimeUploadProject, version, channel, tags)
   }
 
   private def addTags(pendingVersion: PendingVersion, newVersion: Model[Version]): UIO[Seq[Model[VersionTag]]] =
@@ -382,22 +364,20 @@ trait ProjectFactory {
       val movePath  = fileIO.move(oldPath, newPath)
       val deleteOld = fileIO.deleteIfExists(oldPath)
 
-      createDirs *> movePath *> deleteOld.const(Right(()))
+      createDirs *> movePath *> deleteOld.as(Right(()))
     }
 
-    fileIO.exists(newPath).ifM(UIO.succeed(Left("error.plugin.fileName")), move).orDie.absolve
+    fileIO.exists(newPath).ifM(UIO.succeed(Left("error.plugin.fileName")), move).absolve
   }
 
 }
 
-@Singleton
-class OreProjectFactory @Inject()(
+class OreProjectFactory(
     val service: ModelService[UIO],
     val config: OreConfig,
-    val forums: OreDiscourseApi[UIO],
     val cacheApi: SyncCacheApi,
     val env: OreEnv,
     val projects: ProjectBase[UIO],
-    val fileManager: ProjectFiles[ZIO[Blocking, Nothing, ?]],
-    val fileIO: FileIO[ZIO[Blocking, Nothing, ?]]
+    val fileManager: ProjectFiles[ZIO[Blocking, Nothing, *]],
+    val fileIO: FileIO[ZIO[Blocking, Nothing, *]]
 ) extends ProjectFactory

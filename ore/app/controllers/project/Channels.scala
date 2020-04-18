@@ -1,7 +1,5 @@
 package controllers.project
 
-import javax.inject.{Inject, Singleton}
-
 import play.api.mvc.{Action, AnyContent}
 
 import controllers.{OreBaseController, OreControllerComponents}
@@ -22,8 +20,7 @@ import zio.{IO, Task}
 /**
   * Controller for handling Channel related actions.
   */
-@Singleton
-class Channels @Inject()(forms: OreForms)(
+class Channels(forms: OreForms)(
     implicit oreComponents: OreControllerComponents
 ) extends OreBaseController {
 
@@ -65,7 +62,7 @@ class Channels @Inject()(forms: OreForms)(
         .orDie
         .absolve
         .mapError(Redirect(self.showList(author, slug)).withErrors(_))
-        .const(Redirect(self.showList(author, slug)))
+        .as(Redirect(self.showList(author, slug)))
     }
 
   /**
@@ -84,7 +81,7 @@ class Channels @Inject()(forms: OreForms)(
         .saveTo(request.project, channelName)
         .toZIO
         .mapError(Redirect(self.showList(author, slug)).withErrors(_))
-        .const(Redirect(self.showList(author, slug)))
+        .as(Redirect(self.showList(author, slug)))
     }
 
   /**
@@ -123,7 +120,7 @@ class Channels @Inject()(forms: OreForms)(
       )
 
       for {
-        t <- service.runDBIO(query.result.headOption).get.constError(NotFound)
+        t <- service.runDBIO(query.result.headOption).get.asError(NotFound)
         (channel, notLast, notLastNonEmpty, notLastReviewed) = t
         _ <- {
           val errorSeq = Seq(

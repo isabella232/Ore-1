@@ -9,13 +9,13 @@
 @import views.html.helper.CSPNonce
 
 @(mostRecentUnfinishedReview: Option[Review], reviews: Seq[(Model[Review], Option[String])], project: Project, version: Model[Version])(implicit messages: Messages,
-        request: OreRequest[_], config: OreConfig, flash: Flash, renderer: MarkdownRenderer)
+        request: OreRequest[_], config: OreConfig, flash: Flash, renderer: MarkdownRenderer, assetsFinder: AssetsFinder)
 
 @projectRoutes = @{controllers.project.routes.Projects}
 @versionRoutes = @{controllers.project.routes.Versions}
 
 @scripts = {
-    <script @CSPNonce.attr type="text/javascript" src="@routes.Assets.versioned("javascripts/review.js")"></script>
+    <script @CSPNonce.attr type="text/javascript" src="@assetsFinder.path("javascripts/review.js")"></script>
     <script @CSPNonce.attr>versionPath = '@helper.urlEncode(project.ownerName)/@helper.urlEncode(project.slug)/versions/@helper.urlEncode(version.name)'</script>
 }
 
@@ -27,7 +27,7 @@
                 <h1 class="pull-left">@project.name <i>@version.versionString</i></h1>
             </div>
             <p class="user date pull-left">
-                <a href="@routes.Users.showProjects(project.ownerName, None)">
+                <a href="@routes.Users.showProjects(project.ownerName)">
                     <strong>@project.ownerName</strong>
                 </a>
                 released this version on @prettifyDate(version.createdAt)

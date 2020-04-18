@@ -4,7 +4,7 @@ import scala.language.higherKinds
 
 import java.nio.file.{Files, Path}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import ore.OreConfig
 
@@ -15,12 +15,12 @@ import zio.ZIO
 import zio.blocking._
 import zio.interop.catz._
 
-class ZIOFileIO(nioBlockingFibers: Long) extends FileIO[ZIO[Blocking, Throwable, ?]] {
+class ZIOFileIO(nioBlockingFibers: Int) extends FileIO[ZIO[Blocking, Throwable, *]] {
 
   type BlockIO[A] = ZIO[Blocking, Throwable, A]
 
-  override def list(path: Path): Resource[BlockIO, Stream[Path]] =
-    Resource.fromAutoCloseable(effectBlocking(Files.list(path))).map(_.iterator.asScala.toStream)
+  override def list(path: Path): Resource[BlockIO, LazyList[Path]] =
+    Resource.fromAutoCloseable(effectBlocking(Files.list(path))).map(_.iterator.asScala.to(LazyList))
 
   override def exists(path: Path): BlockIO[Boolean] = effectBlocking(Files.exists(path))
 

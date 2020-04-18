@@ -3,6 +3,8 @@ import scala.language.higherKinds
 import java.sql.Connection
 import javax.inject.Provider
 
+import scala.concurrent.duration.FiniteDuration
+
 import play.api.cache.caffeine.CaffeineCacheComponents
 import play.api.cache.{DefaultSyncCacheApi, SyncCacheApi}
 import play.api.db.evolutions.EvolutionsComponents
@@ -31,14 +33,12 @@ import db.impl.DbUpdateTask
 import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
 import db.impl.service.OreModelService
 import db.impl.service.OreModelService.F
-import discourse.{OreDiscourseApi, OreDiscourseApiDisabled, OreDiscourseApiEnabled}
 import filters.LoggingFilter
 import form.OreForms
 import mail.{EmailFactory, Mailer, SpongeMailer}
 import ore.auth.{AkkaSSOApi, AkkaSpongeAuthApi, SSOApi, SpongeAuthApi}
 import ore.db.ModelService
-import ore.discourse.AkkaDiscourseApi
-import ore.discourse.AkkaDiscourseApi.AkkaDiscourseSettings
+import ore.external.Cacher
 import ore.markdown.{FlexmarkRenderer, MarkdownRenderer}
 import ore.models.project.ProjectTask
 import ore.models.project.factory.{OreProjectFactory, ProjectFactory}
@@ -52,19 +52,18 @@ import ErrorHandler.OreHttpErrorHandler
 import akka.actor.ActorSystem
 import cats.arrow.FunctionK
 import cats.effect.{ContextShift, Resource}
-import cats.tagless.FunctorK
 import cats.tagless.syntax.all._
 import cats.{Defer, ~>}
 import com.softwaremill.macwire._
 import com.typesafe.scalalogging.Logger
-import doobie.{ExecutionContexts, KleisliInterpreter, Transactor}
 import doobie.util.transactor.Strategy
+import doobie.{ExecutionContexts, KleisliInterpreter, Transactor}
 import slick.basic.{BasicProfile, DatabaseConfig}
 import slick.jdbc.{JdbcDataSource, JdbcProfile}
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.interop.catz.implicits._
-import zio.{DefaultRuntime, Task, UIO, ZIO}
+import zio.{CancelableFuture, DefaultRuntime, Schedule, Task, UIO, ZIO, ZSchedule}
 
 class OreApplicationLoader extends ApplicationLoader {
   override def load(context: ApplicationLoader.Context): PlayApplication = {
@@ -154,7 +153,7 @@ class OreComponents(context: ApplicationLoader.Context)
 
   implicit lazy val fileIO: FileIO[ZIO[Blocking, Nothing, *]] = fileIORaw.imapK(
     OreComponents.orDieFnK[Blocking],
-    OreComponents.upcastFnK[ZIO[Blocking, Nothing, *], ZIO[Blocking, Throwable, ?]]
+    OreComponents.upcastFnK[ZIO[Blocking, Nothing, *], ZIO[Blocking, Throwable, *]]
   )
 
   implicit lazy val projectFiles: ProjectFiles[ZIO[Blocking, Nothing, *]] =
@@ -162,17 +161,17 @@ class OreComponents(context: ApplicationLoader.Context)
       .mapK(OreComponents.orDieFnK[Blocking])
 
   implicit val transactor: Transactor[Task] = {
-    val cs = ContextShift[Task]
+    val cs: ContextShift[Task] = ContextShift[Task]
 
     applicationResource {
       for {
         connectEC  <- ExecutionContexts.fixedThreadPool[F](32)
-        transactEC <- ExecutionContexts.cachedThreadPool[F]
+        transactEC <- cats.effect.Blocker[F]
       } yield Transactor[F, JdbcDataSource](
         dbConfigProvider.get[JdbcProfile].db.source,
         source => {
           val acquire                = cs.evalOn(connectEC)(F.delay(source.createConnection()))
-          def release(c: Connection) = cs.evalOn(transactEC)(F.delay(c.close()))
+          def release(c: Connection) = transactEC.blockOn(F.delay(c.close()))
           Resource.make(acquire)(release)
         },
         KleisliInterpreter[F](transactEC).ConnectionInterpreter,
@@ -192,7 +191,7 @@ class OreComponents(context: ApplicationLoader.Context)
   implicit lazy val oreControllerComponents: OreControllerComponents = wire[DefaultOreControllerComponents]
   lazy val uioOreControllerEffects: OreControllerEffects[UIO]        = wire[DefaultOreControllerEffects[UIO]]
 
-  lazy val statTracker: StatTracker[UIO] = (wire[StatTracker.StatTrackerInstant[Task, ParTask]]: StatTracker[Task])
+  lazy val statTracker: StatTracker[UIO] = (wire[StatTracker.StatTrackerInstant[Task]]: StatTracker[Task])
     .imapK(taskToUIO)(uioToTask)
   lazy val spongeAuthApiTask: SpongeAuthApi[Task] = {
     val api = config.security.api
@@ -210,58 +209,25 @@ class OreComponents(context: ApplicationLoader.Context)
   }
   implicit lazy val spongeAuthApi: SpongeAuthApi[UIO] = spongeAuthApiTask.mapK(taskToUIO)
   lazy val ssoApiTask: SSOApi[Task] = {
+    val cacher = util.ZIOCacher.instance[Any, Throwable]
+    implicit val taskCacher: Cacher[Task] = new Cacher[Task] {
+      override def cache[A](duration: FiniteDuration)(fa: Task[A]): Task[Task[A]] =
+        cacher.cache(duration)(fa).provide(runtime.environment).map(_.provide(runtime.environment))
+    }
     val sso = config.security.sso
     runtime.unsafeRun(AkkaSSOApi[Task](sso.loginUrl, sso.signupUrl, sso.verifyUrl, sso.secret, sso.timeout, sso.reset))
   }
-  lazy val ssoApi: SSOApi[UIO] = ssoApiTask.imapK(taskToUIO)(uioToTask)
-  lazy val oreDiscourseApiTask: OreDiscourseApi[Task] = {
-    val forums = config.forums
-    if (forums.api.enabled) {
-      val api = forums.api
-
-      val discourseApi = runtime.unsafeRun(
-        AkkaDiscourseApi[Task](
-          AkkaDiscourseSettings(
-            api.key,
-            api.admin,
-            forums.baseUrl,
-            api.breaker.maxFailures,
-            api.breaker.reset,
-            api.breaker.timeout
-          )
-        )
-      )
-
-      val forumsApi = new OreDiscourseApiEnabled(
-        discourseApi,
-        forums.categoryDefault,
-        forums.categoryDeleted,
-        env.conf.resolve("discourse/project_topic.md"),
-        env.conf.resolve("discourse/version_post.md"),
-        forums.retryRate,
-        actorSystem.scheduler,
-        forums.baseUrl,
-        api.admin
-      )
-
-      forumsApi.start()
-
-      forumsApi
-    } else {
-      new OreDiscourseApiDisabled[Task]
-    }
-  }
-  implicit lazy val oreDiscourseApi: OreDiscourseApi[UIO] = oreDiscourseApiTask.mapK(taskToUIO)
-  implicit lazy val userBaseTask: UserBase[Task]          = wire[UserBase.UserBaseF[Task]]
-  implicit lazy val userBaseUIO: UserBase[UIO]            = wire[UserBase.UserBaseF[UIO]]
+  lazy val ssoApi: SSOApi[UIO]                   = ssoApiTask.imapK(taskToUIO)(uioToTask)
+  implicit lazy val userBaseTask: UserBase[Task] = wire[UserBase.UserBaseF[Task]]
+  implicit lazy val userBaseUIO: UserBase[UIO]   = wire[UserBase.UserBaseF[UIO]]
   implicit lazy val projectBase: ProjectBase[UIO] = {
     implicit val providedProjectFiles: ProjectFiles[Task] =
-      projectFiles.mapK(OreComponents.provideFnK[Blocking, Nothing](runtime.Environment))
+      projectFiles.mapK(OreComponents.provideFnK[Blocking, Nothing](runtime.environment))
 
     implicit lazy val fileIOTask: FileIO[Task] =
       fileIORaw.imapK(
         new FunctionK[ZIO[Blocking, Throwable, *], Task] {
-          def apply[A](fa: ZIO[Blocking, Throwable, A]): Task[A] = fa.provide(runtime.Environment)
+          def apply[A](fa: ZIO[Blocking, Throwable, A]): Task[A] = fa.provide(runtime.environment)
         },
         OreComponents.upcastFnK[Task, ZIO[Blocking, Throwable, *]]
       )
@@ -271,10 +237,10 @@ class OreComponents(context: ApplicationLoader.Context)
     use(providedProjectFiles)
     use(fileIOTask)
 
-    (wire[ProjectBase.ProjectBaseF[Task, ParTask]]: ProjectBase[Task]).mapK(taskToUIO)
+    (wire[ProjectBase.ProjectBaseF[Task]]: ProjectBase[Task]).mapK(taskToUIO)
   }
   implicit lazy val orgBase: OrganizationBase[UIO] =
-    (wire[OrganizationBase.OrganizationBaseF[Task, ParTask]]: OrganizationBase[Task]).mapK(taskToUIO)
+    (wire[OrganizationBase.OrganizationBaseF[Task]]: OrganizationBase[Task]).mapK(taskToUIO)
 
   lazy val bakery: Bakery     = wire[Bakery]
   lazy val forms: OreForms    = wire[OreForms]
@@ -302,9 +268,18 @@ class OreComponents(context: ApplicationLoader.Context)
   lazy val channelsProvider: Provider[Channels]                 = () => channels
   lazy val reviewsProvider: Provider[Reviews]                   = () => reviews
 
-  eager(projectTask)
-  eager(userTask)
-  eager(dbUpdateTask)
+  def waitTilEvolutionsDone(action: UIO[Unit]): CancelableFuture[Nothing, Unit] = {
+    val isDone    = ZIO.effectTotal(applicationEvolutions.upToDate)
+    val waitCheck = Schedule.doUntilM[Unit](_ => isDone) && Schedule.fixed(zio.duration.Duration.fromNanos(100))
+
+    runtime.unsafeRunToFuture(ZIO.unit.repeat(waitCheck).andThen(action))
+  }
+
+  waitTilEvolutionsDone(ZIO.effectTotal {
+    eager(projectTask)
+    eager(userTask)
+    eager(dbUpdateTask)
+  })
 
   def eager[A](module: A): Unit = use(module)
 
@@ -316,9 +291,7 @@ class OreComponents(context: ApplicationLoader.Context)
   def applicationResource[A](resource: Resource[Task, A]): A = {
     val (a, finalize) = runtime.unsafeRunSync(resource.allocated).toEither.toTry.get
 
-    applicationLifecycle.addStopHook { () =>
-      runtime.unsafeRunToFuture(finalize)
-    }
+    applicationLifecycle.addStopHook(() => runtime.unsafeRunToFuture(finalize))
 
     a
   }
@@ -328,15 +301,15 @@ object OreComponents {
   def upcastFnK[From[_], To[A] >: From[A]]: From ~> To = new FunctionK[From, To] {
     override def apply[A](fa: From[A]): To[A] = fa
   }
-  def provideFnK[R, E](environment: R): ZIO[R, E, ?] ~> ZIO[Any, E, ?] = new FunctionK[ZIO[R, E, ?], ZIO[Any, E, ?]] {
+  def provideFnK[R, E](environment: R): ZIO[R, E, *] ~> ZIO[Any, E, *] = new FunctionK[ZIO[R, E, *], ZIO[Any, E, *]] {
     override def apply[A](fa: ZIO[R, E, A]): ZIO[Any, E, A] = fa.provide(environment)
   }
-  def orDieFnK[R]: ZIO[R, Throwable, ?] ~> ZIO[R, Nothing, ?] =
-    new FunctionK[ZIO[R, Throwable, ?], ZIO[R, Nothing, ?]] {
+  def orDieFnK[R]: ZIO[R, Throwable, *] ~> ZIO[R, Nothing, *] =
+    new FunctionK[ZIO[R, Throwable, *], ZIO[R, Nothing, *]] {
       override def apply[A](fa: ZIO[R, Throwable, A]): ZIO[R, Nothing, A] = fa.orDie
     }
 
   implicit def zioDefer[R, E]: Defer[ZIO[R, E, *]] = new Defer[ZIO[R, E, *]] {
-    override def defer[A](fa: => ZIO[R, E, A]): ZIO[R, E, A] = ZIO.suspend(fa)
+    override def defer[A](fa: => ZIO[R, E, A]): ZIO[R, E, A] = ZIO.effectSuspendTotal(fa)
   }
 }

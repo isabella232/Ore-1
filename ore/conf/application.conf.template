@@ -6,6 +6,9 @@
 application {
     baseUrl             =   "http://localhost:9000"
     baseUrl             =   ${?BASE_URL}
+    discourse-url       =   "https://forums.spongepowered.org"
+    discourse-cdn-url   =   "https://forums-cdn.spongepowered.org"
+
     uploadsDir = "uploads"
     uploadsDir = ${?UPLOADS_DIR}
 
@@ -40,14 +43,14 @@ play {
                 script-src = ${play.filters.csp.nonce.pattern} "'self' https://forums.spongepowered.org https://forums-cdn.spongepowered.org"
                 style-src = "'self' 'unsafe-inline' https://fonts.googleapis.com https://forums-cdn.spongepowered.org"
                 img-src = "'self' data: https: http:"
-                font-src = "'self' https://fonts.gstatic.com"
+                font-src = "'self' data: https://fonts.gstatic.com"
                 frame-src = "https://forums.spongepowered.org"
                 frame-ancestors = "'none'"
             }
         }
 
         hosts {
-            allowed = [".spongepowered.org", "localhost:9000"]
+            allowed = [".spongepowered.org", "localhost:9000", "localhost:9443"]
         }
     }
 
@@ -57,6 +60,11 @@ play {
         session.maxAge                   =   28d # 4 weeks
         parser.maxDiskBuffer             =   20MB
         parser.maxMemoryBuffer           =   1000000
+    }
+
+    assets {
+        path = "/public"
+        urlPrefix = "/assets"
     }
 }
 
@@ -205,31 +213,6 @@ slick.dbs.default {
         user = ${?JDBC_DATABASE_USERNAME}
         password = ""
         password = ${?JDBC_DATABASE_PASSWORD}
-    }
-}
-
-
-# Discourse SSO
-discourse {
-    baseUrl            =   "https://forums.spongepowered.org"
-    cdnUrl             =   "https://forums-cdn.spongepowered.org"
-    retryRate          =   60000ms
-    categoryDefault    =   -1
-    categoryDefault    =   ${?DISCOURSE_CATEGORY_OPEN}
-    categoryDeleted    =   -1
-    categoryDeleted    =   ${?DISCOURSE_CATEGORY_DELETED}
-
-    api {
-        enabled              =   true
-        key                  =   "changeme"
-        key                  =   ${?DISCOURSE_API_KEY}
-        admin                =   system
-
-        breaker {
-            max-failures =   5
-            timeout      =   10s
-            reset        =   5m
-        }
     }
 }
 

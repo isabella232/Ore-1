@@ -3,12 +3,11 @@ package controllers
 import java.io.StringWriter
 import java.sql.Timestamp
 import java.time.temporal.ChronoUnit
-import java.time.{Instant, LocalDate}
+import java.time.{LocalDate, OffsetDateTime}
 import java.util.Date
-import javax.inject.{Inject, Singleton}
 
-import scala.util.Try
 import scala.concurrent.duration._
+import scala.util.Try
 
 import play.api.mvc.{Action, ActionBuilder, AnyContent}
 import play.api.routing.JavaScriptReverseRouter
@@ -21,6 +20,13 @@ import models.viewhelper.{OrganizationData, UserData}
 import ore.db._
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
+import ore.db.impl.schema.{
+  LoggedActionOrganizationTable,
+  LoggedActionPageTable,
+  LoggedActionProjectTable,
+  LoggedActionUserTable,
+  LoggedActionVersionTable
+}
 import ore.markdown.MarkdownRenderer
 import ore.member.MembershipDossier
 import ore.models.organization.Organization
@@ -42,8 +48,7 @@ import zio.{IO, Task, UIO, ZIO}
 /**
   * Main entry point for application.
   */
-@Singleton
-final class Application @Inject()(forms: OreForms)(
+final class Application(forms: OreForms)(
     implicit oreComponents: OreControllerComponents,
     renderer: MarkdownRenderer
 ) extends OreBaseController {
@@ -55,9 +60,10 @@ final class Application @Inject()(forms: OreForms)(
       JavaScriptReverseRouter("jsRoutes")(
         controllers.project.routes.javascript.Projects.show,
         controllers.project.routes.javascript.Versions.show,
+        controllers.project.routes.javascript.Versions.showCreator,
         controllers.routes.javascript.Users.showProjects
       )
-    ).as("text/javascript").withHeaders(CACHE_CONTROL -> s"max-age=${1.hour.toSeconds}")
+    ).as("text/javascript")
   }
 
   /**
@@ -65,18 +71,14 @@ final class Application @Inject()(forms: OreForms)(
     *
     * @return External link page
     */
-  def linkOut(remoteUrl: String): Action[AnyContent] = OreAction { implicit request =>
-    Ok(views.linkout(remoteUrl))
-  }
+  def linkOut(remoteUrl: String): Action[AnyContent] = OreAction(implicit request => Ok(views.linkout(remoteUrl)))
 
   /**
     * Display the home page.
     *
     * @return Home page
     */
-  def showHome(): Action[AnyContent] = OreAction { implicit request =>
-    Ok(views.home())
-  }
+  def showHome(): Action[AnyContent] = OreAction(implicit request => Ok(views.home()))
 
   /**
     * Shows the moderation queue for unreviewed versions.
@@ -99,11 +101,7 @@ final class Application @Inject()(forms: OreForms)(
     */
   def showFlags(): Action[AnyContent] = FlagAction.asyncF { implicit request =>
     service
-      .runDbCon(
-        AppQueries
-          .flags(request.user.id)
-          .to[Vector]
-      )
+      .runDbCon(AppQueries.flags.to[Vector])
       .map(flagSeq => Ok(views.users.admin.flags(flagSeq)))
   }
 
@@ -123,11 +121,11 @@ final class Application @Inject()(forms: OreForms)(
         flagCreator <- flag.user[Task].orDie
         _ <- UserActionLogger.log(
           request,
-          LoggedAction.ProjectFlagResolved,
+          LoggedActionType.ProjectFlagResolved,
           flag.projectId,
           s"Flag Resolved by ${user.fold("unknown")(_.name)}",
           s"Flagged by ${flagCreator.name}"
-        )
+        )(LoggedActionProject.apply)
       } yield Ok
     }
 
@@ -137,22 +135,20 @@ final class Application @Inject()(forms: OreForms)(
 
       (
         service.runDbCon(AppQueries.getUnhealtyProjects(config.ore.projects.staleAge).to[Vector]),
-        projects.missingFile.flatMap { versions =>
-          versions.toVector.traverse(v => v.project[Task].orDie.tupleLeft(v))
-        }
-      ).parMapN { (unhealtyProjects, missingFileProjects) =>
-        val noTopicProjects    = unhealtyProjects.filter(p => p.topicId.isEmpty || p.postId.isEmpty)
-        val topicDirtyProjects = unhealtyProjects.filter(_.isTopicDirty)
+        service.runDbCon(AppQueries.erroredJobs.to[Vector]),
+        projects.missingFile.flatMap(versions => versions.toVector.traverse(v => v.project[Task].orDie.tupleLeft(v)))
+      ).parMapN { (unhealtyProjects, erroredJobs, missingFileProjects) =>
+        val noTopicProjects = unhealtyProjects.filter(p => p.topicId.isEmpty || p.postId.isEmpty)
         val staleProjects = unhealtyProjects
           .filter(_.lastUpdated > new Timestamp(new Date().getTime - config.ore.projects.staleAge.toMillis))
         val notPublic = unhealtyProjects.filter(_.visibility != Visibility.Public)
         Ok(
           views.users.admin.health(
             noTopicProjects,
-            topicDirtyProjects,
             staleProjects,
             notPublic,
-            Model.unwrapNested(missingFileProjects)
+            Model.unwrapNested(missingFileProjects),
+            erroredJobs
           )
         )
       }
@@ -194,14 +190,10 @@ final class Application @Inject()(forms: OreForms)(
       o1: Either[FlagActivity, ReviewActivity],
       o2: Either[FlagActivity, ReviewActivity]
   ): Boolean = {
-    val o1Time: Long = o1 match {
-      case Right(review) => review.endedAt.getOrElse(Instant.EPOCH).toEpochMilli
-      case _             => 0
-    }
-    val o2Time: Long = o2 match {
-      case Left(flag) => flag.resolvedAt.getOrElse(Instant.EPOCH).toEpochMilli
-      case _          => 0
-    }
+    val o1Time                                = o1.toOption.flatMap(_.endedAt).getOrElse(OffsetDateTime.MIN)
+    val o2Time                                = o2.toOption.flatMap(_.endedAt).getOrElse(OffsetDateTime.MIN)
+    implicit val order: Order[OffsetDateTime] = Order.fromComparable[OffsetDateTime]
+
     o1Time > o2Time
   }
 
@@ -229,12 +221,12 @@ final class Application @Inject()(forms: OreForms)(
 
   def showLog(
       oPage: Option[Int],
-      userFilter: Option[DbRef[User]],
-      projectFilter: Option[DbRef[Project]],
-      versionFilter: Option[DbRef[Version]],
+      userFilter: Option[String],
+      projectFilter: Option[String],
+      versionFilter: Option[String],
       pageFilter: Option[DbRef[Page]],
-      actionFilter: Option[Int],
-      subjectFilter: Option[DbRef[_]]
+      actionFilter: Option[String],
+      subjectFilter: Option[String]
   ): Action[AnyContent] = Authenticated.andThen(PermissionAction(Permission.ViewLogs)).asyncF { implicit request =>
     val pageSize = 50
     val page     = oPage.getOrElse(1)
@@ -246,7 +238,15 @@ final class Application @Inject()(forms: OreForms)(
           .getLog(oPage, userFilter, projectFilter, versionFilter, pageFilter, actionFilter, subjectFilter)
           .to[Vector]
       ),
-      ModelView.now(LoggedActionModel).size
+      service.runDBIO(
+        (
+          TableQuery[LoggedActionProjectTable].size +
+            TableQuery[LoggedActionVersionTable].size +
+            TableQuery[LoggedActionPageTable].size +
+            TableQuery[LoggedActionUserTable].size +
+            TableQuery[LoggedActionOrganizationTable].size
+        ).result
+      )
     ).parMapN { (actions, size) =>
       Ok(
         views.users.admin.log(
@@ -280,7 +280,7 @@ final class Application @Inject()(forms: OreForms)(
       t2 <- (
         UserData.of(request, u),
         ZIO.foreachPar(projectRoles)(_.project[Task].orDie),
-        OrganizationData.of[Task, ParTask](orga).value.orDie
+        OrganizationData.of[Task](orga).value.orDie
       ).parTupled
       (userData, projects, orgaData) = t2
     } yield {
@@ -314,9 +314,9 @@ final class Application @Inject()(forms: OreForms)(
                   val roleType = Role.withValue((json \ "role").as[String])
 
                   if (roleType == ownerType)
-                    transferOwner(role).const(Ok)
+                    transferOwner(role).as(Ok)
                   else if (roleType.category == allowedCategory && roleType.isAssignable)
-                    service.update(role)(_.withRole(roleType)).const(Ok)
+                    service.update(role)(_.withRole(roleType)).as(Ok)
                   else
                     IO.fail(Left(BadRequest))
                 }
@@ -340,7 +340,7 @@ final class Application @Inject()(forms: OreForms)(
             r.organization[Task]
               .orDie
               .flatMap(_.transferOwner(r.userId))
-              .const(r)
+              .as(r)
 
           val res: IO[Either[Status, Unit], Status] = thing match {
             case "orgRole" =>
@@ -392,14 +392,10 @@ final class Application @Inject()(forms: OreForms)(
       (
         service.runDbCon(AppQueries.getVisibilityNeedsApproval.to[Vector]),
         service.runDbCon(AppQueries.getVisibilityWaitingProject.to[Vector])
-      ).mapN { (needsApproval, waitingProject) =>
-        Ok(views.users.admin.visibility(needsApproval, waitingProject))
-      }
+      ).mapN((needsApproval, waitingProject) => Ok(views.users.admin.visibility(needsApproval, waitingProject)))
     }
 
-  def swagger(): Action[AnyContent] = OreAction { implicit request =>
-    Ok(views.swagger())
-  }
+  def swagger(): Action[AnyContent] = OreAction(implicit request => Ok(views.swagger()))
 
   def sitemapIndex(): Action[AnyContent] = Action.asyncF { implicit request =>
     service.runDbCon(AppQueries.sitemapIndexUsers.to[Vector]).map { users =>
@@ -434,36 +430,38 @@ final class Application @Inject()(forms: OreForms)(
   }
 
   val robots: Action[AnyContent] = Action {
-    Ok(s"""user-agent: *
-          |Disallow: /login
-          |Disallow: /signup
-          |Disallow: /logout
-          |Disallow: /linkout
-          |Disallow: /admin
-          |Disallow: /api
-          |Disallow: /*/*/versions
-          |Disallow: /*/*/watchers
-          |Disallow: /*/*/stars
-          |Disallow: /*/*/discuss
-          |Disallow: /*/*/channels
-          |Disallow: /*/*/manage
-          |Disallow: /*/*/versionLog
-          |Disallow: /*/*/flags
-          |Disallow: /*/*/notes
-          |Disallow: /*/*/channels
+    Ok(
+      s"""user-agent: *
+         |Disallow: /login
+         |Disallow: /signup
+         |Disallow: /logout
+         |Disallow: /linkout
+         |Disallow: /admin
+         |Disallow: /api
+         |Disallow: /*/*/versions
+         |Disallow: /*/*/watchers
+         |Disallow: /*/*/stars
+         |Disallow: /*/*/discuss
+         |Disallow: /*/*/channels
+         |Disallow: /*/*/manage
+         |Disallow: /*/*/versionLog
+         |Disallow: /*/*/flags
+         |Disallow: /*/*/notes
+         |Disallow: /*/*/channels
           
-          |Allow: /*/*/versions/*
-          |Allow: /api$$
+         |Allow: /*/*/versions/*
+         |Allow: /api$$
           
-          |Disallow: /*/*/versions/*/download
-          |Disallow: /*/*/versions/*/recommended/download
-          |Disallow: /*/*/versions/*/jar
-          |Disallow: /*/*/versions/*/recommended/jar
-          |Disallow: /*/*/versions/*/reviews
-          |Disallow: /*/*/versions/*/new
-          |Disallow: /*/*/versions/*/confirm
+         |Disallow: /*/*/versions/*/download
+         |Disallow: /*/*/versions/*/recommended/download
+         |Disallow: /*/*/versions/*/jar
+         |Disallow: /*/*/versions/*/recommended/jar
+         |Disallow: /*/*/versions/*/reviews
+         |Disallow: /*/*/versions/*/new
+         |Disallow: /*/*/versions/*/confirm
 
-          |Sitemap: ${config.app.baseUrl}/sitemap.xml
-      """.stripMargin).as("text/plain")
+         |Sitemap: ${config.app.baseUrl}/sitemap.xml
+         |""".stripMargin
+    ).as("text/plain")
   }
 }

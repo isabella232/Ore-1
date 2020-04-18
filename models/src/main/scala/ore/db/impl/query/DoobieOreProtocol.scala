@@ -1,7 +1,9 @@
 package ore.db.impl.query
 
+import scala.language.implicitConversions
+
 import java.net.InetAddress
-import java.time.Instant
+import java.time.OffsetDateTime
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -12,10 +14,11 @@ import scala.reflect.runtime.universe.TypeTag
 import ore.data.project.{Category, FlagReason}
 import ore.data.user.notification.NotificationType
 import ore.data.{Color, DownloadType, Prompt}
-import ore.db.{DbRef, Model, ObjId, ObjInstant}
+import ore.db.{DbRef, Model, ObjId, ObjOffsetDateTime}
+import ore.models.Job
 import ore.models.api.ApiKey
 import ore.models.project.{ReviewState, TagColor, Visibility}
-import ore.models.user.{LoggedAction, LoggedActionContext, User}
+import ore.models.user.{LoggedActionContext, LoggedActionType, User}
 import ore.permission.Permission
 import ore.permission.role.{Role, RoleCategory}
 
@@ -26,6 +29,8 @@ import doobie._
 import doobie.enum.JdbcType
 import doobie.implicits._
 import doobie.postgres.implicits._
+import doobie.util.param.Param.Elem
+import doobie.util.pos.Pos
 import enumeratum.values._
 import org.postgresql.util.{PGInterval, PGobject}
 import shapeless._
@@ -110,14 +115,30 @@ trait DoobieOreProtocol {
     }
   }
 
+  //Based on https://github.com/tpolecat/doobie/pull/1045
+  object betterinterpolator {
+    implicit def makeBetterInterpolator(sc: StringContext): BetterSqlInterpolator = new BetterSqlInterpolator(sc)
+  }
+
   implicit def objectIdMeta[A](implicit tt: TypeTag[ObjId[A]]): Meta[ObjId[A]] =
     Meta[Long].timap(ObjId.apply[A])(_.value)
-  implicit val objInstantMeta: Meta[ObjInstant] = Meta[Instant].timap(ObjInstant.apply)(_.value)
 
-  implicit def modelRead[A](implicit raw: Read[(ObjId[A], ObjInstant, A)]): Read[Model[A]] = raw.map {
+  implicit val offsetDateTimeMeta: Meta[OffsetDateTime] =
+    Meta.Basic.one[OffsetDateTime](
+      JdbcType.Timestamp, //Apparently Postgres reports TIMESTAMPTZ as TIMESTAMP and not TIMESTAMPWITHTIMEZONE
+      List(JdbcType.Char, JdbcType.VarChar, JdbcType.LongVarChar, JdbcType.Date, JdbcType.Time),
+      _.getObject(_, classOf[OffsetDateTime]),
+      _.setObject(_, _, java.sql.JDBCType.TIMESTAMP_WITH_TIMEZONE),
+      _.updateObject(_, _, java.sql.JDBCType.TIME_WITH_TIMEZONE)
+    )
+
+  implicit val objOffsetDateTimeMeta: Meta[ObjOffsetDateTime] =
+    offsetDateTimeMeta.timap(ObjOffsetDateTime.apply)(_.value)
+
+  implicit def modelRead[A](implicit raw: Read[(ObjId[A], ObjOffsetDateTime, A)]): Read[Model[A]] = raw.map {
     case (id, time, obj) => Model(id, time, obj)
   }
-  implicit def modelWrite[A](implicit raw: Write[(ObjId[A], ObjInstant, A)]): Write[Model[A]] = raw.contramap {
+  implicit def modelWrite[A](implicit raw: Write[(ObjId[A], ObjOffsetDateTime, A)]): Write[Model[A]] = raw.contramap {
     case Model(id, createdAt, obj) => (id, createdAt, obj)
   }
 
@@ -151,6 +172,9 @@ trait DoobieOreProtocol {
   )(implicit meta: Meta[V]): Meta[E] =
     meta.timap[E](enum.withValue)(_.value)
 
+  def pgEnumEnumeratumMeta[E <: StringEnumEntry: TypeTag](typeName: String, enum: StringEnum[E]): Meta[E] =
+    pgEnumString(typeName, enum.withValue, _.value)
+
   implicit val colorMeta: Meta[Color]                       = enumeratumMeta(Color)
   implicit val tagColorMeta: Meta[TagColor]                 = enumeratumMeta(TagColor)
   implicit val roleTypeMeta: Meta[Role]                     = enumeratumMeta(Role)
@@ -160,11 +184,13 @@ trait DoobieOreProtocol {
   implicit val promptMeta: Meta[Prompt]                     = enumeratumMeta(Prompt)
   implicit val downloadTypeMeta: Meta[DownloadType]         = enumeratumMeta(DownloadType)
   implicit val visibilityMeta: Meta[Visibility]             = enumeratumMeta(Visibility)
-  implicit def loggedActionMeta[Ctx]: Meta[LoggedAction[Ctx]] =
-    enumeratumMeta(LoggedAction).asInstanceOf[Meta[LoggedAction[Ctx]]] // scalafix:ok
+  implicit def loggedActionTypeMeta[Ctx]: Meta[LoggedActionType[Ctx]] =
+    pgEnumEnumeratumMeta("LOGGED_ACTION_TYPE", LoggedActionType)
+      .asInstanceOf[Meta[LoggedActionType[Ctx]]] // scalafix:ok
   implicit def loggedActionContextMeta[Ctx]: Meta[LoggedActionContext[Ctx]] =
     enumeratumMeta(LoggedActionContext).asInstanceOf[Meta[LoggedActionContext[Ctx]]] // scalafix:ok
   implicit val reviewStateMeta: Meta[ReviewState] = enumeratumMeta(ReviewState)
+  implicit val jobTypeMeta: Meta[Job.JobType]     = enumeratumMeta(Job.JobType)
 
   implicit val langMeta: Meta[Locale] = Meta[String].timap(Locale.forLanguageTag)(_.toLanguageTag)
   implicit val inetStringMeta: Meta[InetString] =
@@ -193,19 +219,8 @@ trait DoobieOreProtocol {
       }
     )
 
-  implicit val roleCategoryMeta: Meta[RoleCategory] = pgEnumString[RoleCategory](
-    name = "ROLE_CATEGORY",
-    f = {
-      case "global"       => RoleCategory.Global
-      case "project"      => RoleCategory.Project
-      case "organization" => RoleCategory.Organization
-    },
-    g = {
-      case RoleCategory.Global       => "global"
-      case RoleCategory.Project      => "project"
-      case RoleCategory.Organization => "organization"
-    }
-  )
+  implicit val roleCategoryMeta: Meta[RoleCategory] = pgEnumEnumeratumMeta("ROLE_CATEGORY", RoleCategory)
+  implicit val jobStateMeta: Meta[Job.JobState]     = pgEnumEnumeratumMeta("JOB_STATE", Job.JobState)
 
   def metaFromGetPut[A](implicit get: Get[A], put: Put[A]): Meta[A] = new Meta(get, put)
 
@@ -227,8 +242,8 @@ trait DoobieOreProtocol {
     listPut.tcontramap(_.toList)
 
   implicit val userModelRead: Read[Model[User]] =
-    Read[ObjId[User] :: ObjInstant :: Option[String] :: String :: Option[String] :: Option[String] :: Option[
-      Instant
+    Read[ObjId[User] :: ObjOffsetDateTime :: Option[String] :: String :: Option[String] :: Option[String] :: Option[
+      OffsetDateTime
     ] :: List[Prompt] :: Boolean :: Option[Locale] :: HNil].map {
       case id :: createdAt :: fullName :: name :: email :: tagline :: joinDate :: readPrompts :: isLocked :: lang :: HNil =>
         Model(
@@ -249,9 +264,9 @@ trait DoobieOreProtocol {
     }
 
   implicit val userModelOptRead: Read[Option[Model[User]]] =
-    Read[Option[ObjId[User]] :: Option[ObjInstant] :: Option[String] :: Option[String] :: Option[String] :: Option[
+    Read[Option[ObjId[User]] :: Option[ObjOffsetDateTime] :: Option[String] :: Option[String] :: Option[String] :: Option[
       String
-    ] :: Option[Instant] :: Option[List[Prompt]] :: Option[Boolean] :: Option[
+    ] :: Option[OffsetDateTime] :: Option[List[Prompt]] :: Option[Boolean] :: Option[
       Locale
     ] :: HNil].map {
       case Some(id) :: Some(createdAt) :: fullName :: Some(name) :: email :: tagline :: joinDate :: Some(readPrompts) :: Some(
@@ -289,3 +304,37 @@ trait DoobieOreProtocol {
     }
 }
 object DoobieOreProtocol extends DoobieOreProtocol
+
+class BetterSqlInterpolator(private val sc: StringContext) extends AnyVal {
+  import BetterSqlInterpolator.SingleFragment
+  import cats.instances.list._
+  import cats.syntax.all._
+
+  private def mkFragment(parts: List[SingleFragment], token: Boolean, pos: Pos): Fragment = {
+    val last = if (token) Fragment(" ", Nil, None) else Fragment.empty
+
+    sc.parts.toList
+      .map(sql => SingleFragment(Fragment(sql, Nil, Some(pos))))
+      .zipAll(parts, SingleFragment.empty, SingleFragment(last))
+      .flatMap { case (a, b) => List(a.fr, b.fr) }
+      .combineAll
+  }
+
+  def bfr(a: SingleFragment*)(implicit pos: Pos): doobie.Fragment = mkFragment(a.toList, token = true, pos)
+
+  def bsql(a: SingleFragment*)(implicit pos: Pos): doobie.Fragment = mkFragment(a.toList, token = false, pos)
+
+  def bfr0(a: SingleFragment*)(implicit pos: Pos): doobie.Fragment = mkFragment(a.toList, token = false, pos)
+}
+object BetterSqlInterpolator {
+  final case class SingleFragment(fr: Fragment) extends AnyVal
+  object SingleFragment {
+    val empty: SingleFragment = SingleFragment(Fragment.empty)
+
+    implicit def fromPut[A](a: A)(implicit put: Put[A]): SingleFragment =
+      SingleFragment(Fragment("?", Elem.Arg(a, put) :: Nil, None))
+    implicit def fromPutOption[A](a: Option[A])(implicit put: Put[A]): SingleFragment =
+      SingleFragment(Fragment("?", Elem.Opt(a, put) :: Nil, None))
+    implicit def fromFragment(fr: Fragment): SingleFragment = SingleFragment(fr)
+  }
+}

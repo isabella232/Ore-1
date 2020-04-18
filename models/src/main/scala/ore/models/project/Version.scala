@@ -2,13 +2,13 @@ package ore.models.project
 
 import scala.language.higherKinds
 
-import java.time.Instant
+import java.time.OffsetDateTime
 
 import ore.data.project.Dependency
 import ore.db.access.{ModelView, QueryView}
 import ore.db.impl.DefaultModelCompanion
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.common.{Describable, Downloadable, Hideable}
+import ore.db.impl.common.{Describable, Hideable}
 import ore.db.impl.schema._
 import ore.db.{DbRef, Model, ModelQuery, ModelService}
 import ore.models.admin.{Review, VersionVisibilityChange}
@@ -39,19 +39,16 @@ case class Version(
     channelId: DbRef[Channel],
     fileSize: Long,
     hash: String,
-    authorId: DbRef[User],
+    authorId: Option[DbRef[User]],
     description: Option[String],
-    downloadCount: Long = 0,
     reviewState: ReviewState = ReviewState.Unreviewed,
     reviewerId: Option[DbRef[User]] = None,
-    approvedAt: Option[Instant] = None,
+    approvedAt: Option[OffsetDateTime] = None,
     visibility: Visibility = Visibility.Public,
     fileName: String,
     createForumPost: Boolean = true,
-    postId: Option[Int] = None,
-    isPostDirty: Boolean = false
-) extends Describable
-    with Downloadable {
+    postId: Option[Int] = None
+) extends Describable {
 
   //TODO: Check this in some way
   //checkArgument(description.exists(_.length <= Page.maxLength), "content too long", "")
@@ -81,8 +78,8 @@ case class Version(
     */
   def url(project: Project): String = project.url + "/versions/" + this.versionString
 
-  def author[QOptRet, SRet[_]](view: ModelView[QOptRet, SRet, VersionTagTable, Model[VersionTag]]): QOptRet =
-    view.get(this.authorId)
+  def author[QOptRet, SRet[_]](view: ModelView[QOptRet, SRet, VersionTagTable, Model[VersionTag]]): Option[QOptRet] =
+    this.authorId.map(view.get)
 
   def reviewer[QOptRet, SRet[_]](view: ModelView[QOptRet, SRet, UserTable, Model[User]]): Option[QOptRet] =
     this.reviewerId.map(view.get)
@@ -123,10 +120,10 @@ object Version extends DefaultModelCompanion[Version, VersionTable](TableQuery[V
 
   implicit val isProjectOwned: ProjectOwned[Version] = (a: Version) => a.projectId
 
-  implicit def versionIsHideable[F[_], G[_]](
+  implicit def versionIsHideable[F[_]](
       implicit service: ModelService[F],
       F: Monad[F],
-      par: Parallel[F, G]
+      par: Parallel[F]
   ): Hideable.Aux[F, Version, VersionVisibilityChange, VersionVisibilityChangeTable] = new Hideable[F, Version] {
     override type MVisibilityChange      = VersionVisibilityChange
     override type MVisibilityChangeTable = VersionVisibilityChangeTable
@@ -142,7 +139,7 @@ object Version extends DefaultModelCompanion[Version, VersionTable](TableQuery[V
         .semiflatMap { vc =>
           service.update(vc)(
             _.copy(
-              resolvedAt = Some(Instant.now()),
+              resolvedAt = Some(OffsetDateTime.now()),
               resolvedBy = Some(creator)
             )
           )
@@ -180,32 +177,6 @@ object Version extends DefaultModelCompanion[Version, VersionTable](TableQuery[V
         view: V[VersionTagTable, Model[VersionTag]]
     ): V[VersionTagTable, Model[VersionTag]] =
       view.filterView(_.versionId === self.id.value)
-
-    def isSpongePlugin[QOptRet, SRet[_]](
-        view: ModelView[QOptRet, SRet, VersionTagTable, Model[VersionTag]]
-    ): SRet[Boolean] =
-      tags(view).exists(_.name === "Sponge")
-
-    def isForgeMod[QOptRet, SRet[_]](
-        view: ModelView[QOptRet, SRet, VersionTagTable, Model[VersionTag]]
-    ): SRet[Boolean] =
-      tags(view).exists(_.name === "Forge")
-
-    /**
-      * Adds a download to the amount of unique downloads this Version has.
-      */
-    def addDownload[F[_]](implicit service: ModelService[F]): F[Model[Version]] =
-      service.update(self)(_.copy(downloadCount = self.downloadCount + 1))
-
-    /**
-      * Returns [[ModelView]] to the recorded unique downloads.
-      *
-      * @return Recorded downloads
-      */
-    def downloadEntries[V[_, _]: QueryView](
-        view: V[VersionDownloadsTable, VersionDownload]
-    ): V[VersionDownloadsTable, VersionDownload] =
-      view.filterView(_.modelId === self.id.value)
 
     def reviewEntries[V[_, _]: QueryView](view: V[ReviewTable, Model[Review]]): V[ReviewTable, Model[Review]] =
       view.filterView(_.versionId === self.id.value)

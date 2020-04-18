@@ -1,14 +1,12 @@
 package controllers.project
 
 import java.nio.charset.StandardCharsets
-import javax.inject.{Inject, Singleton}
 
 import play.api.libs.json.JsValue
 import play.api.mvc.{Action, AnyContent}
 import play.utils.UriEncoding
 
 import controllers.{OreBaseController, OreControllerComponents}
-import discourse.OreDiscourseApi
 import form.OreForms
 import form.project.PageSaveForm
 import ore.StatTracker
@@ -17,8 +15,9 @@ import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.PageTable
 import ore.db.{DbRef, Model}
 import ore.markdown.MarkdownRenderer
+import ore.models.{Job, JobInfo}
 import ore.models.project.{Page, Project}
-import ore.models.user.LoggedAction
+import ore.models.user.{LoggedActionPage, LoggedActionType}
 import ore.permission.Permission
 import ore.util.StringUtils._
 import util.UserActionLogger
@@ -32,10 +31,8 @@ import zio.{IO, Task, UIO}
 /**
   * Controller for handling Page related actions.
   */
-@Singleton
-class Pages @Inject()(forms: OreForms, stats: StatTracker[UIO])(
+class Pages(forms: OreForms, stats: StatTracker[UIO])(
     implicit oreComponents: OreControllerComponents,
-    forums: OreDiscourseApi[UIO],
     renderer: MarkdownRenderer
 ) extends OreBaseController {
 
@@ -103,7 +100,7 @@ class Pages @Inject()(forms: OreForms, stats: StatTracker[UIO])(
     */
   def show(author: String, slug: String, page: String): Action[AnyContent] = ProjectAction(author, slug).asyncF {
     implicit request =>
-      queryProjectPagesAndFindSpecific(request.project, page).constError(notFound).flatMap {
+      queryProjectPagesAndFindSpecific(request.project, page).asError(notFound).flatMap {
         case (pages, p) =>
           val pageCount = pages.size + pages.map(_._2.size).sum
           val parentPage =
@@ -139,7 +136,7 @@ class Pages @Inject()(forms: OreForms, stats: StatTracker[UIO])(
     */
   def showEditor(author: String, slug: String, pageName: String): Action[AnyContent] =
     PageEditAction(author, slug).asyncF { implicit request =>
-      queryProjectPagesAndFindSpecific(request.project, pageName).constError(notFound).map {
+      queryProjectPagesAndFindSpecific(request.project, pageName).asError(notFound).map {
         case (pages, p) =>
           val pageCount  = pages.size + pages.map(_._2.size).sum
           val parentPage = pages.collectFirst { case (pp, page) if page.contains(p) => pp }
@@ -232,14 +229,22 @@ class Pages @Inject()(forms: OreForms, stats: StatTracker[UIO])(
           }
         }
         _ <- content.fold(IO.succeed(createdPage)) { newPage =>
-          val oldPage = createdPage.contents
-          UserActionLogger.log(
+          val oldPage    = createdPage.contents
+          val updatePage = service.update(createdPage)(_.copy(contents = newPage))
+
+          val addForumJob = if (createdPage.isHome) {
+            service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob).unit
+          } else IO.unit
+
+          val log = UserActionLogger.log(
             request.request,
-            LoggedAction.ProjectPageEdited,
+            LoggedActionType.ProjectPageEdited,
             createdPage.id,
             newPage,
             oldPage
-          ) *> createdPage.updateForumContents[Task](newPage).orDie
+          )(LoggedActionPage(_, Some(createdPage.projectId)))
+
+          updatePage <* log <* addForumJob
         }
       } yield Redirect(self.show(author, slug, page))
     }
@@ -257,7 +262,7 @@ class Pages @Inject()(forms: OreForms, stats: StatTracker[UIO])(
       findPage(request.project, page)
         .flatMap(service.delete(_).unit)
         .either
-        .const(Redirect(routes.Projects.show(author, slug)))
+        .as(Redirect(routes.Projects.show(author, slug)))
     }
 
 }

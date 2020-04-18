@@ -10,17 +10,16 @@ Base template for Project overview.
 @import ore.markdown.MarkdownRenderer
 @import ore.models.project.Visibility
 @import ore.permission.Permission
-@import util.syntax._
 @import views.html.helper.{CSPNonce, CSRF, form}
 
-@(p: ProjectData, sp: ScopedProjectData, active: String, noButtons: Boolean = false, additionalScripts: Html = Html(""))(content: Html)(implicit messages: Messages,
-        request: OreRequest[_], flash: Flash, config: OreConfig, renderer: MarkdownRenderer)
+@(p: ProjectData, sp: ScopedProjectData, active: String, noButtons: Boolean = false, additionalScripts: Html = Html(""), additionalStyling: Html = Html(""))(content: Html)(implicit messages: Messages,
+        request: OreRequest[_], flash: Flash, config: OreConfig, renderer: MarkdownRenderer, assetsFinder: AssetsFinder)
 
 @appRoutes = @{controllers.routes.Application}
 
 @scripts = {
-    <script type="text/javascript" src="@routes.Assets.versioned("javascripts/projectDetail.js")"></script>
-    <script type="text/javascript" src="@routes.Assets.versioned("javascripts/pageEdit.js")"></script>
+    <script type="text/javascript" src="@assetsFinder.path("javascripts/projectDetail.js")"></script>
+    <script type="text/javascript" src="@assetsFinder.path("javascripts/pageEdit.js")"></script>
     @additionalScripts
     <script @CSPNonce.attr>
             var projectOwner = "@p.project.ownerName";
@@ -42,7 +41,7 @@ Base template for Project overview.
     }
 }
 
-@layout.base(p.project.ownerName + " / " + p.project.name, scripts, additionalMeta = meta) {
+@layout.base(p.project.ownerName + " / " + p.project.name, scripts, additionalStyling = additionalStyling, additionalMeta = meta) {
     <div class="project-header-container">
         @if(p.visibility != Visibility.Public) {
             <div class="row">
@@ -75,7 +74,7 @@ Base template for Project overview.
             <div class="col-md-6">
                 <div class="project-header">
                     <div class="project-path">
-                        <a href="@routes.Users.showProjects(p.project.ownerName, None)">@p.project.ownerName</a>
+                        <a href="@routes.Users.showProjects(p.project.ownerName)">@p.project.ownerName</a>
                         /
                         <a class="project-name" href="@Projects.show(p.project.ownerName, p.project.slug)">@p.project.name</a>
                     </div>
@@ -103,7 +102,7 @@ Base template for Project overview.
                                                         class="fas fa-star"
                                                     } else {
                                                         class="far fa-star" }></i>
-                            <span class="starred"> @p.project.starCount</span>
+                            <span class="starred"> @p.starCount</span>
                             </button>
 
                             <button class="btn btn-watch btn-default @if(sp.watching) { watching }">
@@ -112,7 +111,7 @@ Base template for Project overview.
                             </button>
                         } else {
                             <span class="minor stars-static">
-                                <i class="fas fa-star"></i> @p.project.starCount
+                                <i class="fas fa-star"></i> @p.starCount
                             </span>
                         }
                     }
@@ -181,7 +180,7 @@ Base template for Project overview.
                                     Staff notes (@p.noteCount) </a></li>
                             }
                             @if(request.headerData.globalPerm(Permission.ViewLogs)) {
-                                <li><a href="@appRoutes.showLog(None, None, Some(p.project.id), None, None, None, None)">
+                                <li><a href="@appRoutes.showLog(None, None, Some(p.project.pluginId), None, None, None, None)">
                                     User Action Logs</a></li>
                             }
                             <li><a href="https://forums.spongepowered.org/users/@p.project.ownerName">Owner on forum <i class="fas fa-external-link-alt" aria-hidden="true"></i></a></li>
@@ -229,7 +228,7 @@ Base template for Project overview.
                                 </li>
                             }
 
-                            @p.settings.homepage.map { homepage =>
+                            @p.project.settings.homepage.map { homepage =>
                                 <li id="homepage">
                                     <a title="@homepage" target="_blank" rel="noopener"
                                     href="@routes.Application.linkOut(homepage)">
@@ -237,7 +236,7 @@ Base template for Project overview.
                                 </li>
                             }
 
-                            @p.settings.issues.map { issues =>
+                            @p.project.settings.issues.map { issues =>
                                 <li id="issues">
                                     <a title="@issues" target="_blank" rel="noopener"
                                     href="@routes.Application.linkOut(issues)">
@@ -245,7 +244,7 @@ Base template for Project overview.
                                 </li>
                             }
 
-                            @p.settings.source.map { source =>
+                            @p.project.settings.source.map { source =>
                                 <li id="source">
                                     <a title="@source" target="_blank" rel="noopener"
                                     href="@routes.Application.linkOut(source)">
@@ -254,7 +253,7 @@ Base template for Project overview.
                                 </li>
                             }
 
-                            @p.settings.support.map { support =>
+                            @p.project.settings.support.map { support =>
                                 <li id="support">
                                     <a title="@support" target="_blank" rel="noopener"
                                     href="@routes.Application.linkOut(support)">

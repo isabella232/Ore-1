@@ -1,8 +1,6 @@
 package controllers
 
-import java.time.Instant
 import java.util.{Base64, UUID}
-import javax.inject.{Inject, Singleton}
 
 import play.api.i18n.Messages
 import play.api.libs.json._
@@ -14,13 +12,13 @@ import ore.auth.CryptoUtils
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.ProjectApiKeyTable
-import ore.db.{DbRef, Model}
+import ore.db.{DbRef, Model, ObjId}
 import ore.models.api.ProjectApiKey
 import ore.models.organization.Organization
 import ore.models.project.factory.ProjectFactory
 import ore.models.project.io.PluginUpload
 import ore.models.project.{Channel, Page, Project, Version}
-import ore.models.user.{LoggedAction, User}
+import ore.models.user.{LoggedActionProject, LoggedActionType, User}
 import ore.permission.Permission
 import ore.permission.role.Role
 import ore.rest.{OreRestfulApiV1, OreWrites}
@@ -39,8 +37,7 @@ import zio.{Task, UIO, ZIO}
 /**
   * Ore API (v1)
   */
-@Singleton
-final class ApiV1Controller @Inject()(
+final class ApiV1Controller(
     api: OreRestfulApiV1,
     status: StatusZ,
     forms: OreForms,
@@ -103,13 +100,17 @@ final class ApiV1Controller @Inject()(
           _ <- OptionT.liftF(
             UserActionLogger.log(
               request.request,
-              LoggedAction.ProjectSettingsChanged,
+              LoggedActionType.ProjectSettingsChanged,
               projectId,
               s"${request.user.name} created a new ApiKey",
               ""
-            )
+            )(LoggedActionProject.apply)
           )
-        } yield Created(Json.toJson(pak))
+        } yield {
+          //Gets around unused warning
+          identity(exists)
+          Created(Json.toJson(pak))
+        }
         res.getOrElse(BadRequest)
     }
 
@@ -124,11 +125,11 @@ final class ApiV1Controller @Inject()(
           _ <- OptionT.liftF(
             UserActionLogger.log(
               request.request,
-              LoggedAction.ProjectSettingsChanged,
+              LoggedActionType.ProjectSettingsChanged,
               request.data.project.id,
               s"${request.user.name} removed an ApiKey",
               ""
-            )
+            )(LoggedActionProject.apply)
           )
         } yield Ok
         res.getOrElse(BadRequest)
@@ -172,9 +173,7 @@ final class ApiV1Controller @Inject()(
       val project     = projectData.project
 
       forms.VersionDeploy
-        .bindEitherT[ZIO[Blocking, Nothing, ?]](
-          hasErrors => BadRequest(Json.obj("errors" -> hasErrors.errorsAsJson))
-        )
+        .bindEitherT[ZIO[Blocking, Nothing, *]](hasErrors => BadRequest(Json.obj("errors" -> hasErrors.errorsAsJson)))
         .flatMap { formData =>
           OptionT(formData.channel.value: ZIO[Blocking, Nothing, Option[Model[Channel]]])
             .toRight(BadRequest(Json.obj("errors" -> "Invalid channel")))
@@ -200,13 +199,12 @@ final class ApiV1Controller @Inject()(
             )
 
             EitherT
-              .liftF[ZIO[Blocking, Nothing, ?], Result, (Boolean, Boolean)](service.runDBIO(query.result.head))
+              .liftF[ZIO[Blocking, Nothing, *], Result, (Boolean, Boolean)](service.runDBIO(query.result.head))
               .ensure(Unauthorized(error("apiKey", "api.deploy.invalidKey")))(apiKeyExists => apiKeyExists._1)
               .ensure(BadRequest(error("versionName", "api.deploy.versionExists")))(nameExists => !nameExists._2)
               .semiflatMap(_ => project.user[Task].orDie)
-              .semiflatMap(
-                user =>
-                  user.toMaybeOrganization(ModelView.now(Organization)).semiflatMap(_.user[Task].orDie).getOrElse(user)
+              .semiflatMap(user =>
+                user.toMaybeOrganization(ModelView.now(Organization)).semiflatMap(_.user[Task].orDie).getOrElse(user)
               )
               .flatMap { owner =>
                 val pluginUpload = this.factory
@@ -215,7 +213,7 @@ final class ApiV1Controller @Inject()(
                   .toLeft(PluginUpload.bindFromRequest())
                   .flatMap(_.toRight(BadRequest(error("files", "error.noFile"))))
 
-                EitherT.fromEither[ZIO[Blocking, Nothing, ?]](pluginUpload).flatMap { data =>
+                EitherT.fromEither[ZIO[Blocking, Nothing, *]](pluginUpload).flatMap { data =>
                   EitherT(
                     this.factory
                       .processSubsequentPluginUpload(data, owner, project)
@@ -237,12 +235,11 @@ final class ApiV1Controller @Inject()(
                     if (formData.recommended)
                       service.update(project)(
                         _.copy(
-                          recommendedVersionId = Some(newVersion.id),
-                          lastUpdated = Instant.now()
+                          recommendedVersionId = Some(newVersion.id)
                         )
                       )
                     else
-                      service.update(project)(_.copy(lastUpdated = Instant.now()))
+                      ZIO.unit
 
                   update.as(Created(api.writeVersion(newVersion, newProject, channel, None, tags)))
               }
@@ -317,34 +314,41 @@ final class ApiV1Controller @Inject()(
       .semiflatMap {
         case (query, optUser) =>
           Logger.debug("Sync user found: " + optUser.isDefined)
+
+          val id        = ObjId(query.get("external_id").get.toLong)
+          val email     = query.get("email")
+          val username  = query.get("username")
+          val fullName  = query.get("name")
+          val addGroups = query.get("add_groups")
+
+          val globalRoles = addGroups.map { groups =>
+            if (groups.trim.isEmpty) Nil
+            else groups.split(",").flatMap(Role.withValueOpt).toList
+          }
+
+          val updateRoles = (user: Model[User]) =>
+            globalRoles.fold(UIO.unit) { roles =>
+              user.globalRoles.deleteAllFromParent *> roles
+                .map(_.toDbRole.id.value)
+                .traverse(user.globalRoles.addAssoc)
+                .unit
+            }
+
           optUser
             .map { user =>
-              val email      = query.get("email")
-              val username   = query.get("username")
-              val fullName   = query.get("name")
-              val add_groups = query.get("add_groups")
-
-              val globalRoles = add_groups.map { groups =>
-                if (groups.trim.isEmpty) Nil
-                else groups.split(",").flatMap(Role.withValueOpt).toList
-              }
-
-              val updateRoles = globalRoles.fold(UIO.unit) { roles =>
-                user.globalRoles.deleteAllFromParent *> roles
-                  .map(_.toDbRole.id.value)
-                  .traverse(user.globalRoles.addAssoc)
-                  .unit
-              }
-
-              service.update(user)(
-                _.copy(
-                  email = email.orElse(user.email),
-                  name = username.getOrElse(user.name),
-                  fullName = fullName.orElse(user.fullName)
+              service
+                .update(user)(
+                  _.copy(
+                    email = email.orElse(user.email),
+                    name = username.getOrElse(user.name),
+                    fullName = fullName.orElse(user.fullName)
+                  )
                 )
-              ) *> updateRoles
+                .flatMap(updateRoles)
             }
-            .getOrElse(UIO.unit)
+            .getOrElse {
+              service.insert(User(ObjId(id), fullName, username.get, email)).flatMap(updateRoles)
+            }
             .as(Ok(Json.obj("status" -> "success")))
       }
       .toZIO

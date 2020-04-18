@@ -2,8 +2,7 @@ package ore.models.user
 
 import scala.language.implicitConversions
 
-import java.time.Instant
-import javax.inject.Inject
+import java.time.OffsetDateTime
 
 import ore.OreConfig
 import ore.db.{DbRef, ObjId}
@@ -12,7 +11,7 @@ import ore.db.{DbRef, ObjId}
   * Represents a "fake" User object for bypassing the standard authentication
   * method in a development environment.
   */
-final class FakeUser @Inject()(config: OreConfig) {
+final class FakeUser(config: OreConfig) {
 
   private lazy val conf = config.app.fakeUser
 
@@ -31,7 +30,7 @@ final class FakeUser @Inject()(config: OreConfig) {
         fullName = conf.name,
         name = username,
         email = conf.email,
-        joinDate = Some(Instant.now())
+        joinDate = Some(OffsetDateTime.now())
       )
     else sys.error("Tried to use disabled fake user")
 

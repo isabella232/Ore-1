@@ -26,6 +26,8 @@ abstract class OreBaseController(implicit val oreComponents: OreControllerCompon
     with Actions
     with I18nSupport {
 
+  implicit val assetsFinder: AssetsFinder = oreComponents.assetsFinder
+
   override def notFound(implicit request: OreRequest[_]): Result = NotFound(views.html.errors.notFound())
 
   /**
@@ -37,7 +39,7 @@ abstract class OreBaseController(implicit val oreComponents: OreControllerCompon
     * @return         NotFound or project
     */
   def getProject(author: String, slug: String)(implicit request: OreRequest[_]): IO[Result, Model[Project]] =
-    projects.withSlug(author, slug).get.constError(notFound)
+    projects.withSlug(author, slug).get.asError(notFound)
 
   private def versionFindFunc(versionString: String, canSeeHiden: Boolean): VersionTable => Rep[Boolean] = v => {
     val versionMatches = v.versionString.toLowerCase === versionString.toLowerCase
