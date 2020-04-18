@@ -12,7 +12,7 @@
                 <li v-for="visibility in visibilities.values">
                     <a href="#" @click="handleVisibilityClick(visibility)" class="btn-visibility-change">
                         {{ visibilityMessage(visibility.name) }}
-                        <font-awesome-icon v-if="projectVisibility === visibility.name" :icon="['fas', 'check']"
+                        <font-awesome-icon v-if="currentVisibility === visibility.name" :icon="['fas', 'check']"
                                            style="color: black" aria-hidden="true"/>
                     </a>
                 </li>
@@ -52,14 +52,15 @@
 
     export default {
         props: {
-            pluginId: {
+            currentVisibility: {
                 type: String,
                 required: true
             },
-            projectVisibility: {
+            endpoint: {
                 type: String,
                 required: true
-            }
+            },
+            emitLocation: String
         },
         data() {
             return {
@@ -102,13 +103,19 @@
             },
             sendVisibilityChange(visibility) {
                 this.spinIcon = true;
-                API.request('projects/' + this.pluginId + '/visibility', 'POST', {
+                API.request(this.endpoint, 'POST', {
                     visibility: visibility.name,
                     comment: this.comment
                 }).then(res => {
                     this.spinIcon = false;
                     $('#modal-visibility-comment').modal('hide');
-                    this.$emit('update-visibility', visibility.name)
+
+                    if(this.emitLocation) {
+                        this.$emit({
+                            type: this.emitLocation,
+                            visibility: visibility.name
+                        })
+                    }
                 })
             }
         }

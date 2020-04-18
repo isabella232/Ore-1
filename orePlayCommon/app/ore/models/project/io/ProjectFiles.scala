@@ -56,6 +56,16 @@ trait ProjectFiles[+F[_]] {
   def renameProject(owner: String, oldName: String, newName: String): F[Unit]
 
   /**
+    * Transfers this specified project to a new user in the file system.
+    *
+    * @param oldOwner  Old owner name
+    * @param newOwner  New owner name
+    * @param name      Project name
+    * @return          New path
+    */
+  def transferProject(oldOwner: String, newOwner: String, name: String): F[Unit]
+
+  /**
     * Returns the directory that contains a [[Project]]'s custom icons.
     *
     * @param owner  Project owner
@@ -105,6 +115,16 @@ object ProjectFiles {
     override def renameProject(owner: String, oldName: String, newName: String): F[Unit] = {
       val newProjectDir = getProjectDir(owner, newName)
       val oldProjectDir = getProjectDir(owner, oldName)
+
+      F.ifM(fileIO.exists(oldProjectDir))(
+        ifTrue = fileIO.move(oldProjectDir, newProjectDir),
+        ifFalse = F.unit
+      )
+    }
+
+    override def transferProject(oldOwner: String, newOwner: String, name: String): F[Unit] = {
+      val newProjectDir = getProjectDir(newOwner, name)
+      val oldProjectDir = getProjectDir(oldOwner, name)
 
       F.ifM(fileIO.exists(oldProjectDir))(
         ifTrue = fileIO.move(oldProjectDir, newProjectDir),

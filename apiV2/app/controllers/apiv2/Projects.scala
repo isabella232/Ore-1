@@ -17,12 +17,15 @@ import models.querymodels.APIV2ProjectStatsQuery
 import models.viewhelper.ProjectData
 import ore.OreConfig
 import ore.data.project.Category
+import ore.data.user.notification.NotificationType
 import ore.db.Model
-import ore.db.access.ModelView
+import ore.db.impl.OrePostgresDriver.api._
+import ore.db.impl.schema.ProjectRoleTable
 import ore.models.Job
 import ore.models.project.factory.{ProjectFactory, ProjectTemplate}
 import ore.models.project.{Project, ProjectSortingStrategy, Version, Visibility}
-import ore.models.user.{LoggedActionProject, LoggedActionType}
+import ore.models.user.role.ProjectUserRole
+import ore.models.user.{LoggedActionProject, LoggedActionType, Notification}
 import ore.permission.Permission
 import ore.util.OreMDC
 import util.{PartialUtils, PatchDecoder, UserActionLogger}
@@ -37,7 +40,7 @@ import io.circe.syntax._
 import squeal.category._
 import squeal.category.macros.Derive
 import squeal.category.syntax.all._
-import zio.{IO, UIO, ZIO}
+import zio.{IO, Task, UIO, ZIO}
 import zio.blocking.Blocking
 import zio.interop.catz._
 
@@ -212,21 +215,47 @@ class Projects(
 
         res match {
           case Validated.Valid(edits) =>
-            //Renaming a project is a big deal, and can't be done as easily as most other things
-            val withoutName = edits.copy[Option](
-              name = None
+            //Renaming or transferring a project is a big deal, and can't be done as easily as most other things
+            val withoutNameAndOwner = edits.copy[Option](
+              name = None,
+              namespace = EditableProjectNamespaceF[Option](None)
             )
 
+            def checkIsOwner(action: String): ZIO[Any, Result, Unit] =
+              if (request.scopePermission.has(Permission.IsProjectOwner)) ZIO.unit
+              else ZIO.fail(Forbidden(ApiError(s"Not enough perms to $action")))
+
             val renameOp = edits.name.fold(ZIO.unit: ZIO[Any, Result, Unit]) { newName =>
-              projects
+              val doRename = projects
                 .withPluginId(pluginId)
                 .get
                 .orDieWith(_ => new Exception("impossible"))
                 .flatMap(projects.rename(_, newName).absolve)
                 .mapError(e => BadRequest(ApiError(e)))
+
+              checkIsOwner("rename project") *> doRename
             }
 
-            val update = service.runDbCon(APIV2Queries.updateProject(pluginId, withoutName).run)
+            val transferOp = edits.namespace.owner.fold(ZIO.unit: ZIO[Any, Result, Unit]) { newOwner =>
+              val doTransfer = for {
+                project <- projects.withPluginId(pluginId).someOrFail(NotFound)
+                user    <- users.withName(newOwner)(OreMDC.NoMDC).value.someOrFail(NotFound)
+                userRole <- project
+                  .memberships[Task, ProjectUserRole, ProjectRoleTable]
+                  .getMembership(project)(user.id)
+                  .orDie
+                  .someOrFail(BadRequest(ApiError("User to transfer to is not member")))
+                _ <- if (userRole.isAccepted) ZIO.unit
+                else ZIO.fail(BadRequest(ApiError("User to transfer to has not accepted invite")))
+                _ <- if (userRole.role == ore.permission.role.Role.ProjectAdmin) ZIO.unit
+                else ZIO.fail(BadRequest(ApiError("User to transfer to is not project admin")))
+                _ <- projects.transfer(project, user.id)
+              } yield ()
+
+              checkIsOwner("transfer project") *> doTransfer
+            }
+
+            val update = service.runDbCon(APIV2Queries.updateProject(pluginId, withoutNameAndOwner).run)
 
             //We need two queries two queries as we use the generic update function
             val get = service
@@ -244,30 +273,79 @@ class Projects(
 
             val count = PartialUtils.countDefined(edits)
             count match {
-              case 0                         => ZIO.fail(BadRequest(ApiError("No updates defined")))
-              case 1 if edits.name.isDefined => renameOp *> get
-              case _                         => renameOp *> update *> get
+              case 0                                                            => ZIO.fail(BadRequest(ApiError("No updates defined")))
+              case 2 if edits.name.isDefined && edits.namespace.owner.isDefined => renameOp *> transferOp *> get
+              case 1 if edits.name.isDefined                                    => renameOp *> get
+              case 1 if edits.namespace.owner.isDefined                         => transferOp *> get
+              case _                                                            => renameOp *> transferOp *> update *> get
             }
           case Validated.Invalid(e) => ZIO.fail(BadRequest(ApiErrors(e)))
         }
       }
 
-  def showMembers(pluginId: String, limit: Option[Long], offset: Long): Action[AnyContent] =
-    CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF { r =>
-      service
-        .runDbCon(
-          APIV2Queries
-            .projectMembers(pluginId, limitOrDefault(limit, 25), offsetOrZero(offset))
-            .to[Vector]
-        )
-        .map { xs =>
-          val users =
-            if (r.scopePermission.has(Permission.ManageProjectMembers)) xs
-            else xs.map(u => u.copy(roles = u.roles.filter(_.isAccepted))).filter(_.roles.nonEmpty)
+  def projectMembersAction(pluginId: String, limit: Option[Long], offset: Long)(
+      implicit r: ApiRequest[_]
+  ): ZIO[Any, Nothing, Result] = {
+    service
+      .runDbCon(
+        APIV2Queries
+          .projectMembers(pluginId, limitOrDefault(limit, 25), offsetOrZero(offset))
+          .to[Vector]
+      )
+      .map { xs =>
+        val users =
+          if (r.scopePermission.has(Permission.ManageProjectMembers)) xs
+          else xs.filter(_.role.isAccepted)
 
-          Ok(users.asJson)
-        }
-    }
+        Ok(users.asJson)
+      }
+  }
+
+  def showMembers(pluginId: String, limit: Option[Long], offset: Long): Action[AnyContent] =
+    CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF(implicit r =>
+      projectMembersAction(pluginId, limit, offset)
+    )
+
+  def updateMembers(pluginId: String): Action[List[Projects.ProjectMemberUpdate]] =
+    ApiAction(Permission.ManageProjectMembers, APIScope.ProjectScope(pluginId))
+      .asyncF(parseCirce.decodeJson[List[Projects.ProjectMemberUpdate]]) { implicit r =>
+        for {
+          project <- projects.withPluginId(pluginId).someOrFail(NotFound)
+          resolvedUsers <- ZIO.foreach(r.body) { m =>
+            users.withName(m.user)(OreMDC.NoMDC).tupleLeft(m.role).value.someOrFail(NotFound)
+          }
+          currentMembers <- project.memberships[Task, ProjectUserRole, ProjectRoleTable].members(project).orDie
+          resolvedUsersMap  = resolvedUsers.map(t => t._2.id.value -> t._1).toMap
+          currentMembersMap = currentMembers.map(t => t.userId -> t).toMap
+          newUsers          = resolvedUsersMap.view.filterKeys(!currentMembersMap.contains(_)).toMap
+          usersToUpdate = currentMembersMap.collect {
+            case (user, oldRole) if resolvedUsersMap.get(user).exists(newRole => oldRole.role != newRole) =>
+              (user, (oldRole, resolvedUsersMap(user)))
+          }
+          usersToDelete = currentMembersMap.view.filterKeys(!resolvedUsersMap.contains(_)).toMap
+          _ <- if (usersToUpdate.contains(project.ownerId)) ZIO.fail(BadRequest(ApiError("Can't update owner")))
+          else ZIO.unit
+          _ <- if (usersToDelete.contains(project.ownerId)) ZIO.fail(BadRequest(ApiError("Can't delete owner")))
+          else ZIO.unit
+          _ <- service.bulkInsert(newUsers.map(t => ProjectUserRole(t._1, project.id, t._2)).toSeq)
+          _ <- ZIO.foreach(usersToUpdate.values)(t => service.update(t._1)(_.copy(role = t._2)))
+          _ <- service.deleteWhere(ProjectUserRole)(_.id.inSetBind(usersToDelete.values.map(_.id.value)))
+          _ <- {
+            val notifications = newUsers.map {
+              case (userId, role) =>
+                Notification(
+                  userId = userId,
+                  originId = Some(project.ownerId),
+                  notificationType = NotificationType.ProjectInvite,
+                  messageArgs = NonEmptyList.of("notification.project.invite", role.title, project.name)
+                )
+            }
+
+            service.bulkInsert(notifications.toSeq)
+          }
+          res <- projectMembersAction(pluginId, None, 0)
+        } yield res
+      }
 
   def showProjectStats(pluginId: String, fromDateString: String, toDateString: String): Action[AnyContent] =
     CachingApiAction(Permission.IsProjectMember, APIScope.ProjectScope(pluginId)).asyncF {
@@ -374,7 +452,7 @@ class Projects(
     }
 }
 object Projects {
-  import APIV2.{categoryCodec, visibilityCodec}
+  import APIV2.{categoryCodec, visibilityCodec, permissionRoleCodec}
 
   @SnakeCaseJsonCodec case class PaginatedProjectResult(
       pagination: Pagination,
@@ -384,7 +462,7 @@ object Projects {
   type EditableProject = EditableProjectF[Option]
   case class EditableProjectF[F[_]](
       name: F[String],
-      ownerName: F[String],
+      namespace: EditableProjectNamespaceF[F],
       category: F[Category],
       summary: F[Option[String]],
       settings: EditableProjectSettingsF[F]
@@ -405,7 +483,7 @@ object Projects {
 
       EditableProjectF[Validator](
         checkLength("project name", config.ore.projects.maxDescLen),
-        noValidation,
+        EditableProjectNamespaceF[Validator](noValidation),
         noValidation,
         allValid(invaidIfEmpty("summary"), validIfEmpty(checkLength("summary", config.ore.projects.maxDescLen))),
         EditableProjectSettingsF[Validator](
@@ -426,6 +504,15 @@ object Projects {
         )
       )
     }
+  }
+
+  case class EditableProjectNamespaceF[F[_]](
+      owner: F[String]
+  )
+  object EditableProjectNamespaceF {
+    implicit val F: ApplicativeKC[EditableProjectNamespaceF]
+      with TraverseKC[EditableProjectNamespaceF]
+      with DistributiveKC[EditableProjectNamespaceF] = Derive.allKC[EditableProjectNamespaceF]
   }
 
   case class EditableProjectSettingsF[F[_]](
@@ -464,5 +551,10 @@ object Projects {
   @SnakeCaseJsonCodec case class EditVisibility(
       visibility: Visibility,
       comment: String
+  )
+
+  @SnakeCaseJsonCodec case class ProjectMemberUpdate(
+      user: String,
+      role: ore.permission.role.Role
   )
 }

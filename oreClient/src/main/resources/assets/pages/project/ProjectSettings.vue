@@ -8,7 +8,7 @@
                     <div class="panel-heading">
                         <h3 class="panel-title pull-left">Settings</h3>
                         <template v-if="permissions.includes('see_hidden')">
-                            <btn-hide :plugin-id="project.plugin_id" :project-visibility="project.visibility"></btn-hide>
+                            <btn-hide :current-visibility="project.visibility" :endpoint="'projects/' + project.plugin_id + '/visibility'" emit-location="project/setVisibility"></btn-hide>
                         </template>
                     </div>
 
@@ -249,6 +249,23 @@
                             <div class="clearfix"></div>
                         </div>
 
+                        <!-- Transfer -->
+                        <div class="setting">
+                            <div class="setting-description">
+                                <h4 class="danger">Transfer</h4>
+                                <p>Transfer project ownership. </p>
+                            </div>
+                            <div class="setting-content">
+                                <select class="form-control" v-model="newOwner">
+                                    <option v-for="member in adminMembers" :value="member.user">{{ member.user }}</option>
+                                </select>
+                                <button id="btn-transfer" data-toggle="modal" data-target="#modal-transfer" class="btn btn-warning" :disabled="newOwner === this.project.namespace.owner">
+                                    Transfer
+                                </button>
+                            </div>
+                            <div class="clearfix"></div>
+                        </div>
+
                         <!-- Delete -->
                         <div v-if="permissions.includes('delete_project')" class="setting">
                             <div class="setting-description">
@@ -284,14 +301,14 @@
             <!-- Side panel -->
             <div class="col-md-4">
                 <router-link :to="{name: 'settings'}" v-slot="{ href, navigate }">
-                    <!-- TODO: Pass in navigate to member-list -->
                     <member-list
                             :editable="true"
                             :members="members"
                             :permissions="permissions"
-                            :remove-call="routes.project.Projects.removeMember(project.namespace.owner, project.namespace.slug).absoluteURL()"
-                            :settings-call="href"
-                            role-category="project"></member-list>
+                            role-category="project"
+                            new-role="Project_Support"
+                            :endpoint="'projects/' + project.plugin_id + '/members'"
+                            commit-location="project/updateMembers"></member-list>
                 </router-link>
             </div>
         </div>
@@ -314,6 +331,30 @@
                                 Close
                             </button>
                             <button @click="sendProjectUpdate({'name': newName})" name="rename" class="btn btn-warning">Rename</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modal-transfer" tabindex="-1" role="dialog" aria-labelledby="label-transfer">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Cancel">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        <h4 class="modal-title" id="label-transfer">Transfer project ownership</h4>
+                    </div>
+                    <div class="modal-body">
+                        Changing the owner of a project can have undesired consequences. We will not setup any redirects.
+                    </div>
+                    <div class="modal-footer">
+                        <div class="form-inline">
+                            <button type="button" class="btn btn-default" data-dismiss="modal">
+                                Close
+                            </button>
+                            <button @click="sendProjectUpdate({namespace: {owner: newOwner}})" name="transfer" class="btn btn-warning">Transfer</button>
                         </div>
                     </div>
                 </div>
@@ -380,6 +421,7 @@
             if(project) {
                 return {
                         newName: project.name,
+                        newOwner: project.namespace.owner,
                         category: project.category,
                         keywords: project.settings.keywords,
                         homepage: project.settings.homepage,
@@ -402,6 +444,7 @@
             else {
                 return {
                     newName: null,
+                    newOwner: null,
                     category: null,
                     keywords: [],
                     homepage: null,
@@ -452,6 +495,9 @@
             saveChangesIcon() {
                 return ['fas', this.sendingChanges ? 'spinner' : 'check']
             },
+            adminMembers() {
+                return this.members.filter(member => member.role.name === 'Project_Owner' || member.role.name === 'Project_Admin')
+            },
             ...mapState('project', ['project', 'permissions', 'members'])
         },
         watch: {
@@ -471,6 +517,7 @@
                 this.getDeployKey();
 
                 this.newName = this.project.name;
+                this.newOwner = this.project.namespace.owner;
                 this.category = this.project.category;
                 this.keywords = '';
                 this.homepage = this.project.settings.homepage;
@@ -489,7 +536,9 @@
             sendProjectUpdate(update) {
                 this.sendingChanges = true;
                 $('#modal-rename').modal('hide');
+                $('#modal-transfer').modal('hide');
                 let changedName = this.project.name !== this.newName;
+                let changedOwner = this.project.namespace.owner !== this.newOwner;
 
                 API.request('projects/' + this.project.plugin_id, 'PATCH', update).then(result => {
                     this.$store.commit({
@@ -499,7 +548,7 @@
                     this.sendingChanges = false;
                     this.updateDataFromProject();
 
-                    if(changedName) {
+                    if(changedName || changedOwner) {
                         this.$router.replace({name: 'settings', params: result.namespace})
                     }
                 }).catch(failed => {

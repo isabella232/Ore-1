@@ -1,23 +1,23 @@
 <template>
-    <select form="form-continue" :style="hidden ? {display: 'none'} : ''">
-        <option v-for="roleType in roles" :value="roleType.value">{{ roleType.title }}</option>
+    <select :value="value" @input="$emit('input', $event.target.value)">
+        <option v-for="roleType in roles" :value="roleType.name">{{ roleType.title }}</option>
     </select>
 </template>
 
 <script>
+    import {Role} from "../enums"
 
     export default {
         props: {
+            value: String,
             roleCategory: {
                 type: String,
                 required: true
-            },
-            hidden: Boolean
+            }
         },
         computed: {
             roles() {
-                //return Role.values.filter(role => role.category == this.roleCategory && role.isAssignable).sortBy(_.permissions: Long).reverse
-                return []
+                return Role.categoryRoles(this.roleCategory).filter(role => role.isAssignable);
             }
         }
     }

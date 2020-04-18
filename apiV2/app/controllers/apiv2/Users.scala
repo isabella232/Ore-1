@@ -5,7 +5,7 @@ import play.api.inject.ApplicationLifecycle
 import play.api.mvc.{Action, AnyContent, Result}
 
 import controllers.OreControllerComponents
-import controllers.apiv2.Users.PaginatedCompactProjectResult
+import controllers.apiv2.Users.{PaginatedCompactProjectResult, PaginatedUserResult, UserSortingStrategy}
 import controllers.apiv2.helpers.{APIScope, ApiError, Pagination}
 import db.impl.query.APIV2Queries
 import models.protocols.APIV2
@@ -13,8 +13,10 @@ import ore.db.DbRef
 import ore.models.project.ProjectSortingStrategy
 import ore.models.user.User
 import ore.permission.Permission
+import ore.permission.role.Role
 
 import cats.syntax.all._
+import enumeratum.values.{StringEnum, StringEnumEntry}
 import io.circe._
 import io.circe.derivation.annotations.SnakeCaseJsonCodec
 import io.circe.syntax._
@@ -27,6 +29,56 @@ class Users(
 )(
     implicit oreComponents: OreControllerComponents
 ) extends AbstractApiV2Controller(lifecycle) {
+
+  def listUsers(
+      q: Option[String],
+      minProjects: Option[Int],
+      roles: Seq[Role],
+      excludeOrganizations: Boolean,
+      sort: Option[UserSortingStrategy],
+      sortDescending: Boolean,
+      limit: Option[Long],
+      offset: Long
+  ): Action[AnyContent] = ApiAction(Permission.ViewPublicInfo, APIScope.GlobalScope).asyncF { r =>
+    val realLimit  = limitOrDefault(limit, config.ore.users.authorPageSize)
+    val realOffset = offsetOrZero(offset)
+
+    val getUsers = service.runDbCon(
+      APIV2Queries
+        .userSearchQuery(
+          q,
+          minProjects.getOrElse(0),
+          roles,
+          excludeOrganizations,
+          sort.getOrElse(UserSortingStrategy.Name),
+          sortDescending,
+          realLimit,
+          realOffset
+        )
+        .to[Vector]
+    )
+
+    val userCount = service.runDbCon(
+      APIV2Queries
+        .userSearchCountQuery(
+          q,
+          minProjects.getOrElse(0),
+          roles,
+          excludeOrganizations
+        )
+        .unique
+    )
+
+    (getUsers <&> userCount).map {
+      case (users, userCount) =>
+        Ok(
+          PaginatedUserResult(
+            Pagination(realLimit, realOffset, userCount),
+            users
+          )
+        )
+    }
+  }
 
   def showCurrentUser: Action[AnyContent] = ApiAction(Permission.ViewPublicInfo, APIScope.GlobalScope).asyncF { r =>
     r.user match {
@@ -114,8 +166,23 @@ class Users(
   }
 }
 object Users {
+  @SnakeCaseJsonCodec case class PaginatedUserResult(
+      pagination: Pagination,
+      result: Seq[APIV2.User]
+  )
+
   @SnakeCaseJsonCodec case class PaginatedCompactProjectResult(
       pagination: Pagination,
       result: Seq[APIV2.CompactProject]
   )
+
+  sealed abstract class UserSortingStrategy(val value: String) extends StringEnumEntry
+  object UserSortingStrategy extends StringEnum[UserSortingStrategy] {
+    override def values: IndexedSeq[UserSortingStrategy] = findValues
+
+    case object Name     extends UserSortingStrategy("name")
+    case object Roles    extends UserSortingStrategy("role")
+    case object Joined   extends UserSortingStrategy("join_date")
+    case object Projects extends UserSortingStrategy("project_count")
+  }
 }
