@@ -103,21 +103,17 @@ object Stats {
       .read[String]
       .and((JsPath \ "size").read[Long])
       .and((JsPath \ "emitted").readNullable[Boolean])
-      .and((JsPath \\ "chunkNames").read[List[String]])
-  (Asset.apply _)
+      .and((JsPath \\ "chunkNames").read[List[String]])(Asset.apply _)
 
   implicit val statsReads: Reads[WebpackStats] =
     (JsPath \ "version")
       .read[String]
       .and((JsPath \ "hash").read[String])
       .and((JsPath \ "time").read[Long])
-      .and(JsPath \ "outputPath")
-      .readNullable[String]
-      .map(x => x.map(new File(_).toPath)) and // It seems webpack 2 doesn't produce outputPath
-      (JsPath \ "errors")
-        .read[List[String]]
-        .and((JsPath \ "warnings").read[List[String]])
-        .and((JsPath \ "assets").read[List[Asset]])
-  (WebpackStats.apply _)
+      // It seems webpack 2 doesn't produce outputPath
+      .and((JsPath \ "outputPath").readNullable[String].map(x => x.map(new File(_).toPath)))
+      .and((JsPath \ "errors").read[List[String]])
+      .and((JsPath \ "warnings").read[List[String]])
+      .and((JsPath \ "assets").read[List[Asset]])(WebpackStats.apply _)
 
 }
