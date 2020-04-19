@@ -4,20 +4,21 @@ const CopyPlugin = require('copy-webpack-plugin');
 //const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 const Path = require('path');
-const rootDir = Path.resolve(__dirname, '../../../..');
-const resourcesDir = Path.resolve(rootDir, 'src', 'main', 'resources');
-const entryDir = Path.resolve(resourcesDir, 'assets', 'entries');
+const rootDir = Path.resolve(__dirname);
+const resourcesDir = Path.resolve(rootDir, 'src', 'main', 'assets');
+const entryDir = Path.resolve(resourcesDir, 'entries');
 const modulesDir = Path.resolve(__dirname, 'node_modules');
-const outputDir = Path.resolve(__dirname, 'build');
+
+const outputDir = process.env.FROM_SBT === 'true' ?
+    Path.resolve(__dirname, 'target', 'web', 'public', 'main', 'build') :
+    Path.resolve(__dirname, 'build');
 
 module.exports = {
     entry: {
-        main: Path.resolve(resourcesDir, 'assets', 'scss', 'main.scss'),
+        main: Path.resolve(resourcesDir, 'scss', 'main.scss'),
         home: Path.resolve(entryDir, 'home.js'),
         'font-awesome': Path.resolve(entryDir, 'font-awesome.js'),
         'user-profile': Path.resolve(entryDir, 'user-profile.js'),
-        'ore-client-fastopt': Path.resolve(entryDir, 'dummy.js'),
-        'ore-client-opt': Path.resolve(entryDir, 'dummy.js')
     },
     output: {
         path: outputDir,
