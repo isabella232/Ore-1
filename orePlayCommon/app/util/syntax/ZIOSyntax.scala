@@ -23,6 +23,6 @@ object ZIOSyntax {
 
     def toZIO: IO[Unit, A] = o.value.get
 
-    def toZIOWithError[E](err: E): IO[E, A] = o.value.get.asError(err)
+    def toZIOWithError[E](err: E): IO[E, A] = o.value.get.orElseFail(err)
   }
 }

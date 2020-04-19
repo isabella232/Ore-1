@@ -75,8 +75,9 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
   def showCreator(): Action[AnyContent] = UserLock().asyncF { implicit request =>
     import cats.instances.vector._
     for {
-      orgas      <- request.user.organizations.allFromParent
-      createOrga <- orgas.toVector.parTraverse(request.user.permissionsIn(_).map(_.has(Permission.CreateProject)))
+      orgas <- request.user.organizations.allFromParent
+      createOrga <- orgas.toVector
+        .parTraverse(request.user.permissionsIn[Model[Organization], UIO](_).map(_.has(Permission.CreateProject)))
     } yield {
       val createdOrgas = orgas.zip(createOrga).collect {
         case (orga, true) => orga
@@ -111,7 +112,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
     for {
       all <- user.organizations.allFromParent
       canCreate <- all.toVector.parTraverse(org =>
-        user.permissionsIn(org).map(_.has(Permission.CreateProject)).tupleLeft(org.id.value)
+        user.permissionsIn[Model[Organization], UIO](org).map(_.has(Permission.CreateProject)).tupleLeft(org.id.value)
       )
     } yield {
       // Filter by can Create Project
@@ -186,11 +187,11 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
               .flatMap { posterName =>
                 users.requestPermission(request.user, posterName, Permission.PostAsOrganization).toZIO
               }
-              .asError(request.user)
+              .orElseFail(request.user)
               .either
               .map(_.merge)
           }
-          topicId <- ZIO.fromOption(request.project.topicId).asError(BadRequest)
+          topicId <- ZIO.fromOption(request.project.topicId).orElseFail(BadRequest)
           _       <- service.insert(Job.PostDiscourseReply.newJob(topicId, poster.name, formData.content).toJob)
         } yield Redirect(self.showDiscussion(author, slug))
       }
@@ -208,7 +209,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
     projects
       .withSlug(author, slug)
       .get
-      .asError(NotFound)
+      .orElseFail(NotFound)
       .flatMap(project => project.obj.iconUrlOrPath.map(_.fold(Redirect(_), showImage)))
   }
 
@@ -391,7 +392,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
         }
       } yield res
 
-      res.asError(NotFound)
+      res.orElseFail(NotFound)
     }
 
   /**

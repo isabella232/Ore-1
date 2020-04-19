@@ -7,25 +7,25 @@ object Version {
   val catsEffect  = "2.1.2"
   val catsTagless = "0.11"
 
-  val zio     = "1.0.0-RC17"
-  val zioCats = "2.0.0.0-RC10"
+  val zio     = "1.0.0-RC18-2"
+  val zioCats = "2.0.0.0-RC12"
 
   val slick     = "3.3.2"
-  val slickPg   = "0.18.1"
+  val slickPg   = "0.19.0"
   val playSlick = "5.0.0"
-  val doobie    = "0.8.6"
+  val doobie    = "0.8.8"
 
   val circe           = "0.13.0"
-  val circeDerivation = "0.13.0-M3"
+  val circeDerivation = "0.13.0-M4"
 
-  val akka         = "2.6.3"
+  val akka         = "2.6.4"
   val akkaHttp     = "10.1.11"
   val scalaLogging = "3.9.2"
 
   val simulacrum = "0.19.0"
   val macWire    = "2.3.3"
   val scalaCache = "0.28.0"
-  val flexmark   = "0.50.44"
+  val flexmark   = "0.60.2"
 }
 
 object Deps {
@@ -51,9 +51,10 @@ object Deps {
   val circeDerivation = "io.circe" %% "circe-derivation-annotations" % Version.circeDerivation
   val circeParser     = "io.circe" %% "circe-parser"                 % Version.circe
 
-  val akkaHttp     = "com.typesafe.akka" %% "akka-http"      % Version.akkaHttp
-  val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core" % Version.akkaHttp
-  val akkaStream   = "com.typesafe.akka" %% "akka-stream"    % Version.akka
+  val akkaHttp     = "com.typesafe.akka" %% "akka-http"        % Version.akkaHttp
+  val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core"   % Version.akkaHttp
+  val akkaStream   = "com.typesafe.akka" %% "akka-stream"      % Version.akka
+  val akkaTyped    = "com.typesafe.akka" %% "akka-actor-typed" % Version.akka
 
   val scalaLogging = "com.typesafe.scala-logging" %% "scala-logging" % Version.scalaLogging
 
