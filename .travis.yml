@@ -29,7 +29,7 @@ before_script:
   - psql -c "CREATE EXTENSION hstore;"
   - cp ore/conf/application.conf.template ore/conf/application.conf
   - cp jobs/src/main/resources/application.conf.template jobs/src/main/resources/application.conf
-  - cp oreClient/src/main/assets/config.json5.template oreClient/src/main/resources/assets/config.json5
+  - cp oreClient/src/main/assets/config.json5.template oreClient/src/main/assets/config.json5
 
 env:
   global:
