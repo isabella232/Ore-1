@@ -14,7 +14,7 @@ import ore.db.impl.schema.{ProjectTable, VersionTable}
 
 import com.typesafe.scalalogging
 import zio.clock.Clock
-import zio.{Schedule, UIO, ZIO, duration}
+import zio.{Schedule, UIO, duration}
 
 /**
   * Task that is responsible for publishing New projects
@@ -30,8 +30,8 @@ class ProjectTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: z
   val draftExpire: Long           = this.config.ore.projects.draftExpire.toMillis
 
   private val dayAgoF =
-    ZIO
-      .accessM[Clock](_.clock.currentTime(TimeUnit.MILLISECONDS))
+    zio.clock
+      .currentTime(TimeUnit.MILLISECONDS)
       .map(_ - draftExpire)
       .map(Instant.ofEpochMilli)
       .map(OffsetDateTime.ofInstant(_, ZoneOffset.UTC))

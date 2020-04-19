@@ -120,7 +120,7 @@ class Channels(forms: OreForms)(
       )
 
       for {
-        t <- service.runDBIO(query.result.headOption).get.asError(NotFound)
+        t <- service.runDBIO(query.result.headOption).get.orElseFail(NotFound)
         (channel, notLast, notLastNonEmpty, notLastReviewed) = t
         _ <- {
           val errorSeq = Seq(

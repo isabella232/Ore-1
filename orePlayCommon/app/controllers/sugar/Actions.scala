@@ -323,7 +323,7 @@ trait Actions extends Calls with ActionHelpers { self =>
       }
     } yield res
 
-    zioToFuture(projectRequest.asError(notFound).either)
+    zioToFuture(projectRequest.orElseFail(notFound).either)
   }
 
   private def toProjectRequest[T](project: Model[Project])(f: (ProjectData, ScopedProjectData) => T)(
@@ -340,7 +340,7 @@ trait Actions extends Calls with ActionHelpers { self =>
     } else {
 
       def tryOther[E](e: Exit[E, Boolean], other: Fiber[E, Boolean]): IO[E, Boolean] =
-        e.fold(ZIO.halt, ZIO.succeed).flatMap {
+        ZIO.done(e).flatMap {
           case true  => other.interrupt.as(true)
           case false => other.join
         }
@@ -385,7 +385,7 @@ trait Actions extends Calls with ActionHelpers { self =>
         }
       } yield projectRequest
 
-      zioToFuture(projectRequest.asError(notFound).either)
+      zioToFuture(projectRequest.orElseFail(notFound).either)
     }
   }
 
@@ -413,7 +413,7 @@ trait Actions extends Calls with ActionHelpers { self =>
         }
       } yield orgaRequest
 
-      zioToFuture(orgaRequest.asError(notFound).either)
+      zioToFuture(orgaRequest.orElseFail(notFound).either)
     }
   }
 
@@ -432,7 +432,7 @@ trait Actions extends Calls with ActionHelpers { self =>
         }
       } yield orgaRequest
 
-      zioToFuture(orgaRequest.asError(notFound).either)
+      zioToFuture(orgaRequest.orElseFail(notFound).either)
     }
   }
 

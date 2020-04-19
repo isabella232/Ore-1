@@ -100,7 +100,7 @@ class Pages(forms: OreForms, stats: StatTracker[UIO])(
     */
   def show(author: String, slug: String, page: String): Action[AnyContent] = ProjectAction(author, slug).asyncF {
     implicit request =>
-      queryProjectPagesAndFindSpecific(request.project, page).asError(notFound).flatMap {
+      queryProjectPagesAndFindSpecific(request.project, page).orElseFail(notFound).flatMap {
         case (pages, p) =>
           val pageCount = pages.size + pages.map(_._2.size).sum
           val parentPage =
@@ -136,7 +136,7 @@ class Pages(forms: OreForms, stats: StatTracker[UIO])(
     */
   def showEditor(author: String, slug: String, pageName: String): Action[AnyContent] =
     PageEditAction(author, slug).asyncF { implicit request =>
-      queryProjectPagesAndFindSpecific(request.project, pageName).asError(notFound).map {
+      queryProjectPagesAndFindSpecific(request.project, pageName).orElseFail(notFound).map {
         case (pages, p) =>
           val pageCount  = pages.size + pages.map(_._2.size).sum
           val parentPage = pages.collectFirst { case (pp, page) if page.contains(p) => pp }

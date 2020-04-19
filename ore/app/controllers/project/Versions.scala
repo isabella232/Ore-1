@@ -269,7 +269,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
         )
       )
 
-      suc2.asError(Redirect(self.showCreator(author, slug)).withError("error.plugin.timeout"))
+      suc2.orElseFail(Redirect(self.showCreator(author, slug)).withError("error.plugin.timeout"))
     }
 
   /**
@@ -289,7 +289,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
         pendingVersion <- ZIO
           .fromOption(this.factory.getPendingVersion(project, versionString))
           // Not found
-          .asError(Redirect(self.showCreator(author, slug)).withError("error.plugin.timeout"))
+          .orElseFail(Redirect(self.showCreator(author, slug)).withError("error.plugin.timeout"))
         // Get submitted channel
         versionData <- this.forms.VersionCreate.bindZIO(
           // Invalid channel
@@ -664,7 +664,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
         )
         .flatMap { version =>
           confirmDownload0(version.id, downloadType, token)
-            .asError(Redirect(ShowProject(author, slug)).withError("error.plugin.noConfirmDownload"))
+            .orElseFail(Redirect(ShowProject(author, slug)).withError("error.plugin.noConfirmDownload"))
         }
         .map {
           case (dl, optNewSession) =>
@@ -870,7 +870,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
       getVersion(project, versionString).flatMap { version =>
         optToken
           .map { token =>
-            confirmDownload0(version.id, Some(DownloadType.JarFile.value), Some(token)).asError(notFound) *>
+            confirmDownload0(version.id, Some(DownloadType.JarFile.value), Some(token)).orElseFail(notFound) *>
               sendJar(project, version, optToken, api = true)
           }
           .getOrElse(sendJar(project, version, optToken, api = true))
