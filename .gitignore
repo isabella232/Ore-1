@@ -178,6 +178,9 @@ local.properties
 # Code Recommenders
 .recommenders/
 
+# Yarn
+node_modules
+
 # Ore
 oreClient/src/main/resources/assets/config.json5
 jobs/src/main/resources/application.conf

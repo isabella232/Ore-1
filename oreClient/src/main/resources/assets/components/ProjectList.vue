@@ -74,6 +74,8 @@
     import NProgress from "nprogress"
     import npcss from "nprogress/nprogress.css";
 
+    void(npcss);
+
     export default {
         components: {
             Tag,
