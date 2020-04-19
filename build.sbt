@@ -139,7 +139,8 @@ lazy val oreClient = project
       baseDirectory.value / "webpack.config.common.js",
       baseDirectory.value / ".postcssrc.js",
       baseDirectory.value / ".browserlistrc"
-    )
+    ),
+    pipelineStages := Seq(digest, gzip)
   )
 
 lazy val ore = project
