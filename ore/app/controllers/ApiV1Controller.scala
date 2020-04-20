@@ -131,7 +131,7 @@ final class ApiV1Controller(
         for {
           optKey <- forms.ProjectApiKeyRevoke
             .bindZIO(hasErrors => BadRequest(Json.obj("errors" -> hasErrors.errorsAsJson)))
-          key <- optKey.toZIO.asError(BadRequest(Json.obj("error" -> "Key not found")))
+          key <- optKey.toZIO.orElseFail(BadRequest(Json.obj("error" -> "Key not found")))
           _ <- if (key.projectId == request.data.project.id.value) ZIO.unit
           else ZIO.fail(BadRequest(Json.obj("error" -> "Wrong key")))
           _ <- service.delete(key)
