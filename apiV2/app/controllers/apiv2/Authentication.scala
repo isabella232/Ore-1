@@ -71,7 +71,7 @@ class Authentication(
     def expirationToZIO(expiration: Option[OffsetDateTime]) =
       ZIO
         .fromOption(expiration)
-        .asError(BadRequest(ApiError("The requested expiration can't be used")))
+        .orElseFail(BadRequest(ApiError("The requested expiration can't be used")))
 
     def unAuth(msg: String) = Unauthorized(ApiError(msg)).withHeaders(WWW_AUTHENTICATE -> "OreApi")
 
@@ -87,7 +87,7 @@ class Authentication(
     val validateCreds = for {
       expiration <- expirationToZIO(sessionExpiration)
       findQuery  <- findApiKey
-      t          <- service.runDbCon(findQuery).get.asError(unAuth("Invalid api key"))
+      t          <- service.runDbCon(findQuery).get.orElseFail(unAuth("Invalid api key"))
       (keyId, keyOwnerId) = t
     } yield SessionType.Key -> ApiSession(uuidToken, Some(keyId), Some(keyOwnerId), expiration)
 
@@ -152,7 +152,7 @@ class Authentication(
   def deleteSession(): Action[AnyContent] = ApiAction(Permission.None, APIScope.GlobalScope).asyncF { request =>
     ZIO
       .fromOption(request.apiInfo.session)
-      .asError(BadRequest(ApiError("This request was not made with a session")))
+      .orElseFail(BadRequest(ApiError("This request was not made with a session")))
       .flatMap(session => service.deleteWhere(ApiSession)(_.token === session))
       .as(NoContent)
   }

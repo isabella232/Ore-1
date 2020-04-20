@@ -68,7 +68,7 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
     import ParseAuthHeaderError._
 
     for {
-      stringAuth <- ZIO.fromOption(request.headers.get(AUTHORIZATION)).asError(NoAuthHeader)
+      stringAuth <- ZIO.fromOption(request.headers.get(AUTHORIZATION)).orElseFail(NoAuthHeader)
       parsedAuth = Authorization
         .parseFromValueString(stringAuth)
         .leftMap(NonEmptyList.fromList(_).fold[ParseAuthHeaderError](UnparsableHeader)(ErrorParsingHeader))
@@ -97,13 +97,14 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
         creds <- parseAuthHeader(request).mapError(_.toResult)
         token <- ZIO
           .fromOption(creds.params.get("session"))
-          .asError(unAuth("No session specified"))
+          .orElseFail(unAuth("No session specified"))
         info <- service
           .runDbCon(APIV2Queries.getApiAuthInfo(token).option)
           .get
-          .asError(unAuth("Invalid session"))
+          .orElseFail(unAuth("Invalid session"))
         scopePerms <- {
-          val res: IO[Result, Permission] = apiScopeToRealScope(scope).flatMap(permissionIn(_, info)).asError(NotFound)
+          val res: IO[Result, Permission] =
+            apiScopeToRealScope(scope).flatMap(permissionIn(_, info)).orElseFail(NotFound)
           res
         }
         res <- {
@@ -157,7 +158,7 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
   ): IO[Result, (APIScope, Permission)] =
     for {
       apiScope <- ZIO.fromEither(createApiScope(pluginId, organizationName))
-      scope    <- apiScopeToRealScope(apiScope).asError(NotFound)
+      scope    <- apiScopeToRealScope(apiScope).orElseFail(NotFound)
       perms    <- request.permissionIn(scope)
     } yield (apiScope, perms)
 

@@ -30,6 +30,8 @@ import squeal.category.syntax.all._
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
+import doobie.implicits.javasql._
+import doobie.implicits.javatime.JavaTimeLocalDateMeta
 import doobie.postgres.circe.jsonb.implicits._
 import doobie.util.Put
 import io.circe.DecodingFailure
@@ -37,8 +39,6 @@ import zio.ZIO
 import zio.blocking.Blocking
 
 object APIV2Queries extends DoobieOreProtocol {
-
-  implicit val localDateTimeMeta: Meta[LocalDateTime] = Meta[Timestamp].timap(_.toLocalDateTime)(Timestamp.valueOf)
 
   def getApiAuthInfo(token: String): Query0[ApiAuthInfo] =
     sql"""|SELECT u.id,

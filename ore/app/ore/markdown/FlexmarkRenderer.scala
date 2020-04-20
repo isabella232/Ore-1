@@ -20,6 +20,7 @@ import com.vladsch.flexmark.html.{HtmlRenderer, LinkResolver, LinkResolverFactor
 import com.vladsch.flexmark.parser.Parser
 import com.vladsch.flexmark.util.ast.Node
 import com.vladsch.flexmark.util.data.MutableDataSet
+import com.vladsch.flexmark.util.misc.Extension
 
 class FlexmarkRenderer(config: OreConfig) extends MarkdownRenderer {
   private val options = new MutableDataSet()
@@ -32,7 +33,7 @@ class FlexmarkRenderer(config: OreConfig) extends MarkdownRenderer {
     .set[java.lang.Boolean](TablesExtension.APPEND_MISSING_COLUMNS, true)
     .set[java.lang.Boolean](TablesExtension.DISCARD_EXTRA_COLUMNS, true)
     .set[java.lang.Boolean](TablesExtension.HEADER_SEPARATOR_COLUMN_MATCH, true)
-    .set(
+    .set[java.util.Collection[Extension]](
       Parser.EXTENSIONS,
       java.util.Arrays.asList(
         AutolinkExtension.create(),
@@ -46,10 +47,6 @@ class FlexmarkRenderer(config: OreConfig) extends MarkdownRenderer {
     )
 
   private val markdownParser = Parser.builder(options).build()
-  private val htmlRenderer = HtmlRenderer
-    .builder(options)
-    .linkResolverFactory(new FlexmarkRenderer.ExternalLinkResolver.Factory(config))
-    .build()
 
   override def render(s: String, settings: MarkdownRenderer.RenderSettings): Html = {
     val options = new MutableDataSet(this.options)
@@ -58,7 +55,12 @@ class FlexmarkRenderer(config: OreConfig) extends MarkdownRenderer {
 
     settings.linkPrefix.foreach(prefix => options.set[String](WikiLinkExtension.LINK_PREFIX, prefix))
 
-    Html(htmlRenderer.withOptions(options).render(markdownParser.parse(s)))
+    val htmlRenderer = HtmlRenderer
+      .builder(options)
+      .linkResolverFactory(new FlexmarkRenderer.ExternalLinkResolver.Factory(config))
+      .build()
+
+    Html(htmlRenderer.render(markdownParser.parse(s)))
   }
 }
 object FlexmarkRenderer {
@@ -67,9 +69,9 @@ object FlexmarkRenderer {
 
     // scalafix:off
     private[FlexmarkRenderer] class Factory(config: OreConfig) extends LinkResolverFactory {
-      override def getAfterDependents: util.Set[Class[_ <: LinkResolverFactory]] = null
+      override def getAfterDependents: util.Set[Class[_]] = null
 
-      override def getBeforeDependents: util.Set[Class[_ <: LinkResolverFactory]] = null
+      override def getBeforeDependents: util.Set[Class[_]] = null
 
       override def affectsGlobalScope(): Boolean = false
 

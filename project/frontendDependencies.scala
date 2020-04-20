@@ -19,9 +19,9 @@ object NPMDeps {
   val fontAwesomeRegular = "@fortawesome/free-regular-svg-icons" -> "5.12.1"
   val fontAwesomeBrands  = "@fortawesome/free-brands-svg-icons"  -> "5.12.1"
 
-  val babel          = "@babel/core"       -> "7.8.7"
-  val babelLoader    = "babel-loader"      -> "8.0.6"
-  val babelPresetEnv = "@babel/preset-env" -> "7.8.7"
+  val babel          = "@babel/core"       -> "7.9.0"
+  val babelLoader    = "babel-loader"      -> "8.1.0"
+  val babelPresetEnv = "@babel/preset-env" -> "7.9.5"
   val json5Loader    = "json5-loader"      -> "4.0.0"
 
   val markdownIt          = "markdown-it"            -> "10.0.0"

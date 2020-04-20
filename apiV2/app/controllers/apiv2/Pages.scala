@@ -43,7 +43,7 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
 
   def showPage(pluginId: String, page: String): Action[AnyContent] =
     CachingApiAction(Permission.ViewPublicInfo, APIScope.GlobalScope).asyncF {
-      service.runDbCon(APIV2Queries.getPage(pluginId, page).option).get.asError(NotFound).map {
+      service.runDbCon(APIV2Queries.getPage(pluginId, page).option).get.orElseFail(NotFound).map {
         case (_, _, name, contents) =>
           Ok(APIV2.Page(name, contents))
       }
@@ -74,12 +74,12 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
 
       val createNew =
         if (page.contains("/")) {
-          service.runDbCon(APIV2Queries.getPage(pluginId, pageInit).option).get.asError(NotFound).flatMap {
+          service.runDbCon(APIV2Queries.getPage(pluginId, pageInit).option).get.orElseFail(NotFound).flatMap {
             case (projectId, parentId, _, _) =>
               insertNewPage(projectId, Some(parentId))
           }
         } else {
-          projects.withPluginId(pluginId).get.asError(NotFound).map(_.id).flatMap(insertNewPage(_, None))
+          projects.withPluginId(pluginId).get.orElseFail(NotFound).map(_.id).flatMap(insertNewPage(_, None))
         }
 
       if (page == Page.homeName && content.fold(0)(_.length) < Page.minLength)
@@ -105,11 +105,11 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
 
             val slug = newName.name.map(StringUtils.slugify)
 
-            val oldPage = service.runDbCon(APIV2Queries.getPage(pluginId, page).option).get.asError(NotFound)
+            val oldPage = service.runDbCon(APIV2Queries.getPage(pluginId, page).option).get.orElseFail(NotFound)
             val newParent = newName.parent
               .map(_.map(p => service.runDbCon(APIV2Queries.getPage(pluginId, p).option).get.map(_._2)).sequence)
               .sequence
-              .asError(BadRequest(ApiError("Unknown parent")))
+              .orElseFail(BadRequest(ApiError("Unknown parent")))
 
             val runRename = (oldPage <&> newParent).flatMap {
               case ((_, id, name, contents), parentId) =>
@@ -130,7 +130,7 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
       service
         .runDbCon(APIV2Queries.getPage(pluginId, page).option)
         .get
-        .asError(NotFound)
+        .orElseFail(NotFound)
         .flatMap {
           case (_, id, _, _) =>
             //TODO: In the future when we represent the tree in a better way, just promote all children one level up
