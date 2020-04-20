@@ -483,7 +483,9 @@
                 return ['fas', this.sendingChanges ? 'spinner' : 'check']
             },
             adminMembers() {
-                return this.members.filter(member => member.role.name === 'Project_Owner' || member.role.name === 'Project_Admin')
+                return this.members.filter(member => {
+                    return (member.role.name === 'Project_Owner' || member.role.name === 'Project_Admin') && member.role.is_accepted;
+                })
             },
             ...mapState('project', ['project', 'permissions', 'members'])
         },
