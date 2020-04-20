@@ -660,7 +660,7 @@
             deleteProject() {
                 if(this.hardDelete) {
                     API.request('projects/' + this.project.plugin_id, 'DELETE').then(res => {
-                        //TODO: Needs the merged Vue views to really make sense
+                        this.$store.commit('project/clearProject')
                         this.$router.push({to: 'home'})
                     })
                 }
@@ -669,8 +669,16 @@
                         visibility: 'softDelete',
                         reason: this.deleteReason
                     }).then(res => {
-                        //TODO: Needs the merged Vue views to really make sense
-                        this.$router.push({to: 'home'})
+                        if(this.permissions.includes('see_hidden')) {
+                            this.$store.commit({
+                                type: 'project/setVisibility',
+                                visibility: 'softDelete'
+                            })
+                        }
+                        else {
+                            this.$store.commit('project/clearProject')
+                            this.$router.push({to: 'home'})
+                        }
                     })
                 }
             }

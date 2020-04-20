@@ -20,6 +20,11 @@ const mutations = {
     setVisibility(state, payload) {
         Vue.set(state.project, 'visibility', payload.visibility);
     },
+    clearProject(state) {
+        state.project = null;
+        state.permissions = [];
+        state.members = [];
+    },
     toggleStarred(state) {
         if (state.project.user_actions.starred) {
             Vue.set(state.project.stats, 'stars', state.project.stats.stars - 1);
