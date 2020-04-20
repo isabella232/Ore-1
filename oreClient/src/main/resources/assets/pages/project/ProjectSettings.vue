@@ -534,27 +534,36 @@
                 return avatarUrlUtils(name)
             },
             sendProjectUpdate(update) {
-                this.sendingChanges = true;
-                $('#modal-rename').modal('hide');
-                $('#modal-transfer').modal('hide');
-                let changedName = this.project.name !== this.newName;
-                let changedOwner = this.project.namespace.owner !== this.newOwner;
+                if(Object.entries(update).length) {
+                    this.sendingChanges = true;
+                    $('#modal-rename').modal('hide');
+                    $('#modal-transfer').modal('hide');
+                    let changedName = this.project.name !== this.newName;
+                    let changedOwner = this.project.namespace.owner !== this.newOwner;
 
-                API.request('projects/' + this.project.plugin_id, 'PATCH', update).then(result => {
-                    this.$store.commit({
-                        type: 'project/updateProject',
-                        project: result
-                    });
-                    this.sendingChanges = false;
-                    this.updateDataFromProject();
+                    API.request('projects/' + this.project.plugin_id, 'PATCH', update).then(result => {
+                        this.$store.commit({
+                            type: 'project/updateProject',
+                            project: result
+                        });
+                        this.sendingChanges = false;
+                        this.updateDataFromProject();
 
-                    if(changedName || changedOwner) {
-                        this.$router.replace({name: 'settings', params: result.namespace})
-                    }
-                }).catch(failed => {
-                    this.sendingChanges = false;
-                    //TODO
-                })
+                        if(changedName || changedOwner) {
+                            this.$router.replace({name: 'settings', params: result.namespace})
+                        }
+                    }).catch(failed => {
+                        this.sendingChanges = false;
+                        //TODO
+                    })
+                }
+                else {
+                    //Some "illusion" of the change being acknowledged is always good
+                    this.sendingChanges = true;
+                    setTimeout(() => {
+                        this.sendingChanges = false;
+                    }, 150)
+                }
             },
             updateIcon() {
                 let form = document.getElementById('form-icon');
@@ -660,24 +669,27 @@
             deleteProject() {
                 if(this.hardDelete) {
                     API.request('projects/' + this.project.plugin_id, 'DELETE').then(res => {
-                        this.$store.commit('project/clearProject')
-                        this.$router.push({to: 'home'})
+                        this.$store.commit('project/clearProject');
+                        $('#modal-delete').modal('hide');
+                        this.$router.push({name: 'home'})
                     })
                 }
                 else {
                     API.request('projects/' + this.project.plugin_id + '/visibility', 'POST', {
                         visibility: 'softDelete',
-                        reason: this.deleteReason
+                        comment: this.deleteReason
                     }).then(res => {
                         if(this.permissions.includes('see_hidden')) {
                             this.$store.commit({
                                 type: 'project/setVisibility',
                                 visibility: 'softDelete'
-                            })
+                            });
+                            $('#modal-delete').modal('hide');
                         }
                         else {
                             this.$store.commit('project/clearProject')
-                            this.$router.push({to: 'home'})
+                            $('#modal-delete').modal('hide');
+                            this.$router.push({name: 'home'})
                         }
                     })
                 }
