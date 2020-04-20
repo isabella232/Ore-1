@@ -418,28 +418,20 @@
         data() {
             //Seems project hasn't been initialized yet, so we use the store directly
             let project = this.$store.state.project.project;
+
+            let alwaysPresent = {
+                deployKey: null,
+                showDeployKeySpinner: false,
+                sendingChanges: false,
+                selectedLogo: false,
+                deleteReason: '',
+                hardDelete: false
+            }
+
             if(project) {
-                return {
-                        newName: project.name,
-                        newOwner: project.namespace.owner,
-                        category: project.category,
-                        keywords: project.settings.keywords,
-                        homepage: project.settings.homepage,
-                        issues: project.settings.issues,
-                        sources: project.settings.sources,
-                        support: project.settings.support,
-                        licenseName: project.settings.license.name,
-                        licenseUrl: project.settings.license.url,
-                        forumSync: project.settings.forum_sync,
-                        summary: project.summary,
-                        iconUrl: project.icon_url,
-                        deployKey: null,
-                        showDeployKeySpinner: false,
-                        sendingChanges: false,
-                        selectedLogo: false,
-                        deleteReason: '',
-                        hardDelete: false
-                }
+                this.updateDataFromProject(project, alwaysPresent)
+
+                return alwaysPresent
             }
             else {
                 return {
@@ -456,12 +448,7 @@
                     forumSync: null,
                     summary: null,
                     iconUrl: null,
-                    deployKey: null,
-                    showDeployKeySpinner: false,
-                    sendingChanges: false,
-                    selectedLogo: false,
-                    deleteReason: '',
-                    hardDelete: false
+                    ...alwaysPresent,
                 }
             }
         },
@@ -503,32 +490,32 @@
         watch: {
             project(val, oldVal) {
                 if(!oldVal || val.plugin_id !== oldVal.plugin_id) {
-                    this.updateDataFromProject()
+                    this.updateDataFromProject(val, this)
                 }
             }
         },
         created() {
             if(this.project) {
-                this.getDeployKey()
+                this.getDeployKey(this.project)
             }
         },
         methods: {
-            updateDataFromProject() {
-                this.getDeployKey();
+            updateDataFromProject(project, self) {
+                this.getDeployKey(project);
 
-                this.newName = this.project.name;
-                this.newOwner = this.project.namespace.owner;
-                this.category = this.project.category;
-                this.keywords = '';
-                this.homepage = this.project.settings.homepage;
-                this.issues = this.project.settings.issues;
-                this.sources = this.project.settings.sources;
-                this.support = this.project.settings.support;
-                this.licenseName = this.project.settings.license.name;
-                this.licenseUrl = this.project.settings.license.url;
-                this.forumSync = this.project.settings.forum_sync;
-                this.summary = this.project.summary;
-                this.iconUrl = this.project.icon_url;
+                self.newName = project.name;
+                self.newOwner = project.namespace.owner;
+                self.category = project.category;
+                self.keywords = '';
+                self.homepage = project.settings.homepage;
+                self.issues = project.settings.issues;
+                self.sources = project.settings.sources;
+                self.support = project.settings.support;
+                self.licenseName = project.settings.license.name;
+                self.licenseUrl = project.settings.license.url;
+                self.forumSync = project.settings.forum_sync;
+                self.summary = project.summary;
+                self.iconUrl = project.icon_url;
             },
             avatarUrl(name) {
                 return avatarUrlUtils(name)
@@ -547,7 +534,7 @@
                             project: result
                         });
                         this.sendingChanges = false;
-                        this.updateDataFromProject();
+                        this.updateDataFromProject(result, this);
 
                         if(changedName || changedOwner) {
                             this.$router.replace({name: 'settings', params: result.namespace})
@@ -603,8 +590,8 @@
                     }
                 })
             },
-            getDeployKey() {
-                fetch('/api/v1/projects/' + this.project.plugin_id + '/keys', {
+            getDeployKey(project) {
+                fetch('/api/v1/projects/' + project.plugin_id + '/keys', {
                     credentials: "same-origin"
                 }).then(res => {
                     if(res.ok) {
