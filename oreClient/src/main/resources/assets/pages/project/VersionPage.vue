@@ -105,10 +105,10 @@
                         </div>
                     </div>
                     <div class="col-md-12">
-                        <editor save-call="TODO"
-                                :enabled="permissions.includes('edit_page')"
+                        <editor :enabled="permissions.includes('edit_page')"
                                 :raw="versionDescription ? versionDescription : ''"
-                                subject="Version">
+                                subject="Version"
+                                v-on:saved="saveDescription">
                         </editor>
                     </div>
                 </div>
@@ -249,6 +249,7 @@
     import {Platform} from "../../enums";
     import config from "../../config.json5"
     import { mapState } from 'vuex'
+    import NProgress from "nprogress";
 
     export default {
         components: {
@@ -266,7 +267,8 @@
             version: {
                 type: String,
                 required: true
-            }
+            },
+            fetchedVersionObj: Object
         },
         computed: {
             routes: function () {
@@ -290,14 +292,37 @@
             ])
         },
         created() {
-            this.updateVersion();
+            if(this.fetchedVersionObj && this.fetchedVersionObj.name === this.version) {
+                this.versionObj = this.fetchedVersionObj;
+            }
+
+            if(this.project) {
+                this.updateVersion();
+            }
         },
         watch: {
-            '$route': 'updateVersion'
+            '$route': 'updateVersion',
+            project(val, oldVal) {
+                if(!oldVal || val.plugin_id !== oldVal.plugin_id) {
+                    this.updateVersion()
+                }
+            }
         },
         methods: {
             updateVersion() {
-                API.request('projects/' + this.project.plugin_id + '/versions/' + this.version).then(v => {
+                let futureVersion;
+
+                if(!this.versionObj || this.versionObj.name !== this.version) {
+                    NProgress.start();
+
+                    futureVersion = API.request('projects/' + this.project.plugin_id + '/versions/' + this.version)
+                }
+                else {
+                    futureVersion = Promise.resolve(this.versionObj)
+                }
+
+                futureVersion.then(v => {
+                    NProgress.done();
                     this.versionObj = v;
 
                     for(let dependency of v.dependencies) {
@@ -349,6 +374,13 @@
                 const i = Math.floor(Math.log(bytes) / Math.log(k));
 
                 return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+            },
+            saveDescription(newDescription) {
+                API.request('projects/' + this.project.plugin_id + '/versions/' + this.version + '/changelog', 'PUT', {
+                    changelog: newDescription
+                }).then(res => {
+                    this.versionDescription = newDescription;
+                })
             }
         }
     }

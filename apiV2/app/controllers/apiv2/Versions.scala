@@ -20,15 +20,17 @@ import models.protocols.APIV2
 import models.querymodels.{APIV2QueryVersion, APIV2VersionStatsQuery}
 import ore.data.Platform
 import ore.db.Model
+import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.{ProjectTable, VersionTable}
+import ore.models.Job
 import ore.models.project.Version.Stability
 import ore.models.project.{Page, Project, ReviewState, Version, Visibility}
 import ore.models.project.factory.ProjectFactory
 import ore.models.project.io.{PluginFileWithData, PluginUpload}
-import ore.models.user.User
+import ore.models.user.{LoggedActionType, LoggedActionVersion, User}
 import ore.permission.Permission
-import util.PatchDecoder
+import util.{PatchDecoder, UserActionLogger}
 import util.syntax._
 
 import cats.data.{NonEmptyList, Validated, ValidatedNel, Writer, WriterT}
@@ -163,7 +165,6 @@ class Versions(
           λ[PatchDecoder ~>: Compose2[Decoder.AccumulatingResult, Option, *]](_.decode(root))
         )
         .leftMap(_.map(_.show))
-        .ensure(NonEmptyList.one("Description too long"))(_.description.flatten.forall(_.length < Page.maxLength))
         .andThen { a =>
           a.platforms
             .traverse(parsePlatforms)
@@ -174,7 +175,6 @@ class Versions(
           case (a, w) =>
             w.map { optPlatforms =>
               DbEditableVersionF[Option](
-                a.description,
                 a.stability,
                 a.releaseType,
                 VersionedPlatformF[Option](
@@ -220,6 +220,28 @@ class Versions(
         )
         .map(_.fold(NotFound: Result)(a => Ok(APIV2.VersionChangelog(a))))
     }
+
+  def updateChangelog(pluginId: String, name: String): Action[APIV2.VersionChangelog] =
+    ApiAction(Permission.EditVersion, APIScope.ProjectScope(pluginId))
+      .asyncF(parseCirce.decodeJson[APIV2.VersionChangelog]) { implicit request =>
+        for {
+          project <- projects.withPluginId(pluginId).someOrFail(NotFound)
+          version <- project.versions(ModelView.now(Version)).find(_.versionString === name).value.someOrFail(NotFound)
+          oldDescription = version.description.getOrElse("")
+          newDescription = request.body.changelog.trim
+          _ <- if (newDescription.length < Page.maxLength) ZIO.unit
+          else ZIO.fail(BadRequest(ApiError("Description too long")))
+          _ <- service.update(version)(_.copy(description = Some(newDescription)))
+          _ <- service.insert(Job.UpdateDiscourseVersionPost.newJob(version.id).toJob)
+          _ <- UserActionLogger.logApi(
+            request,
+            LoggedActionType.VersionDescriptionEdited,
+            version.id,
+            newDescription,
+            oldDescription
+          )(LoggedActionVersion(_, Some(version.projectId)))
+        } yield NoContent
+      }
 
   def showVersionStats(
       pluginId: String,
@@ -398,7 +420,6 @@ object Versions {
   type EditableVersion   = EditableVersionF[Option]
   type DbEditableVersion = DbEditableVersionF[Option]
   case class EditableVersionF[F[_]](
-      description: F[Option[String]],
       stability: F[Version.Stability],
       releaseType: F[Option[Version.ReleaseType]],
       platforms: F[List[SimplePlatform]]
@@ -426,7 +447,6 @@ object Versions {
   }
 
   case class DbEditableVersionF[F[_]](
-      description: F[Option[String]],
       stability: F[Version.Stability],
       releaseType: F[Option[Version.ReleaseType]],
       platforms: VersionedPlatformF[F]
