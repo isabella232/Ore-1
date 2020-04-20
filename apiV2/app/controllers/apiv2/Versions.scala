@@ -119,7 +119,7 @@ class Versions(
             .option
         )
         .get
-        .asError(NotFound)
+        .orElseFail(NotFound)
         .map(a => Ok(a.asJson))
     }
 
@@ -286,8 +286,8 @@ class Versions(
     )
 
     for {
-      user    <- ZIO.fromOption(request.user).asError(BadRequest(ApiError("No user found for session")))
-      project <- projects.withPluginId(pluginId).get.asError(NotFound)
+      user    <- ZIO.fromOption(request.user).orElseFail(BadRequest(ApiError("No user found for session")))
+      project <- projects.withPluginId(pluginId).get.orElseFail(NotFound)
       file    <- fileF
       pluginFile <- factory
         .collectErrorsForVersionUpload(PluginUpload(file.ref, file.filename), user, project)

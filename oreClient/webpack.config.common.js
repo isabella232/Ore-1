@@ -28,18 +28,6 @@ module.exports = {
     plugins: [
         new VueLoaderPlugin(),
         new MiniCssExtractPlugin(),
-        new CopyPlugin([
-            {
-                from: Path.resolve(modulesDir, '@fortawesome', 'fontawesome-svg-core', 'styles.css'),
-                to: Path.resolve(outputDir, 'font-awesome.css')
-            }
-        ]),
-        new CopyPlugin([
-            {
-                from: Path.resolve(modulesDir, 'nprogress', 'nprogress.css'),
-                to: Path.resolve(outputDir, 'nprogress.css')
-            }
-        ]),
         //new BundleAnalyzerPlugin()
     ],
     module: {

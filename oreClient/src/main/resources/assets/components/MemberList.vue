@@ -1,45 +1,30 @@
 <template>
     <div>
-        <div v-if="editable && permissions.includes('manage_subject_members')">
-            <role-select id="select-role" class="pull-right" :hidden="true" :role-category="roleCategory"></role-select>
-
-            <ul style="display: none">
-                <li id="row-user" class="list-group-item">
-                    <input type="hidden"/>
-                    <icon :src="avatarUrl('Spongie')" class="user-avatar-xs"></icon>
-                    <a class="username"></a>
-                    <font-awesome-icon :icon="['fas', 'times']" class="user-cancel" />
-                    <role-select class="pull-right" :role-category="roleCategory"></role-select>
-                </li>
-            </ul>
-
-            <div class="modal fade" id="modal-user-delete" tabindex="-1" role="dialog"
-                 aria-labelledby="label-user-delete">
-                <div class="modal-dialog" role="document">
-                    <div class="modal-content">
-                        <button type="button" class="close" data-dismiss="modal"
-                                aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                        <h4 class="modal-title" id="label-user-delete">Remove member</h4>
-                    </div>
-                    <div class="modal-body">Are you sure you want to remove this user?</div>
-                    <div class="modal-footer">
-                        <form :action="removeCall" method="post" class="form-inline">
-                            <CSRFField></CSRFField>
-                            <input type="hidden" name="username"/>
-                            <button type="button" class="btn btn-default" data-dismiss="modal">
-                                Close
-                            </button>
-                            <button type="submit" class="btn btn-danger">Remove</button>
-                        </form>
-                    </div>
+        <div v-if="editable && permissions.includes('manage_subject_members')" class="modal fade" id="modal-user-delete"
+             tabindex="-1" role="dialog"
+             aria-labelledby="label-user-delete">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <button type="button" class="close" data-dismiss="modal"
+                            aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                    <h4 class="modal-title" id="label-user-delete">Remove member</h4>
+                </div>
+                <div class="modal-body">Are you sure you want to remove this user?</div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal" @click="userToRemove = null">
+                        Close
+                    </button>
+                    <button type="submit" class="btn btn-danger" @click="$emit('remove-user', userToRemove)">
+                        Remove
+                    </button>
                 </div>
             </div>
         </div>
 
-        <div class="alert alert-danger member-error" style="display: none">
-            <span>error</span>
+        <div v-if="updateError" class="alert alert-danger member-error">
+            <span>{{ updateError }}</span>
         </div>
 
         <div class="panel panel-default">
@@ -49,52 +34,55 @@
                 <div v-if="permissions.includes('manage_subject_members')" class="pull-right">
                     <router-link v-if="!editable && settingsRoute" :to="settingsRoute" v-slot="{ href, navigate }">
                         <a v-if="!editable" :href="href" @click="navigate" class="btn yellow btn-xs">
-                            <font-awesome-icon :icon="['fas', 'pencil-alt']" />
+                            <font-awesome-icon :icon="['fas', 'pencil-alt']"/>
                         </a>
                     </router-link>
 
-                    <form v-if="saveCall !== null" :action="saveCall" method="post" id="save">
-                        <CSRFField></CSRFField>
-                        <button class="btn-members-save btn btn-default btn-panel btn-xs" data-toggle="tooltip"
-                                data-placement="top" data-title="Save Users" style="display: none;">
-                            <font-awesome-icon :icon="['fas', 'paper-plane']" />
-                        </button>
-                    </form>
+                    <button v-show="editable && madeChanges" class="btn btn-default btn-panel btn-xs"
+                            data-toggle="tooltip" data-placement="top" data-title="Save Users"
+                            aria-label="Save Users"
+                            @click="saveMembers">
+                        <font-awesome-icon :icon="['fas', spinIcon ? 'spinner' : 'paper-plane']" :spin="spinIcon"/>
+                    </button>
+                    <button v-show="editable && madeChanges" class="btn btn-default btn-panel btn-xs"
+                            data-toggle="tooltip" data-placement="top" data-title="Discard changes"
+                            aria-label="Discard changes"
+                            @click="resetEdit">
+                        <font-awesome-icon :icon="['fas', 'times']"/>
+                    </button>
                 </div>
             </div>
 
             <ul class="list-members list-group">
                 <!-- Member list -->
-                <template v-for="member in members">
-                    <li class="list-group-item" v-for="role in member.roles">
+                <template v-for="member in updatedMembers">
+                    <li class="list-group-item">
                         <icon :name="member.user" :src="avatarUrl(member.user)" extra-classes="user-avatar-xs"></icon>
                         <a class="username" :href="routes.Users.showProjects(member.user).absoluteURL()">
                             {{ member.user }}
                         </a>
-                        <p style="display: none;" class="role-id">{{ role.name }}</p>
 
                         <template
-                                v-if="editable && permissions.includes('manage_subject_members') && !role.permissions.includes('manage_subject_members')">
-                            <a href="#">
-                                <font-awesome-icon style="padding-left:5px" :icon="['fas', 'trash']" data-toggle="modal"
-                                   data-target="#modal-user-delete" />
+                                v-if="editable && permissions.includes('manage_subject_members') && member.role.isAssignable">
+                            <a href="#" @click="removeUser(member.user)">
+                                <font-awesome-icon style="padding-left:5px" :icon="['fas', 'trash']"/>
                             </a>
-                            <a href="#"><font-awesome-icon style="padding-left:5px" :icon="['fas', 'edit']" /></a>
+
+                            <role-select :value="member.role.name" @input="setMemberRole(member.user, $event)"
+                                         role-category="project"/>
                         </template>
-
-
-                        <span class="minor pull-right">
-                            <span v-if="role.is_accepted">{{ role.title }}</span>
-                            <span v-else class="minor">(Invited as {{ role.title }})</span>
+                        <span v-else class="minor pull-right">
+                            <span v-if="member.role.is_accepted">{{ member.role.title }}</span>
+                            <span v-else class="minor">(Invited as {{ member.role.title }})</span>
                         </span>
                     </li>
                 </template>
 
                 <!-- User search -->
                 <li v-if="permissions.includes('manage_subject_members') && editable" class="list-group-item">
-                    <user-search></user-search>
+                    <user-search :exclude="Object.values(updatedMembers).map(m => m.user)" style="width: 100%"
+                                 @add-user="addNewMember"/>
                 </li>
-
             </ul>
         </div>
     </div>
@@ -106,6 +94,8 @@
     import Icon from "./Icon"
     import UserSearch from "./UserSearch"
     import RoleSelect from "./RoleSelect"
+    import {Role} from "../enums";
+    import {API} from "../api";
 
     export default {
         components: {
@@ -114,28 +104,116 @@
             UserSearch,
             RoleSelect
         },
+        data() {
+            return {
+                newUserRole: this.newRole,
+                updatedMembers: this.memberArrayToObj(this.members),
+                madeChanges: false,
+                updateError: null,
+                spinIcon: false,
+            }
+        },
         props: {
             roleCategory: {
                 type: String,
                 required: true
             },
-            members: Array,
-            permissions: Array,
+            members: {
+                type: Array,
+                required: true
+            },
+            permissions: {
+                type: Array,
+                required: true
+            },
             editable: {
                 type: Boolean,
                 default: false
             },
-            removeCall: String,
+            newRole: String,
             settingsRoute: Object,
-            saveCall: String
+            endpoint: String,
+            commitLocation: String
+        },
+        created() {
+            $('[data-toggle="tooltip"]').tooltip()
+        },
+        watch: {
+            members(val) {
+                if (!this.madeChanges) {
+                    this.updatedMembers = this.memberArrayToObj(val);
+                }
+            },
+            madeChanges() {
+                $('[data-toggle="tooltip"]').tooltip()
+            }
         },
         computed: {
             routes: function () {
                 return jsRoutes.controllers;
+            },
+            roles() {
+                return Role;
             }
         },
         methods: {
-            avatarUrl
+            avatarUrl,
+            memberArrayToObj(arr) {
+                let acc = {};
+                for (let member of arr) {
+                    acc[member.user] = {
+                        user: member.user,
+                        role: Role.byId(member.role.name)
+                    }
+                    acc[member.user].role.is_accepted = member.role.is_accepted;
+                }
+
+                return acc;
+            },
+            memberObjToArray(obj) {
+                let acc = [];
+
+                for(let {user, role} of Object.values(obj)) {
+                    acc.push({user, role: role.name})
+                }
+
+                return acc;
+            },
+            resetNewUserRole() {
+                this.newUserRole = 'Project_Support'
+            },
+            addNewMember(user) {
+                this.$set(this.updatedMembers, user.name, {user: user.name, role: Role.byId(this.newUserRole)})
+                this.resetNewUserRole();
+                this.madeChanges = true;
+            },
+            removeUser(user) {
+                delete this.updatedMembers[user];
+                this.madeChanges = true;
+            },
+            setMemberRole(user, role) {
+                this.$set(this.updatedMembers[user], 'role', Role.byId(role));
+                this.madeChanges = true;
+            },
+            resetEdit() {
+                this.updatedMembers = this.memberArrayToObj(this.members);
+                this.madeChanges = false;
+            },
+            saveMembers() {
+                this.spinIcon = true;
+                let memberArr = this.memberObjToArray(this.updatedMembers);
+                API.request(this.endpoint, 'POST', memberArr).then(res => {
+                    this.spinIcon = false;
+
+                    if(this.commitLocation) {
+                        this.$store.commit({
+                            type: this.commitLocation,
+                            members: res
+                        });
+                        this.resetEdit()
+                    }
+                })
+            }
         }
     }
 </script>

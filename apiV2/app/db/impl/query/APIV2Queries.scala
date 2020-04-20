@@ -5,7 +5,8 @@ import java.time.{LocalDate, LocalDateTime}
 
 import play.api.mvc.RequestHeader
 
-import controllers.apiv2.{Pages, Projects, Versions}
+import controllers.apiv2.Users.UserSortingStrategy
+import controllers.apiv2.{Pages, Projects, Users, Versions}
 import controllers.sugar.Requests.ApiAuthInfo
 import models.protocols.APIV2
 import models.querymodels._
@@ -19,6 +20,7 @@ import ore.models.project.io.ProjectFiles
 import ore.models.project.{Page, Project, ProjectSortingStrategy, Version}
 import ore.models.user.User
 import ore.permission.Permission
+import ore.permission.role.Role
 
 import cats.Reducible
 import cats.data.NonEmptyList
@@ -30,6 +32,8 @@ import squeal.category.syntax.all._
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
+import doobie.implicits.javasql._
+import doobie.implicits.javatime.JavaTimeLocalDateMeta
 import doobie.postgres.circe.jsonb.implicits._
 import doobie.util.Put
 import io.circe.DecodingFailure
@@ -37,8 +41,6 @@ import zio.ZIO
 import zio.blocking.Blocking
 
 object APIV2Queries extends DoobieOreProtocol {
-
-  implicit val localDateTimeMeta: Meta[LocalDateTime] = Meta[Timestamp].timap(_.toLocalDateTime)(Timestamp.valueOf)
 
   def getApiAuthInfo(token: String): Query0[ApiAuthInfo] =
     sql"""|SELECT u.id,
@@ -347,7 +349,7 @@ object APIV2Queries extends DoobieOreProtocol {
   def updateProject(pluginId: String, edits: Projects.EditableProject): Update0 = {
     val projectColumns = Projects.EditableProjectF[Column](
       Column.arg("name"),
-      Column.arg("owner_name"),
+      Projects.EditableProjectNamespaceF[Column](Column.arg("owner_name")),
       Column.arg("category"),
       Column.opt("description"),
       Projects.EditableProjectSettingsF[Column](
@@ -367,7 +369,7 @@ object APIV2Queries extends DoobieOreProtocol {
     import cats.instances.tuple._
     import cats.instances.option._
 
-    val (ownerSet, ownerFrom, ownerFilter) = edits.ownerName.foldMap { owner =>
+    val (ownerSet, ownerFrom, ownerFilter) = edits.namespace.owner.foldMap { owner =>
       (fr", owner_id = u.id", fr"FROM users u", fr"AND u.name = $owner")
     }
 
@@ -375,13 +377,13 @@ object APIV2Queries extends DoobieOreProtocol {
   }
 
   def projectMembers(pluginId: String, limit: Long, offset: Long): Query0[APIV2.ProjectMember] =
-    sql"""|SELECT u.name, array_agg(r.name), array_agg(upr.is_accepted)
+    sql"""|SELECT u.name, r.name, upr.is_accepted
           |  FROM projects p
           |         JOIN user_project_roles upr ON p.id = upr.project_id
           |         JOIN users u ON upr.user_id = u.id
           |         JOIN roles r ON upr.role_type = r.name
           |  WHERE p.plugin_id = $pluginId
-          |  GROUP BY u.name ORDER BY max(r.permission::BIGINT) DESC LIMIT $limit OFFSET $offset""".stripMargin
+          |  ORDER BY r.permission & ~B'1'::BIT(64) DESC LIMIT $limit OFFSET $offset""".stripMargin
       .query[APIV2QueryProjectMember]
       .map(_.asProtocol)
 
@@ -500,13 +502,89 @@ object APIV2Queries extends DoobieOreProtocol {
     (updateTable("projects", versionColumns, edits) ++ fr"WHERE plugin_id = $pluginId AND version_string = $versionName").update
   }
 
+  def userSearchFrag(
+      q: Option[String],
+      minProjects: Int,
+      roles: Seq[Role],
+      excludeOrganizations: Boolean
+  ): Fragment = {
+    import betterinterpolator._
+    val initialFilters = Fragments.whereAndOpt(
+      q.map(s => if (s.endsWith("%")) fr"u.name LIKE $s" else fr"u.name LIKE ${s + "%"}"),
+      if (excludeOrganizations) Some(fr"r IS NULL OR r.name != 'Organization'") else None,
+      NonEmptyList.fromList(roles.toList).map(roles => Fragments.in(fr"r.name", roles))
+    )
+    val outerFilters = Fragments.whereAndOpt(
+      if (minProjects > 0) Some(fr"sq.power >= $minProjects") else None
+    )
+
+    bsql"""|SELECT sq.created_at, sq.name, sq.tagline, sq.join_date, projects, roles
+           |    FROM (SELECT u.name,
+           |                 u.tagline,
+           |                 u.created_at,
+           |                 u.join_date,
+           |                 count(p.plugin_id)                                           AS projects,
+           |                 array_remove(array_agg(DISTINCT r.name), NULL)               AS roles,
+           |                 coalesce((bit_or(r.permission) & ~B'1'::BIT(64))::BIGINT, 0) AS power
+           |              FROM users u
+           |                       LEFT JOIN project_members_all pma ON u.id = pma.user_id
+           |                       LEFT JOIN projects p ON p.id = pma.id
+           |                       LEFT JOIN user_global_roles ugr ON u.id = ugr.user_id
+           |                       LEFT JOIN roles r ON ugr.role_id = r.id
+           |              $initialFilters
+           |              GROUP BY u.name, u.tagline, u.join_date, u.created_at) sq
+           |    $outerFilters""".stripMargin
+  }
+
+  def userSearchQuery(
+      q: Option[String],
+      minProjects: Int,
+      roles: Seq[Role],
+      excludeOrganizations: Boolean,
+      strategy: Users.UserSortingStrategy,
+      sortDescending: Boolean,
+      limit: Long,
+      offset: Long
+  ): Query0[APIV2.User] = {
+    val select = userSearchFrag(q, minProjects, roles, excludeOrganizations)
+
+    val primaryRawSort = strategy match {
+      case UserSortingStrategy.Name     => fr"sq.name"
+      case UserSortingStrategy.Roles    => fr"sq.power"
+      case UserSortingStrategy.Joined   => fr"sq.join_date"
+      case UserSortingStrategy.Projects => fr"sq.projects"
+    }
+    val primarySort = if (sortDescending) primaryRawSort ++ fr"DESC" else primaryRawSort ++ fr"ASC"
+    val sortFrag    = if (strategy != UserSortingStrategy.Name) primarySort ++ fr", sq.name" else primarySort
+
+    (select ++ fr" ORDER BY" ++ sortFrag ++ fr"LIMIT $limit OFFSET $offset").query[APIV2QueryUser].map(_.asProtocol)
+  }
+
+  def userSearchCountQuery(
+      q: Option[String],
+      minProjects: Int,
+      roles: Seq[Role],
+      excludeOrganizations: Boolean
+  ): Query0[Long] = {
+    val select = userSearchFrag(q, minProjects, roles, excludeOrganizations)
+
+    (sql"SELECT COUNT(*) FROM " ++ Fragments.parentheses(select) ++ fr" sq").query[Long]
+  }
+
   def userQuery(name: String): Query0[APIV2.User] =
-    sql"""|SELECT u.created_at, u.name, u.tagline, u.join_date, array_agg(r.name)
-          |  FROM users u
-          |         JOIN user_global_roles ugr ON u.id = ugr.user_id
-          |         JOIN roles r ON ugr.role_id = r.id
-          |  WHERE u.name = $name
-          |  GROUP BY u.id""".stripMargin.query[APIV2QueryUser].map(_.asProtocol)
+    sql"""|SELECT u.created_at,
+          |       u.name,
+          |       u.tagline,
+          |       u.join_date,
+          |       count(DISTINCT p.plugin_id),
+          |       array_remove(array_agg(DISTINCT r.name), NULL)
+          |    FROM users u
+          |             LEFT JOIN user_global_roles ugr ON u.id = ugr.user_id
+          |             LEFT JOIN roles r ON ugr.role_id = r.id
+          |             LEFT JOIN project_members_all pma ON u.id = pma.user_id
+          |             LEFT JOIN projects p ON p.id = pma.id
+          |    WHERE u.name = $name
+          |    GROUP BY u.id""".stripMargin.query[APIV2QueryUser].map(_.asProtocol)
 
   private def actionFrag(
       table: Fragment,

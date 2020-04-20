@@ -38,6 +38,8 @@ object APIV2 {
 
   implicit val namedPermissionCodec: Codec[NamedPermission] = APIV2.enumCodec(NamedPermission)(_.entryName)
 
+  implicit val permissionRoleCodec: Codec[ore.permission.role.Role] = valueEnumCodec(ore.permission.role.Role)(_.value)
+
   //Project
   @SnakeCaseJsonCodec case class Project(
       createdAt: OffsetDateTime,
@@ -90,11 +92,11 @@ object APIV2 {
   //Project member
   @SnakeCaseJsonCodec case class ProjectMember(
       user: String,
-      roles: List[Role]
+      role: Role
   )
 
   @SnakeCaseJsonCodec case class Role(
-      name: String,
+      name: ore.permission.role.Role,
       title: String,
       color: String,
       permissions: List[NamedPermission],
@@ -140,6 +142,7 @@ object APIV2 {
       name: String,
       tagline: Option[String],
       joinDate: Option[OffsetDateTime],
+      projectCount: Long,
       roles: List[Role]
   )
 

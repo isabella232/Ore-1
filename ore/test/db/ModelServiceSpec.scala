@@ -22,12 +22,12 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 import org.scalatestplus.junit.JUnitRunner
 import slick.basic.{BasicProfile, DatabaseConfig}
 import zio.interop.catz._
-import zio.{DefaultRuntime, Task}
+import zio.{Runtime, Task}
 
 @RunWith(classOf[JUnitRunner])
 class ModelServiceSpec extends FunSuite with Matchers with BeforeAndAfterAll { self =>
 
-  implicit val runtime: zio.Runtime[Any] = new DefaultRuntime {}
+  implicit val runtime: zio.Runtime[Any] = Runtime.default
 
   lazy val database = Databases(
     "org.postgresql.Driver",

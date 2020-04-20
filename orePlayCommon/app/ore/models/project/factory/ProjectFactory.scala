@@ -189,7 +189,7 @@ trait ProjectFactory {
       _ <- {
         MembershipDossier
           .projectHasMemberships[UIO]
-          .addRole(newProject)(
+          .setRole(newProject)(
             ownerId,
             ProjectUserRole(ownerId, newProject.id, Role.ProjectOwner, isAccepted = true)
           )

@@ -62,9 +62,10 @@ import slick.jdbc.{JdbcDataSource, JdbcProfile}
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.interop.catz.implicits._
-import zio.{CancelableFuture, DefaultRuntime, Schedule, Task, UIO, ZIO, ZSchedule}
+import zio.{CancelableFuture, Runtime, Schedule, Task, UIO, ZIO, ZEnv}
 
 class OreApplicationLoader extends ApplicationLoader {
+
   override def load(context: ApplicationLoader.Context): PlayApplication = {
     LoggerConfigurator(context.environment.classLoader).foreach {
       _.configure(context.environment, context.initialConfiguration, Map.empty)
@@ -137,7 +138,7 @@ class OreComponents(context: ApplicationLoader.Context)
   implicit lazy val impMessagesApi: MessagesApi = messagesApi
   implicit lazy val impActorSystem: ActorSystem = actorSystem
 
-  implicit lazy val runtime: DefaultRuntime = new DefaultRuntime {}
+  implicit lazy val runtime: Runtime[ZEnv] = Runtime.default
 
   type ParUIO[A]  = zio.interop.ParIO[Any, Nothing, A]
   type ParTask[A] = zio.interop.ParIO[Any, Throwable, A]
@@ -275,7 +276,7 @@ class OreComponents(context: ApplicationLoader.Context)
   lazy val organizationsProvider: Provider[Organizations]              = () => organizations
   lazy val reviewsProvider: Provider[Reviews]                          = () => reviews
 
-  def waitTilEvolutionsDone(action: UIO[Unit]): CancelableFuture[Nothing, Unit] = {
+  def waitTilEvolutionsDone(action: UIO[Unit]): CancelableFuture[Unit] = {
     val isDone    = ZIO.effectTotal(applicationEvolutions.upToDate)
     val waitCheck = Schedule.doUntilM[Unit](_ => isDone) && Schedule.fixed(zio.duration.Duration.fromNanos(100))
 
