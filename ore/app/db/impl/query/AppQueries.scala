@@ -19,6 +19,8 @@ import cats.syntax.all._
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
+import doobie.implicits.javasql._
+import doobie.implicits.javatime.JavaTimeLocalDateMeta
 
 object AppQueries extends DoobieOreProtocol {
 

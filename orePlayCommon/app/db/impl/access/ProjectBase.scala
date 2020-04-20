@@ -7,10 +7,12 @@ import ore.OreConfig
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.{PageTable, ProjectTable, VersionTable}
-import ore.db.{Model, ModelService}
+import ore.db.{DbRef, Model, ModelService}
+import ore.member.Joinable
 import ore.models.Job
 import ore.models.project._
 import ore.models.project.io.ProjectFiles
+import ore.models.user.User
 import ore.util.StringUtils._
 import ore.util.{FileUtils, OreMDC}
 import util.syntax._
@@ -24,6 +26,7 @@ import cats.syntax.all._
 import cats.tagless.autoFunctorK
 import com.google.common.base.Preconditions._
 import com.typesafe.scalalogging.LoggerTakingImplicit
+import zio.Task
 
 @autoFunctorK
 trait ProjectBase[+F[_]] {
@@ -78,6 +81,8 @@ trait ProjectBase[+F[_]] {
     */
   def rename(project: Model[Project], name: String): F[Either[String, Unit]]
 
+  def transfer(project: Model[Project], newOwnerId: DbRef[User]): F[Either[String, Unit]]
+
   def prepareDeleteVersion(version: Model[Version]): F[Model[Project]]
 
   /**
@@ -105,7 +110,8 @@ object ProjectBase {
       config: OreConfig,
       fileManager: ProjectFiles[F],
       fileIO: FileIO[F],
-      F: cats.effect.Effect[F]
+      F: cats.effect.Effect[F],
+      projectJoinable: Joinable[F, Project]
   ) extends ProjectBase[F] {
 
     def missingFile: F[Seq[Model[Version]]] = {
@@ -191,6 +197,32 @@ object ProjectBase {
           _           <- if (isAvailable) doRename else F.unit
         } yield Either.cond(isAvailable, (), "Name not available")
       }
+    }
+
+    def transfer(project: Model[Project], newOwnerId: DbRef[User]): F[Either[String, Unit]] = {
+      // Down-grade current owner to "Developer"
+
+      val transferProject = project.transferOwner[F](newOwnerId)
+      val fileOp = (newProject: Model[Project]) =>
+        fileManager.transferProject(project.ownerName, newProject.ownerName, newProject.name)
+      val addForumJob = service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob)
+
+      val dbOp =
+        if (project.topicId.isDefined)
+          transferProject <* addForumJob
+        else
+          transferProject
+
+      val doRename = dbOp >>= fileOp
+
+      for {
+        newOwnerUser <- ModelView
+          .now(User)
+          .get(newOwnerId)
+          .getOrElseF(F.raiseError(new Exception("Could not find user to transfer owner to")))
+        isAvailable <- isNamespaceAvailable(newOwnerUser.name, project.slug)
+        _           <- if (isAvailable) doRename else F.unit
+      } yield Either.cond(isAvailable, (), "Name not available")
     }
 
     def prepareDeleteVersion(version: Model[Version]): F[Model[Project]] = {

@@ -101,11 +101,11 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
               .flatMap { posterName =>
                 users.requestPermission(request.user, posterName, Permission.PostAsOrganization).toZIO
               }
-              .asError(request.user)
+              .orElseFail(request.user)
               .either
               .map(_.merge)
           }
-          topicId <- ZIO.fromOption(request.project.topicId).asError(BadRequest)
+          topicId <- ZIO.fromOption(request.project.topicId).orElseFail(BadRequest)
           _       <- service.insert(Job.PostDiscourseReply.newJob(topicId, poster.name, formData.content).toJob)
         } yield Redirect(self.show(author, slug, ""))
       }
@@ -123,7 +123,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
     projects
       .withSlug(author, slug)
       .get
-      .asError(NotFound)
+      .orElseFail(NotFound)
       .flatMap(project => project.obj.iconUrlOrPath.map(_.fold(Redirect(_), showImage)))
   }
 
@@ -267,7 +267,9 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
               role
                 .project[Task]
                 .orDie
-                .flatMap(project => MembershipDossier.projectHasMemberships[Task].removeRole(project)(role.id).orDie)
+                .flatMap(project =>
+                  MembershipDossier.projectHasMemberships[Task].removeMember(project)(role.userId).orDie
+                )
                 .as(Ok)
             case STATUS_ACCEPT   => service.update(role)(_.copy(isAccepted = true)).as(Ok)
             case STATUS_UNACCEPT => service.update(role)(_.copy(isAccepted = false)).as(Ok)
@@ -298,7 +300,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
           import MembershipDossier._
           status match {
             case STATUS_DECLINE =>
-              MembershipDossier.projectHasMemberships.removeRole(project)(role.id).as(Ok)
+              MembershipDossier.projectHasMemberships.removeMember(project)(role.userId).as(Ok)
             case STATUS_ACCEPT   => service.update(role)(_.copy(isAccepted = true)).as(Ok)
             case STATUS_UNACCEPT => service.update(role)(_.copy(isAccepted = false)).as(Ok)
             case _               => IO.succeed(BadRequest)
@@ -306,7 +308,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
         }
       } yield res
 
-      res.asError(NotFound)
+      res.orElseFail(NotFound)
     }
 
   /**
@@ -321,20 +323,20 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
       request.body.file("icon") match {
         case None => IO.fail(Redirect(self.show(author, slug, "")).withError("error.noFile"))
         case Some(tmpFile) =>
-          val data       = request.data
-          val pendingDir = projectFiles.getPendingIconDir(data.project.ownerName, data.project.name)
+          val data = request.data
+          val dir  = projectFiles.getIconDir(data.project.ownerName, data.project.name)
 
           import zio.blocking._
 
-          val notExist   = effectBlocking(Files.notExists(pendingDir))
-          val createDir  = effectBlocking(Files.createDirectories(pendingDir))
+          val notExist   = effectBlocking(Files.notExists(dir))
+          val createDir  = effectBlocking(Files.createDirectories(dir))
           val deleteFile = (p: Path) => effectBlocking(Files.delete(p))
 
-          val deleteFiles = effectBlocking(Files.list(pendingDir))
+          val deleteFiles = effectBlocking(Files.list(dir))
             .map(_.iterator().asScala)
             .flatMap(it => ZIO.foreachParN_(config.performance.nioBlockingFibers)(it.to(Iterable))(deleteFile))
 
-          val moveFile = effectBlocking(tmpFile.ref.moveTo(pendingDir.resolve(tmpFile.filename), replace = true))
+          val moveFile = effectBlocking(tmpFile.ref.moveTo(dir.resolve(tmpFile.filename), replace = true))
 
           //todo data
           val log = UserActionLogger.log(request.request, LoggedActionType.ProjectIconChanged, data.project.id, "", "")(
@@ -362,11 +364,8 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
         op.fold(IO.succeed(()): ZIO[Blocking, Throwable, Unit])(p => effectBlocking(Files.delete(p)))
 
       val res = for {
-        icon        <- projectFiles.getIconPath(project)
-        _           <- deleteOptFile(icon)
-        pendingIcon <- projectFiles.getPendingIconPath(project)
-        _           <- deleteOptFile(pendingIcon)
-        _           <- effectBlocking(Files.delete(projectFiles.getPendingIconDir(project.ownerName, project.name)))
+        icon <- projectFiles.getIconPath(project)
+        _    <- deleteOptFile(icon)
         //todo data
         _ <- UserActionLogger.log(request.request, LoggedActionType.ProjectIconChanged, project.id, "", "")(
           LoggedActionProject.apply
@@ -374,22 +373,6 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
       } yield Ok
       res.orDie
   }
-
-  /**
-    * Displays the specified [[ore.models.project.Project]]'s current pending
-    * icon, if any.
-    *
-    * @param author Project owner
-    * @param slug   Project slug
-    * @return       Pending icon
-    */
-  def showPendingIcon(author: String, slug: String): Action[AnyContent] =
-    ProjectAction(author, slug).asyncF { implicit request =>
-      projectFiles.getPendingIconPath(request.project.ownerName, request.project.name).map {
-        case None       => notFound
-        case Some(path) => showImage(path)
-      }
-    }
 
   /**
     * Removes a [[ProjectMember]] from the specified project.

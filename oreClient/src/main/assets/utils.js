@@ -6,6 +6,29 @@ export function clearFromEmpty(object) {
         .reduce((acc, [key, value]) => ({...acc, [key]: value}), {})
 }
 
+export function cleanEmptyObject(object) {
+    if(Array.isArray(object) || typeof object !== 'object') {
+        return object
+    }
+
+    Object.keys(object).forEach(key => {
+        let newValue = cleanEmptyObject(object[key]);
+
+        if (newValue === null) {
+            delete object[key]
+        }
+        else {
+            object[key] = newValue
+        }
+    });
+
+    return Object.entries(object).length ? object : null;
+}
+
+export function nullIfEmpty(value) {
+    return value && value.length ? value : null;
+}
+
 export function clearFromDefaults(object, defaults) {
     return Object.entries(object)
         .filter(([key, value]) => {

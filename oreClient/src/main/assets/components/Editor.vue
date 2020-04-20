@@ -60,7 +60,7 @@
         <div class="page-edit" v-if="state === 'edit'">
             <textarea name="content" class="form-control" v-model="rawData"></textarea>
         </div>
-        <div class="page-preview page-rendered" v-else-if="state === 'preview'" v-html="cooked"></div>
+        <div class="page-preview page-rendered" v-else-if="state === 'preview'" v-html="previewCooked"></div>
         <div class="page-content page-rendered" v-else-if="state === 'display'" v-html="cooked"></div>
     </div>
     <div v-else>
@@ -111,6 +111,9 @@
             subject: String
         },
         computed: {
+            previewCooked() {
+                return md.render(this.rawData);
+            },
             cooked: function () {
                 return md.render(this.raw);
             },

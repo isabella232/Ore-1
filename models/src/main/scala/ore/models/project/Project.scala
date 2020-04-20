@@ -13,6 +13,7 @@ import ore.db.impl.common._
 import ore.db.impl.schema._
 import ore.db.impl.{DefaultModelCompanion, OrePostgresDriver}
 import ore.member.{Joinable, MembershipDossier}
+import ore.models.Job
 import ore.models.admin.ProjectVisibilityChange
 import ore.models.api.ProjectApiKey
 import ore.models.project.Project.ProjectSettings
@@ -111,16 +112,6 @@ object Project extends DefaultModelCompanion[Project, ProjectTable](TableQuery[P
 
   implicit val hasScope: HasScope[Model[Project]] = HasScope.projectScope(_.id)
 
-  private def queryRoleForTrust(projectId: Rep[DbRef[Project]], userId: Rep[DbRef[User]]) = {
-    val q = for {
-      m <- TableQuery[ProjectMembersTable] if m.projectId === projectId && m.userId === userId
-      r <- TableQuery[ProjectRoleTable] if m.userId === r.userId && r.projectId === projectId
-    } yield r.roleType
-    q.to[Set]
-  }
-
-  lazy val roleForTrustQuery = lifted.Compiled(queryRoleForTrust _)
-
   implicit def projectHideable[F[_]](
       implicit service: ModelService[F],
       F: Monad[F],
@@ -199,13 +190,13 @@ object Project extends DefaultModelCompanion[Project, ProjectTable](TableQuery[P
           .now(User)
           .get(newOwner)
           .getOrElseF(F.raiseError(new Exception("Could not find user to transfer owner to")))
-        t2 <- (this.memberships.getRoles(m)(oldOwner), this.memberships.getRoles(m)(newOwner)).parTupled
+        t2 <- (this.memberships.getMembership(m)(oldOwner), this.memberships.getMembership(m)(newOwner)).parTupled
         (ownerRoles, userRoles) = t2
         setOwner <- setOwner(m)(newOwnerUser)
         _ <- ownerRoles
           .filter(_.role == Role.ProjectOwner)
           .toVector
-          .parTraverse(role => service.update(role)(_.copy(role = Role.ProjectDeveloper)))
+          .parTraverse(role => service.update(role)(_.copy(role = Role.ProjectAdmin)))
         _ <- userRoles.toVector.parTraverse(role => service.update(role)(_.copy(role = Role.ProjectOwner)))
       } yield setOwner
     }

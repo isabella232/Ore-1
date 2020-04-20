@@ -26,9 +26,11 @@ import cats.data.{NonEmptyList => NEL}
 import com.github.tminglei.slickpg.InetString
 import com.typesafe.scalalogging
 import doobie._
+import doobie.`enum`.JdbcType.{Char, Date, LongVarChar, Time, Timestamp, TimestampWithTimezone, VarChar}
 import doobie.enum.JdbcType
 import doobie.implicits._
 import doobie.postgres.implicits._
+import doobie.util.meta.Meta
 import doobie.util.param.Param.Elem
 import doobie.util.pos.Pos
 import enumeratum.values._
@@ -120,20 +122,20 @@ trait DoobieOreProtocol {
     implicit def makeBetterInterpolator(sc: StringContext): BetterSqlInterpolator = new BetterSqlInterpolator(sc)
   }
 
+  implicit val offsetDateTimeMeta: Meta[java.time.OffsetDateTime] =
+    Meta.Basic.one[java.time.OffsetDateTime](
+      Timestamp, //Appareantly Postgres reports TIMESTAMPTZ as TIMESTAMP and not TIMESTAMPWITHTIMEZONE
+      List(Char, VarChar, LongVarChar, Date, Time, TimestampWithTimezone),
+      _.getObject(_, classOf[java.time.OffsetDateTime]),
+      _.setObject(_, _),
+      _.updateObject(_, _)
+    )
+
   implicit def objectIdMeta[A](implicit tt: TypeTag[ObjId[A]]): Meta[ObjId[A]] =
     Meta[Long].timap(ObjId.apply[A])(_.value)
 
-  implicit val offsetDateTimeMeta: Meta[OffsetDateTime] =
-    Meta.Basic.one[OffsetDateTime](
-      JdbcType.Timestamp, //Apparently Postgres reports TIMESTAMPTZ as TIMESTAMP and not TIMESTAMPWITHTIMEZONE
-      List(JdbcType.Char, JdbcType.VarChar, JdbcType.LongVarChar, JdbcType.Date, JdbcType.Time),
-      _.getObject(_, classOf[OffsetDateTime]),
-      _.setObject(_, _, java.sql.JDBCType.TIMESTAMP_WITH_TIMEZONE),
-      _.updateObject(_, _, java.sql.JDBCType.TIME_WITH_TIMEZONE)
-    )
-
-  implicit val objOffsetDateTimeMeta: Meta[ObjOffsetDateTime] =
-    offsetDateTimeMeta.timap(ObjOffsetDateTime.apply)(_.value)
+  implicit val objOffsetDateTime: Meta[ObjOffsetDateTime] =
+    offsetDateTimeMeta.timap(ObjOffsetDateTime.apply)(ObjOffsetDateTime.unwrapObjTimestamp)
 
   implicit def modelRead[A](implicit raw: Read[(ObjId[A], ObjOffsetDateTime, A)]): Read[Model[A]] = raw.map {
     case (id, time, obj) => Model(id, time, obj)

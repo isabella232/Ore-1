@@ -8,33 +8,21 @@
                     <div class="panel-heading">
                         <h3 class="panel-title pull-left">Settings</h3>
                         <template v-if="permissions.includes('see_hidden')">
-                            <btn-hide :namespace="project.namespace" :project-visibility="project.visibility"></btn-hide>
-                            <div class="modal fade" id="modal-visibility-comment" tabindex="-1" role="dialog"
-                                 aria-labelledby="modal-visibility-comment">
-                                <div class="modal-dialog" role="document">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                                <span aria-hidden="true">&times;</span>
-                                            </button>
-                                            <h4 class="modal-title" style="color:black;">Comment</h4>
-                                        </div>
-                                        <div class="modal-body">
-                                            <textarea class="textarea-visibility-comment form-control" rows="3"></textarea>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button class="btn btn-default" data-dismiss="modal">Close</button>
-                                            <button class="btn btn-visibility-comment-submit btn-primary">
-                                                <font-awesome-icon :icon="['fas', 'pencil-alt']" /> Submit
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <btn-hide :current-visibility="project.visibility" :endpoint="'projects/' + project.plugin_id + '/visibility'" emit-location="project/setVisibility"></btn-hide>
                         </template>
                     </div>
 
                     <div class="panel-body">
+                        <!-- Summary -->
+                        <div class="setting" :set="maxLength = config.ore.projects.maxDescLen">
+                            <div class="setting-description">
+                                <h4>Summary</h4>
+                                <p><label for="summary-setting">A short summary of your project (max {{ maxLength }}).</label></p>
+                            </div>
+                            <input id="summary-setting" class="form-control" type="text" :maxlength="maxLength" v-model="summary">
+                            <div class="clearfix"></div>
+                        </div>
+
                         <div class="setting">
                             <div class="setting-description">
                                 <h4>Category</h4>
@@ -180,19 +168,8 @@
                             <div class="clearfix"></div>
                         </div>
 
-                        <!-- Summary -->
-                        <div class="setting" :set="maxLength = config.ore.projects.maxDescLen">
-                            <div class="setting-description">
-                                <h4>Summary</h4>
-                                <p><label for="summary-setting">A short summary of your project (max {{ maxLength }}).</label></p>
-                            </div>
-                            <input id="summary-setting" class="form-control" type="text" :maxlength="maxLength" v-model="summary">
-                            <div class="clearfix"></div>
-                        </div>
-
-                        <button name="save" class="btn btn-success btn-spinner" data-icon="fa-check">
-                            <font-awesome-icon :icon="['fas', 'check']" /> Save changes
-                            {{ dataToSend }}
+                        <button @click="sendProjectUpdate(dataToSend)" name="save" class="btn btn-success">
+                            <font-awesome-icon :icon="saveChangesIcon" :spin="sendingChanges" /> Save changes
                         </button>
                     </div>
                 </div>
@@ -205,24 +182,21 @@
                     <div class="panel-body">
                         <!-- Project icon -->
                         <div class="setting setting-icon">
-                            <form id="form-icon" enctype="multipart/form-data">
+                            <form id="form-icon" enctype="multipart/form-data" method="post">
                                 <CSRFField></CSRFField>
                                 <div class="setting-description">
                                     <h4>Icon</h4>
 
-                                    <icon :username="project.namespace.owner"
-                                          :src="avatarUrl(project.namespace.owner)"
-                                          :imgSrc="iconUrl"
-                                          class="user-avatar-md"></icon>
+                                    <icon :src="iconUrl" extra-classes="user-avatar-md"></icon>
 
-                                    <input class="form-control-static" type="file" id="icon" name="icon"/>
+                                    <input class="form-control-static" type="file" id="icon" name="icon" @change="selectedLogo = true" />
                                 </div>
                                 <div class="setting-content">
                                     <div class="icon-description">
                                         <p>Upload an image representative of your project.</p>
                                         <div class="btn-group pull-right">
-                                            <button class="btn btn-default btn-reset">Reset</button>
-                                            <button class="btn btn-info btn-upload pull-right" disabled>
+                                            <button @click.prevent="resetIcon" class="btn btn-default btn-reset">Reset</button>
+                                            <button @click.prevent="updateIcon" class="btn btn-info btn-upload pull-right" :disabled="!selectedLogo">
                                                 <font-awesome-icon :icon="['fas', 'upload']" /> Upload
                                             </button>
                                         </div>
@@ -239,18 +213,18 @@
                                     Generate a unique deployment key to enable build deployment from Gradle
                                     <a href="#"><font-awesome-icon :icon="['fas', 'question-circle']" /></a>
                                 </p>
-                                <input class="form-control input-key" type="text" :value="deployKey" readonly/>
+                                <input class="form-control input-key" type="text" :value="deployKey ? deployKey.key : ''" readonly/>
                             </div>
                             <div class="setting-content">
                                 <template v-if="deployKey !== null">
-                                    <button class="btn btn-danger btn-block btn-key-revoke" :data-key-id="deployKey">
-                                        <span class="spinner" style="display: none;"><font-awesome-icon :icon="['fas', 'spinner']" spin /></span>
+                                    <button class="btn btn-danger btn-block" @click="revokeDeployKey">
+                                        <span class="spinner" :style="{display: showDeployKeySpinner ? 'inline' : 'none'}"><font-awesome-icon :icon="['fas', 'spinner']" spin /></span>
                                         <span class="text">Revoke key</span>
                                     </button>
                                 </template>
                                 <template v-else>
-                                    <button class="btn btn-info btn-block btn-key-gen">
-                                        <span class="spinner" style="display: none;"><font-awesome-icon :icon="['fas', 'spinner']" spin /></span>
+                                    <button class="btn btn-info btn-block" @click="generateDeployKey">
+                                        <span class="spinner" :style="{display: showDeployKeySpinner ? 'inline' : 'none'}"><font-awesome-icon :icon="['fas', 'spinner']" spin /></span>
                                         <span class="text">Generate key</span>
                                     </button>
                                 </template>
@@ -262,15 +236,31 @@
                         <div class="setting">
                             <div class="setting-description">
                                 <h4 class="danger">Rename</h4>
-                                <p>Rename project</p>
+                                <p>Rename project. <strong>NOTE: This will not change the project's plugin id, only it's name.</strong></p>
                             </div>
                             <div class="setting-content">
-                                <input form="rename" class="form-control" type="text"
-                                       :value="project.name"
+                                <input class="form-control" type="text"
+                                       v-model="newName"
                                        :maxlength="config.ore.projects.maxNameLen">
-                                <button id="btn-rename" data-toggle="modal" data-target="#modal-rename"
-                                        class="btn btn-warning" disabled>
+                                <button id="btn-rename" data-toggle="modal" data-target="#modal-rename" class="btn btn-warning" :disabled="newName === this.project.name">
                                     Rename
+                                </button>
+                            </div>
+                            <div class="clearfix"></div>
+                        </div>
+
+                        <!-- Transfer -->
+                        <div class="setting">
+                            <div class="setting-description">
+                                <h4 class="danger">Transfer</h4>
+                                <p>Transfer project ownership. </p>
+                            </div>
+                            <div class="setting-content">
+                                <select class="form-control" v-model="newOwner">
+                                    <option v-for="member in adminMembers" :value="member.user">{{ member.user }}</option>
+                                </select>
+                                <button id="btn-transfer" data-toggle="modal" data-target="#modal-transfer" class="btn btn-warning" :disabled="newOwner === this.project.namespace.owner">
+                                    Transfer
                                 </button>
                             </div>
                             <div class="clearfix"></div>
@@ -297,9 +287,8 @@
                                 <p>Once you delete a project, it cannot be recovered.</p>
                             </div>
                             <div class="setting-content">
-                                <button class="btn btn-delete btn-danger btn-visibility-change"
-                                        :data-project="project.namespace.owner + '/' + project.namespace.slug" data-level="-99"
-                                        data-modal="true">
+                                <button class="btn btn-delete btn-danger btn-visibility-change" data-toggle="modal"
+                                        data-target="#modal-delete" @click="hardDelete = true">
                                     <strong>Hard Delete</strong>
                                 </button>
                             </div>
@@ -312,14 +301,14 @@
             <!-- Side panel -->
             <div class="col-md-4">
                 <router-link :to="{name: 'settings'}" v-slot="{ href, navigate }">
-                    <!-- TODO: Pass in navigate to member-list -->
                     <member-list
                             :editable="true"
                             :members="members"
                             :permissions="permissions"
-                            :remove-call="routes.project.Projects.removeMember(project.namespace.owner, project.namespace.slug).absoluteURL()"
-                            :settings-call="href"
-                            role-category="project"></member-list>
+                            role-category="project"
+                            new-role="Project_Support"
+                            :endpoint="'projects/' + project.plugin_id + '/members'"
+                            commit-location="project/updateMembers"></member-list>
                 </router-link>
             </div>
         </div>
@@ -341,7 +330,31 @@
                             <button type="button" class="btn btn-default" data-dismiss="modal">
                                 Close
                             </button>
-                            <button name="rename" class="btn btn-warning">Rename</button>
+                            <button @click="sendProjectUpdate({'name': newName})" name="rename" class="btn btn-warning">Rename</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modal-transfer" tabindex="-1" role="dialog" aria-labelledby="label-transfer">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Cancel">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        <h4 class="modal-title" id="label-transfer">Transfer project ownership</h4>
+                    </div>
+                    <div class="modal-body">
+                        Changing the owner of a project can have undesired consequences. We will not setup any redirects.
+                    </div>
+                    <div class="modal-footer">
+                        <div class="form-inline">
+                            <button type="button" class="btn btn-default" data-dismiss="modal">
+                                Close
+                            </button>
+                            <button @click="sendProjectUpdate({namespace: {owner: newOwner}})" name="transfer" class="btn btn-warning">Transfer</button>
                         </div>
                     </div>
                 </div>
@@ -360,7 +373,7 @@
                     <div class="modal-body">
                         Are you sure you want to delete your Project? This action cannot be undone. Please explain why you want to delete it.
                         <br>
-                        <textarea name="comment" class="textarea-delete-comment form-control" rows="3"></textarea>
+                        <textarea v-model="deleteReason" name="comment" class="textarea-delete-comment form-control" rows="3"></textarea>
                         <br>
                         <div class="alert alert-warning">
                             WARNING: You or anybody else will not be able to use the plugin ID "{0}" in the future if you continue. If you are deleting your project to recreate it, please do not delete your project and contact the Ore staff for help.
@@ -368,10 +381,10 @@
                     </div>
                     <div class="modal-footer">
                         <div class="form-inline">
-                            <button type="button" class="btn btn-default" data-dismiss="modal">
+                            <button @click="resetDeleteData" type="button" class="btn btn-default" data-dismiss="modal">
                                 Close
                             </button>
-                            <button name="delete" class="btn btn-danger">Delete</button>
+                            <button @click="deleteProject" name="delete" class="btn btn-danger">Delete</button>
                         </div>
                     </div>
                 </div>
@@ -389,8 +402,9 @@
     import CSRFField from "../../components/CSRFField";
     import MemberList from "../../components/MemberList";
     import Icon from "../../components/Icon";
-    import {avatarUrl as avatarUrlUtils, clearFromDefaults} from "../../utils"
+    import {avatarUrl as avatarUrlUtils, clearFromDefaults, cleanEmptyObject, nullIfEmpty} from "../../utils"
     import {Category} from "../../enums";
+    import {API} from "../../api";
     import config from "../../config.json5"
     import { mapState } from 'vuex'
 
@@ -404,26 +418,27 @@
         data() {
             //Seems project hasn't been initialized yet, so we use the store directly
             let project = this.$store.state.project.project;
+
+            let alwaysPresent = {
+                deployKey: null,
+                showDeployKeySpinner: false,
+                sendingChanges: false,
+                selectedLogo: false,
+                deleteReason: '',
+                hardDelete: false
+            }
+
             if(project) {
-                return {
-                    category: project.category,
-                    keywords: '',
-                    homepage: project.settings.homepage,
-                    issues: project.settings.issues,
-                    sources: project.settings.sources,
-                    support: project.settings.support,
-                    licenseName: project.settings.license.name,
-                    licenseUrl: project.settings.license.url,
-                    forumSync: project.settings.forum_sync,
-                    summary: project.summary,
-                    iconUrl: project.icon_url,
-                    deployKey: null //TODO
-                }
+                this.updateDataFromProject(project, alwaysPresent)
+
+                return alwaysPresent
             }
             else {
                 return {
+                    newName: null,
+                    newOwner: null,
                     category: null,
-                    keywords: null, //TODO
+                    keywords: [],
                     homepage: null,
                     issues: null,
                     sources: null,
@@ -433,7 +448,7 @@
                     forumSync: null,
                     summary: null,
                     iconUrl: null,
-                    deployKey: null //TODO
+                    ...alwaysPresent,
                 }
             }
         },
@@ -448,45 +463,225 @@
                 return Category
             },
             keywordArr() {
-                return this.keywords ? this.keywords.split(' ') : null;
+                return this.keywords.length ? this.keywords.split(' ') : [];
             },
             dataToSend() {
                 let base = clearFromDefaults({category: this.category, summary: this.summary}, this.project);
                 base.settings = clearFromDefaults({
                     keywords: this.keywordArr,
-                    homepage: this.homepage,
-                    issues: this.issues,
-                    support: this.support,
+                    homepage: nullIfEmpty(this.homepage),
+                    issues: nullIfEmpty(this.issues),
+                    support: nullIfEmpty(this.support),
                     forum_sync: this.forumSync
                 }, this.project.settings);
-                base.settings.license = clearFromDefaults({name: this.licenseName, url: this.licenseUrl}, this.project.settings.license);
+                base.settings.license = clearFromDefaults({name: nullIfEmpty(this.licenseName), url: nullIfEmpty(this.licenseUrl)}, this.project.settings.license);
 
-                return base
+                let ret = cleanEmptyObject(base);
+                return ret ? ret : {};
+            },
+            saveChangesIcon() {
+                return ['fas', this.sendingChanges ? 'spinner' : 'check']
+            },
+            adminMembers() {
+                return this.members.filter(member => {
+                    return (member.role.name === 'Project_Owner' || member.role.name === 'Project_Admin') && member.role.is_accepted;
+                })
             },
             ...mapState('project', ['project', 'permissions', 'members'])
         },
         watch: {
             project(val, oldVal) {
-                console.log({val, oldVal})
                 if(!oldVal || val.plugin_id !== oldVal.plugin_id) {
-                    this.category = this.project.category;
-                    this.keywords = '';
-                    this.homepage = this.project.settings.homepage;
-                    this.issues = this.project.settings.issues;
-                    this.sources = this.project.settings.sources;
-                    this.support = this.project.settings.support;
-                    this.licenseName = this.project.settings.license.name;
-                    this.licenseUrl = this.project.settings.license.url;
-                    this.forumSync = this.project.settings.forum_sync;
-                    this.summary = this.project.summary;
-                    this.iconUrl = this.project.icon_url;
-                    this.deployKey = null //TODO
+                    this.updateDataFromProject(val, this)
                 }
             }
         },
+        created() {
+            if(this.project) {
+                this.getDeployKey(this.project)
+            }
+        },
         methods: {
+            updateDataFromProject(project, self) {
+                this.getDeployKey(project);
+
+                self.newName = project.name;
+                self.newOwner = project.namespace.owner;
+                self.category = project.category;
+                self.keywords = '';
+                self.homepage = project.settings.homepage;
+                self.issues = project.settings.issues;
+                self.sources = project.settings.sources;
+                self.support = project.settings.support;
+                self.licenseName = project.settings.license.name;
+                self.licenseUrl = project.settings.license.url;
+                self.forumSync = project.settings.forum_sync;
+                self.summary = project.summary;
+                self.iconUrl = project.icon_url;
+            },
             avatarUrl(name) {
                 return avatarUrlUtils(name)
+            },
+            sendProjectUpdate(update) {
+                if(Object.entries(update).length) {
+                    this.sendingChanges = true;
+                    $('#modal-rename').modal('hide');
+                    $('#modal-transfer').modal('hide');
+                    let changedName = this.project.name !== this.newName;
+                    let changedOwner = this.project.namespace.owner !== this.newOwner;
+
+                    API.request('projects/' + this.project.plugin_id, 'PATCH', update).then(result => {
+                        this.$store.commit({
+                            type: 'project/updateProject',
+                            project: result
+                        });
+                        this.sendingChanges = false;
+                        this.updateDataFromProject(result, this);
+
+                        if(changedName || changedOwner) {
+                            this.$router.replace({name: 'settings', params: result.namespace})
+                        }
+                    }).catch(failed => {
+                        this.sendingChanges = false;
+                        //TODO
+                    })
+                }
+                else {
+                    //Some "illusion" of the change being acknowledged is always good
+                    this.sendingChanges = true;
+                    setTimeout(() => {
+                        this.sendingChanges = false;
+                    }, 150)
+                }
+            },
+            updateIcon() {
+                let form = document.getElementById('form-icon');
+                let data = new FormData(form);
+                let iconUrl = '/' + this.project.namespace.owner + '/' + this.project.namespace.slug + '/icon';
+                fetch(iconUrl, {
+                    credentials: "same-origin",
+                    method: 'post',
+                    body: data
+                }).then(res => {
+                    if(res.ok) {
+                        form.reset();
+                        this.selectedLogo = false;
+                        //Makes sure we update the image
+                        this.iconUrl = iconUrl + '?temp=' + Math.random()
+                    }
+                    else {
+                        // TODO
+                    }
+                })
+            },
+            resetIcon() {
+                let data = new FormData(document.getElementById('form-icon'));
+                let iconUrl = '/' + this.project.namespace.owner + '/' + this.project.namespace.slug + '/icon';
+                fetch(iconUrl + '/reset', {
+                    credentials: "same-origin",
+                    method: 'post',
+                    body: data
+                }).then(res => {
+                    if(res.ok) {
+                        this.selectedLogo = false;
+                        //Makes sure we update the image
+                        this.iconUrl = iconUrl + '?temp=' + Math.random()
+                    }
+                    else {
+                        // TODO
+                    }
+                })
+            },
+            getDeployKey(project) {
+                fetch('/api/v1/projects/' + project.plugin_id + '/keys', {
+                    credentials: "same-origin"
+                }).then(res => {
+                    if(res.ok) {
+                        res.json().then(json => {
+                            this.deployKey = json;
+                        })
+                    }
+                    else if(res.status === 404) {
+                        //Do nothing
+                    }
+                    else {
+                        //TODO
+                    }
+                })
+            },
+            generateDeployKey() {
+                this.showDeployKeySpinner = true;
+                let data = new FormData()
+                data.append('csrfToken', window.csrf);
+                fetch('/api/v1/projects/' + this.project.plugin_id + '/keys/new', {
+                    method: 'POST',
+                    credentials: "same-origin",
+                    body: data
+                }).then(res => {
+                    this.showDeployKeySpinner = false;
+                    if(res.ok) {
+                        res.json().then(json => {
+                            this.deployKey = {
+                                key: json.value,
+                                id: json.id
+                            }
+                        })
+                    }
+                    else {
+                        //TODO
+                    }
+                })
+            },
+            revokeDeployKey() {
+                this.showDeployKeySpinner = true;
+                let data = new FormData();
+                data.append('id', this.deployKey.id);
+                data.append('csrfToken', window.csrf);
+                fetch('/api/v1/projects/' + this.project.plugin_id + '/keys/revoke', {
+                    method: 'POST',
+                    credentials: "same-origin",
+                    body: data
+                }).then(res => {
+                    this.showDeployKeySpinner = false;
+                    if(res.ok) {
+                        this.deployKey = null
+                    }
+                    else {
+                        //TODO
+                    }
+                })
+            },
+            resetDeleteData() {
+                this.hardDelete = false;
+                this.deleteReason = ''
+            },
+            deleteProject() {
+                if(this.hardDelete) {
+                    API.request('projects/' + this.project.plugin_id, 'DELETE').then(res => {
+                        this.$store.commit('project/clearProject');
+                        $('#modal-delete').modal('hide');
+                        this.$router.push({name: 'home'})
+                    })
+                }
+                else {
+                    API.request('projects/' + this.project.plugin_id + '/visibility', 'POST', {
+                        visibility: 'softDelete',
+                        comment: this.deleteReason
+                    }).then(res => {
+                        if(this.permissions.includes('see_hidden')) {
+                            this.$store.commit({
+                                type: 'project/setVisibility',
+                                visibility: 'softDelete'
+                            });
+                            $('#modal-delete').modal('hide');
+                        }
+                        else {
+                            this.$store.commit('project/clearProject')
+                            $('#modal-delete').modal('hide');
+                            this.$router.push({name: 'home'})
+                        }
+                    })
+                }
             }
         }
     }

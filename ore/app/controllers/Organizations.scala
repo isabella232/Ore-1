@@ -97,12 +97,12 @@ class Organizations(forms: OreForms)(
         .organizationRoles(ModelView.now(OrganizationUserRole))
         .get(id)
         .toZIO
-        .asError(notFound)
+        .orElseFail(notFound)
         .flatMap { role =>
           import MembershipDossier._
           status match {
             case STATUS_DECLINE =>
-              role.organization[Task].orDie.flatMap(org => org.memberships.removeRole(org)(role.id)).as(Ok)
+              role.organization[Task].orDie.flatMap(org => org.memberships.removeMember(org)(role.userId)).as(Ok)
             case STATUS_ACCEPT   => service.update(role)(_.copy(isAccepted = true)).as(Ok)
             case STATUS_UNACCEPT => service.update(role)(_.copy(isAccepted = false)).as(Ok)
             case _               => IO.fail(BadRequest)

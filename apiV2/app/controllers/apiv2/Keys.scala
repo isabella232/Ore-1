@@ -61,7 +61,7 @@ class Keys(
               (service.runDBIO(nameTaken): IO[Result, Boolean]).ifM(ifTaken, ifFree)
             }
           }
-          .leftMap((ApiErrors.apply _).andThen(BadRequest.apply(_)).andThen(IO.fail))
+          .leftMap((ApiErrors.apply _).andThen(BadRequest.apply(_)).andThen(IO.fail(_)))
           .merge
     }
 
@@ -70,7 +70,7 @@ class Keys(
       for {
         user <- ZIO
           .fromOption(request.user)
-          .asError(BadRequest(ApiError("Public keys can't be used to delete")))
+          .orElseFail(BadRequest(ApiError("Public keys can't be used to delete")))
         rowsAffected <- service.runDbCon(APIV2Queries.deleteApiKey(name, user.id.value).run)
       } yield if (rowsAffected == 0) NotFound else NoContent
     }

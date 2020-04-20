@@ -119,7 +119,7 @@ object OrganizationBase {
             userOrg <- org.toUser.getOrElseF(F.raiseError(new IllegalStateException("User not created")))
             _       <- userOrg.globalRoles.addAssoc(Role.Organization.toDbRole.id.value)
             _ <- // Add the owner
-            org.memberships.addRole(org)(
+            org.memberships.setRole(org)(
               ownerId,
               OrganizationUserRole(
                 userId = ownerId,
@@ -134,7 +134,7 @@ object OrganizationBase {
 
               members.toVector.parTraverse { role =>
                 // TODO remove role.user db access we really only need the userid we already have for notifications
-                org.memberships.addRole(org)(role.userId, role.copy(organizationId = org.id)).flatMap { _ =>
+                org.memberships.setRole(org)(role.userId, role.copy(organizationId = org.id)).flatMap { _ =>
                   service.insert(
                     Notification(
                       userId = role.userId,
