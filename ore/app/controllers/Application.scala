@@ -370,7 +370,7 @@ final class Application(forms: OreForms)(
             case "memberRole" =>
               user.toMaybeOrganization(ModelView.now(Organization)).toZIO.mapError(Right.apply).flatMap { orga =>
                 updateRoleTable(OrganizationUserRole)(
-                  orgDossier.roles(orga),
+                  orgDossier.memberships(orga),
                   RoleCategory.Organization,
                   Role.OrganizationOwner,
                   transferOrgOwner

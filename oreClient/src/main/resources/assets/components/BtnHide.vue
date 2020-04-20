@@ -1,52 +1,122 @@
 <template>
-    <div class="btn-group">
-        <button class="btn btn-sm btn-alert btn-hide-dropdown dropdown-toggle" type="button" id="visibility-actions" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" :data-project="stringNamespace" style="color: black">
-            <font-awesome-icon :icon="['fas', 'eye']" /> Visibility actions
-            <span class="caret"></span>
-        </button>
-        <ul class="dropdown-menu" aria-labelledby="visibility-actions">
-            <li v-for="visibility in visibilities.values">
-                <a href="#" class="btn-visibility-change" :data-project="stringNamespace" :data-level="visibility.name" :data-modal="visibility.showModal">
-                    {{ visibilityMessage(visibility.name) }}
-                    <font-awesome-icon v-if="projectVisibility === visibility.name" :icon="['fas', 'check']" style="color: black" aria-hidden="true" />
-                </a>
-            </li>
-        </ul>
+    <div>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-alert btn-hide-dropdown dropdown-toggle" type="button" id="visibility-actions"
+                    data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"
+                    style="color: black">
+                <font-awesome-icon :icon="['fas', spinIcon ? 'spinner' : 'eye']" :spin="spinIcon"/>
+                Visibility actions
+                <span class="caret"></span>
+            </button>
+            <ul class="dropdown-menu" aria-labelledby="visibility-actions">
+                <li v-for="visibility in visibilities.values">
+                    <a href="#" @click="handleVisibilityClick(visibility)" class="btn-visibility-change">
+                        {{ visibilityMessage(visibility.name) }}
+                        <font-awesome-icon v-if="currentVisibility === visibility.name" :icon="['fas', 'check']"
+                                           style="color: black" aria-hidden="true"/>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="modal fade" id="modal-visibility-comment" tabindex="-1" role="dialog"
+             aria-labelledby="modal-visibility-comment">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        <h4 class="modal-title" style="color:black;">Comment</h4>
+                    </div>
+                    <div class="modal-body">
+                        <textarea v-model="comment" class="textarea-visibility-comment form-control" rows="3"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-default" data-dismiss="modal" @click="resetData">Close</button>
+                        <button class="btn btn-visibility-comment-submit btn-primary" @click="sendVisibilityChange(selectedVisibility)">
+                            <font-awesome-icon :icon="['fas', 'pencil-alt']"/>
+                            Submit
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
 <script>
 
     import {Visibility} from "../enums";
+    import {API} from "../api";
 
     export default {
         props: {
-            namespace: {
-                type: Object,
-                required: true
-            },
-            projectVisibility: {
+            currentVisibility: {
                 type: String,
                 required: true
+            },
+            endpoint: {
+                type: String,
+                required: true
+            },
+            emitLocation: String
+        },
+        data() {
+            return {
+                selectedVisibility: null,
+                comment: '',
+                spinIcon: false
             }
         },
         computed: {
-            stringNamespace() {
-                return this.namespace.owner + '/' + this.namespace.slug;
-            },
             visibilities() {
                 return Visibility
             }
         },
         methods: {
+            resetData() {
+                this.selectedVisibility = null;
+                this.comment = ''
+            },
             visibilityMessage(visibility) {
                 switch (visibility) {
-                    case 'public': return 'Public';
-                    case 'new': return 'New';
-                    case 'needsChanges': return 'Needs changes';
-                    case 'needsApproval': return 'Needs approval';
-                    case 'softDelete': return 'Soft deleted'
+                    case 'public':
+                        return 'Public';
+                    case 'new':
+                        return 'New';
+                    case 'needsChanges':
+                        return 'Needs changes';
+                    case 'needsApproval':
+                        return 'Needs approval';
+                    case 'softDelete':
+                        return 'Soft deleted'
                 }
+            },
+            handleVisibilityClick(visibility) {
+                if (visibility.showModal) {
+                    this.selectedVisibility = visibility;
+                    $('#modal-visibility-comment').modal('show');
+                } else {
+                    this.sendVisibilityChange(visibility)
+                }
+            },
+            sendVisibilityChange(visibility) {
+                this.spinIcon = true;
+                API.request(this.endpoint, 'POST', {
+                    visibility: visibility.name,
+                    comment: this.comment
+                }).then(res => {
+                    this.spinIcon = false;
+                    $('#modal-visibility-comment').modal('hide');
+
+                    if(this.emitLocation) {
+                        this.$emit({
+                            type: this.emitLocation,
+                            visibility: visibility.name
+                        })
+                    }
+                })
             }
         }
     }

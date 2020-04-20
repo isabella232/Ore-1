@@ -2,9 +2,11 @@ package util
 
 import play.api.mvc.QueryStringBindable
 
+import controllers.apiv2.Users.UserSortingStrategy
 import ore.data.project.Category
 import ore.models.project.{ProjectSortingStrategy, Version}
 import ore.permission.NamedPermission
+import ore.permission.role.Role
 
 object APIBinders {
 
@@ -25,10 +27,16 @@ object APIBinders {
   implicit val projectSortingStrategyQueryStringBindable: QueryStringBindable[ProjectSortingStrategy] =
     objBindable("sorting strategy", s => ProjectSortingStrategy.values.find(_.apiName == s), _.apiName)
 
+  implicit val userSortingStrategyQueryStringBindable: QueryStringBindable[UserSortingStrategy] =
+    objBindable("sorting strategy", UserSortingStrategy.withValueOpt, _.value)
+
   implicit val stabilityStringBindable: QueryStringBindable[Version.Stability] =
     objBindable("stability", Version.Stability.withValueOpt, _.value)
 
   implicit val releaseTypeStringBindable: QueryStringBindable[Version.ReleaseType] =
     objBindable("release type", Version.ReleaseType.withValueOpt, _.value)
+
+  implicit val roleStringBindable: QueryStringBindable[Role] =
+    objBindable("role", Role.withValueOpt, _.value)
 
 }

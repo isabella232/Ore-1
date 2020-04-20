@@ -24,6 +24,7 @@ GET     /statusz                                                    @controllers
 +nocsrf
 POST    /api/sync_sso                                               @controllers.ApiV1Controller.syncSso()
 
+GET     /api/v1/projects/:pluginId/keys                             @controllers.ApiV1Controller.getKey(pluginId)
 POST    /api/v1/projects/:pluginId/keys/new                         @controllers.ApiV1Controller.createKey(pluginId)
 POST    /api/v1/projects/:pluginId/keys/revoke                      @controllers.ApiV1Controller.revokeKey(pluginId)
 
@@ -116,9 +117,9 @@ GET     /:author/:slug/notes                                        @controllers
 POST    /:author/:slug/notes/addmessage                             @controllers.project.Projects.addMessage(author, slug)
 
 GET     /:author/:slug/icon                                         @controllers.project.Projects.showIcon(author, slug)
++nocsrf
 POST    /:author/:slug/icon                                         @controllers.project.Projects.uploadIcon(author, slug)
 POST    /:author/:slug/icon/reset                                   @controllers.project.Projects.resetIcon(author, slug)
-GET     /:author/:slug/icon/pending                                 @controllers.project.Projects.showPendingIcon(author, slug)
 # ------- End Projects ---------
 
 

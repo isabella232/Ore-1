@@ -84,10 +84,6 @@ class SchemaSpec extends DbSpec {
   }
    */
 
-  test("OrganizationMember") {
-    check(sql"""SELECT user_id, organization_id FROM organization_members""".query[(DbRef[User], DbRef[Organization])])
-  }
-
   test("OrganizationRole") {
     check(sql"""|SELECT user_id, organization_id, role_type,
                 |is_accepted FROM user_organization_roles""".stripMargin.query[OrganizationUserRole])
@@ -96,12 +92,6 @@ class SchemaSpec extends DbSpec {
   test("ProjectRole") {
     check(sql"""|SELECT user_id, project_id, role_type,
                 |is_accepted FROM user_project_roles""".stripMargin.query[ProjectUserRole])
-  }
-
-  test("ProjectMember") {
-    check(
-      sql"""SELECT project_id, user_id FROM project_members""".query[(DbRef[Project], DbRef[User])]
-    )
   }
 
   test("Notifiation") {

@@ -45,6 +45,7 @@ case class APIV2QueryProject(
     visibility: Visibility,
     userStarred: Boolean,
     userWatching: Boolean,
+    keywords: List[String],
     homepage: Option[String],
     issues: Option[String],
     sources: Option[String],
@@ -95,6 +96,7 @@ case class APIV2QueryProject(
           userWatching
         ),
         APIV2.ProjectSettings(
+          keywords,
           homepage,
           issues,
           sources,
@@ -235,22 +237,19 @@ case class APIV2QueryCompactProject(
 
 case class APIV2QueryProjectMember(
     user: String,
-    roles: List[Role],
-    isAccepted: List[Boolean]
+    role: Role,
+    isAccepted: Boolean
 ) {
 
   def asProtocol: APIV2.ProjectMember = APIV2.ProjectMember(
     user,
-    roles.zip(isAccepted).map {
-      case (role, isAccepted) =>
-        APIV2.Role(
-          role.value,
-          role.title,
-          role.color.hex,
-          role.permissions.toNamedSeq.toList,
-          isAccepted
-        )
-    }
+    APIV2.Role(
+      role,
+      role.title,
+      role.color.hex,
+      role.permissions.toNamedSeq.toList,
+      isAccepted
+    )
   )
 }
 
@@ -303,6 +302,7 @@ case class APIV2QueryUser(
     name: String,
     tagline: Option[String],
     joinDate: Option[OffsetDateTime],
+    projectCount: Long,
     roles: List[Role]
 ) {
 
@@ -311,9 +311,10 @@ case class APIV2QueryUser(
     name,
     tagline,
     joinDate,
+    projectCount,
     roles.map { role =>
       APIV2.Role(
-        role.value,
+        role,
         role.title,
         role.color.hex,
         role.permissions.toNamedSeq.toList,
