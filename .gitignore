@@ -182,7 +182,7 @@ local.properties
 node_modules
 
 # Ore
-oreClient/src/main/resources/assets/config.json5
+oreClient/src/main/assets/config.json5
 jobs/src/main/resources/application.conf
 ore/conf/application.conf
 /project/project/target
