@@ -15,11 +15,11 @@ import doobie.Transactor
 import doobie.scalatest.Checker
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 import zio.interop.catz.{taskEffectInstance, zioContextShift}
-import zio.{DefaultRuntime, Task}
+import zio.{Runtime, Task}
 
 trait DbSpec extends FunSuite with Matchers with Checker[Task] with BeforeAndAfterAll with DoobieOreProtocol {
 
-  implicit val runtime: zio.Runtime[Any] = new DefaultRuntime {}
+  implicit val runtime: zio.Runtime[Any] = Runtime.default
 
   implicit override def M: Effect[Task] = taskEffectInstance
 

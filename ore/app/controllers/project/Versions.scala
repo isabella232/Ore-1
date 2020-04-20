@@ -417,7 +417,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
         )
         .flatMap { version =>
           confirmDownload0(version.id, downloadType, token)
-            .asError(Redirect(ShowProject(author, slug)).withError("error.plugin.noConfirmDownload"))
+            .orElseFail(Redirect(ShowProject(author, slug)).withError("error.plugin.noConfirmDownload"))
         }
         .map {
           case (dl, optNewSession) =>
@@ -495,7 +495,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
       service
         .runDBIO(firstPromotedVersion(request.project.id).result.headOption)
         .get
-        .asError(NotFound)
+        .orElseFail(NotFound)
         .flatMap(sendVersion(request.project, _, token))
     }
 
@@ -606,7 +606,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
       service
         .runDBIO(firstPromotedVersion(request.project.id).result.headOption)
         .get
-        .asError(NotFound)
+        .orElseFail(NotFound)
         .flatMap(sendJar(request.project, _, token))
     }
   }
@@ -625,7 +625,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
       getVersion(project, versionString).flatMap { version =>
         optToken
           .map { token =>
-            confirmDownload0(version.id, Some(DownloadType.JarFile.value), Some(token)).asError(notFound) *>
+            confirmDownload0(version.id, Some(DownloadType.JarFile.value), Some(token)).orElseFail(notFound) *>
               sendJar(project, version, optToken, api = true)
           }
           .getOrElse(sendJar(project, version, optToken, api = true))
@@ -645,7 +645,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
       service
         .runDBIO(firstPromotedVersion(request.project.id).result.headOption)
         .get
-        .asError(NotFound)
+        .orElseFail(NotFound)
         .flatMap(sendJar(request.project, _, token, api = true))
     }
   }

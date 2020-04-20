@@ -141,7 +141,7 @@ class Projects(
               service
                 .runDbCon(APIV2Queries.canUploadToOrg(user.id, settings.ownerName).option)
                 .get
-                .asError(BadRequest(ApiError("Owner not found")))
+                .orElseFail(BadRequest(ApiError("Owner not found")))
           }
           _ <- ZIO.unit.filterOrFail(_ => canUpload._2)(Forbidden(ApiError("Can't upload to that org")))
           project <- factory
@@ -198,7 +198,7 @@ class Projects(
 
   def showProjectDescription(pluginId: String): Action[AnyContent] =
     CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF {
-      service.runDbCon(APIV2Queries.getPage(pluginId, "Home").option).get.asError(NotFound).map {
+      service.runDbCon(APIV2Queries.getPage(pluginId, "Home").option).get.orElseFail(NotFound).map {
         case (_, _, _, contents) =>
           Ok(Json.obj("description" := contents))
       }
@@ -416,7 +416,7 @@ class Projects(
   def projectData(pluginId: String): Action[AnyContent] =
     ApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF { implicit r =>
       for {
-        project <- projects.withPluginId(pluginId).get.asError(NotFound)
+        project <- projects.withPluginId(pluginId).get.orElseFail(NotFound)
         data    <- ProjectData.of[ZIO[Blocking, Throwable, *]](project).orDie
       } yield Ok(
         Json.obj(

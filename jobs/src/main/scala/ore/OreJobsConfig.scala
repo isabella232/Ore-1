@@ -5,10 +5,6 @@ import scala.concurrent.duration.FiniteDuration
 import pureconfig._
 import pureconfig.generic.auto._
 
-trait Config {
-  val config: OreJobsConfig
-}
-
 case class OreJobsConfig(
     ore: OreJobsConfig.Ore,
     discourse: OreJobsConfig.Discourse,

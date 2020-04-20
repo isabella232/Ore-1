@@ -101,11 +101,11 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
               .flatMap { posterName =>
                 users.requestPermission(request.user, posterName, Permission.PostAsOrganization).toZIO
               }
-              .asError(request.user)
+              .orElseFail(request.user)
               .either
               .map(_.merge)
           }
-          topicId <- ZIO.fromOption(request.project.topicId).asError(BadRequest)
+          topicId <- ZIO.fromOption(request.project.topicId).orElseFail(BadRequest)
           _       <- service.insert(Job.PostDiscourseReply.newJob(topicId, poster.name, formData.content).toJob)
         } yield Redirect(self.show(author, slug, ""))
       }
@@ -123,7 +123,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
     projects
       .withSlug(author, slug)
       .get
-      .asError(NotFound)
+      .orElseFail(NotFound)
       .flatMap(project => project.obj.iconUrlOrPath.map(_.fold(Redirect(_), showImage)))
   }
 
@@ -308,7 +308,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
         }
       } yield res
 
-      res.asError(NotFound)
+      res.orElseFail(NotFound)
     }
 
   /**
