@@ -25,26 +25,19 @@ import slick.lifted.TableQuery
 /**
   * Represents a single version of a Project.
   *
-  * @param versionString    Version string
-  * @param dependencyIds    List of plugin dependencies with the plugin ID
-  * @param dependencyVersions    List of plugin dependencies with the plugin version
   * @param description     User description of version
   * @param projectId        ID of project this version belongs to
   */
 case class Version(
     projectId: DbRef[Project],
-    versionString: String,
-    dependencyIds: List[String],
-    dependencyVersions: List[Option[String]],
-    fileSize: Long,
-    hash: String,
+    name: String,
+    slug: String,
     authorId: Option[DbRef[User]],
     description: Option[String],
     reviewState: ReviewState = ReviewState.Unreviewed,
     reviewerId: Option[DbRef[User]] = None,
     approvedAt: Option[OffsetDateTime] = None,
     visibility: Visibility = Visibility.Public,
-    fileName: String,
     createForumPost: Boolean = true,
     postId: Option[Int] = None,
     tags: Version.VersionTags
@@ -54,44 +47,14 @@ case class Version(
   //checkArgument(description.exists(_.length <= Page.maxLength), "content too long", "")
 
   /**
-    * Returns the name of this Channel.
-    *
-    * @return Name of channel
-    */
-  def name: String = this.versionString
-
-  /**
     * Returns the base URL for this Version.
     *
     * @return Base URL for version
     */
-  def url(project: Project): String = project.url + "/versions/" + this.versionString
+  def url(project: Project): String = project.url + "/versions/" + this.slug
 
   def reviewer[QOptRet, SRet[_]](view: ModelView[QOptRet, SRet, UserTable, Model[User]]): Option[QOptRet] =
     this.reviewerId.map(view.get)
-
-  /**
-    * Returns this Versions plugin dependencies.
-    *
-    * @return Plugin dependencies
-    */
-  def dependencies: List[Dependency] =
-    dependencyIds.zip(dependencyVersions).map(Dependency.tupled)
-
-  /**
-    * Returns true if this version has a dependency on the specified plugin ID.
-    *
-    * @param pluginId Id to check for
-    * @return         True if has dependency on ID
-    */
-  def hasDependency(pluginId: String): Boolean = this.dependencyIds.contains(pluginId)
-
-  /**
-    * Returns a human readable file size for this Version.
-    *
-    * @return Human readable file size
-    */
-  def humanFileSize: String = FileUtils.formatFileSize(this.fileSize)
 
   def reviewById[F[_]](id: DbRef[Review])(implicit service: ModelService[F]): OptionT[F, Model[Review]] =
     ModelView.now(Review).get(id)
@@ -100,7 +63,6 @@ case class Version(
 object Version extends DefaultModelCompanion[Version, VersionTable](TableQuery[VersionTable]) {
 
   case class VersionTags(
-      usesMixin: Boolean,
       stability: Stability,
       releaseType: Option[ReleaseType],
       channelName: Option[String] = None,

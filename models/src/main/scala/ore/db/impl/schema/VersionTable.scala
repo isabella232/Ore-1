@@ -3,7 +3,6 @@ package ore.db.impl.schema
 import java.time.OffsetDateTime
 
 import ore.db.DbRef
-import ore.db.impl.OrePostgresDriver
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.table.common.{DescriptionColumn, VisibilityColumn}
 import ore.models.project.{Project, ReviewState, TagColor, Version}
@@ -15,26 +14,16 @@ class VersionTable(tag: Tag)
     with DescriptionColumn[Version]
     with VisibilityColumn[Version] {
 
-  implicit private val listOptionStrType: OrePostgresDriver.DriverJdbcType[List[Option[String]]] =
-    new OrePostgresDriver.SimpleArrayJdbcType[String]("text")
-      .mapTo[Option[String]](Option(_), _.orNull)
-      .to(_.toList)
+  def name            = column[String]("name")
+  def slug            = column[String]("slug")
+  def projectId       = column[DbRef[Project]]("project_id")
+  def authorId        = column[DbRef[User]]("author_id")
+  def reviewStatus    = column[ReviewState]("review_state")
+  def reviewerId      = column[DbRef[User]]("reviewer_id")
+  def approvedAt      = column[OffsetDateTime]("approved_at")
+  def createForumPost = column[Boolean]("create_forum_post")
+  def postId          = column[Option[Int]]("post_id")
 
-  def versionString      = column[String]("version_string")
-  def dependencyIds      = column[List[String]]("dependency_ids")
-  def dependencyVersions = column[List[Option[String]]]("dependency_versions")
-  def projectId          = column[DbRef[Project]]("project_id")
-  def fileSize           = column[Long]("file_size")
-  def hash               = column[String]("hash")
-  def authorId           = column[DbRef[User]]("author_id")
-  def reviewStatus       = column[ReviewState]("review_state")
-  def reviewerId         = column[DbRef[User]]("reviewer_id")
-  def approvedAt         = column[OffsetDateTime]("approved_at")
-  def fileName           = column[String]("file_name")
-  def createForumPost    = column[Boolean]("create_forum_post")
-  def postId             = column[Option[Int]]("post_id")
-
-  def usesMixin    = column[Boolean]("uses_mixin")
   def stability    = column[Version.Stability]("stability")
   def releaseType  = column[Version.ReleaseType]("release_type")
   def channelName  = column[String]("legacy_channel_name")
@@ -42,7 +31,6 @@ class VersionTable(tag: Tag)
 
   def tags =
     (
-      usesMixin,
       stability,
       releaseType.?,
       channelName.?,
@@ -55,18 +43,14 @@ class VersionTable(tag: Tag)
       createdAt.?,
       (
         projectId,
-        versionString,
-        dependencyIds,
-        dependencyVersions,
-        fileSize,
-        hash,
+        name,
+        slug,
         authorId.?,
         description.?,
         reviewStatus,
         reviewerId.?,
         approvedAt.?,
         visibility,
-        fileName,
         createForumPost,
         postId,
         tags

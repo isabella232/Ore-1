@@ -11,7 +11,7 @@ import ore.data.user.notification.NotificationType
 import ore.data.{Color, DownloadType, Prompt}
 import ore.db.OreProfile
 import ore.models.Job
-import ore.models.project.{ReviewState, TagColor, Version, Visibility}
+import ore.models.project.{Asset, ReviewState, TagColor, Version, Visibility}
 import ore.models.user.{LoggedActionContext, LoggedActionType}
 import ore.permission.Permission
 import ore.permission.role.{Role, RoleCategory}
@@ -89,6 +89,8 @@ trait OrePostgresDriver
       pgEnumForValueEnum("STABILITY", Version.Stability)
     implicit val releaseTypeTypeMapper: BaseColumnType[Version.ReleaseType] =
       pgEnumForValueEnum("RELEASE_TYPE", Version.ReleaseType)
+    implicit val assetTypeTypeMapper: BaseColumnType[Asset.AssetType] =
+      pgEnumForValueEnum("ASSET_TYPE", Asset.AssetType)
 
     implicit val langTypeMapper: BaseColumnType[Locale] =
       MappedJdbcType.base[Locale, String](_.toLanguageTag, Locale.forLanguageTag)
