@@ -70,7 +70,6 @@ jobs:
         run: |
           cp ore/conf/application.conf.template ore/conf/application.conf
           cp jobs/src/main/resources/application.conf.template jobs/src/main/resources/application.conf
-          cp oreClient/src/main/assets/config.json5.template oreClient/src/main/assets/config.json5
 
       - name: Run compile
         run: sbt "oreAll/compile;ore/test"
