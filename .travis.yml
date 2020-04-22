@@ -2,6 +2,10 @@ dist: xenial
 notifications:
   email: false
 
+branches:
+  only:
+    - production
+
 language: scala
 jdk:
   - openjdk8
