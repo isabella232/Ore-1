@@ -22,7 +22,7 @@ object Asset extends DefaultModelCompanion[Asset, AssetTable](TableQuery[AssetTa
 
   implicit val query: ModelQuery[Asset] = ModelQuery.from(this)
 
-  abstract class AssetType(val value: String) extends StringEnumEntry
+  sealed abstract class AssetType(val value: String) extends StringEnumEntry
   object AssetType extends StringEnum[AssetType] {
     override def values: IndexedSeq[AssetType] = findValues
 

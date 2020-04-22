@@ -43,7 +43,6 @@ object APIV2 {
   //Project
   @SnakeCaseJsonCodec case class Project(
       createdAt: OffsetDateTime,
-      pluginId: String,
       name: String,
       namespace: ProjectNamespace,
       promotedVersions: Seq[PromotedVersion],
@@ -107,17 +106,15 @@ object APIV2 {
   @SnakeCaseJsonCodec case class Version(
       createdAt: OffsetDateTime,
       name: String,
-      dependencies: List[VersionDependency],
+      slug: String,
       visibility: Visibility,
       stats: VersionStatsAll,
-      fileInfo: FileInfo,
       author: Option[String],
       reviewState: ReviewState,
       tags: VersionTags
   )
 
   @SnakeCaseJsonCodec case class VersionTags(
-      mixin: Boolean,
       stability: Stability,
       releaseType: Option[ReleaseType],
       platforms: Seq[VersionPlatform]

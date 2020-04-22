@@ -101,30 +101,30 @@ trait OreRestfulApiV1 extends OreWrites {
 
     for {
       members <- service.runDBIO(getMembers(projectIds).result).map(_.groupBy(_._1.projectId))
-    } yield {
-
-      projects.map {
+      r <- ZIO.foreach(projects) {
         case (p, v, c) =>
-          (
-            p,
-            obj(
-              "pluginId"    -> p.pluginId,
-              "createdAt"   -> p.createdAt.toString,
-              "name"        -> p.name,
-              "owner"       -> p.ownerName,
-              "description" -> p.description,
-              "href"        -> s"/${p.ownerName}/${p.slug}",
-              "members"     -> writeMembers(members.getOrElse(p.id.value, Seq.empty)),
-              "channels"    -> toJson(Version.Stability.values.map(_.value.capitalize)),
-              "recommended" -> toJson(writeVersion(v, p, c, None)),
-              "category"    -> obj("title" -> p.category.title, "icon" -> p.category.icon),
-              "views"       -> 0,
-              "downloads"   -> 0,
-              "stars"       -> 0
+          writeVersion(v, p, c, None).map { recommendedVersion =>
+            (
+              p,
+              obj(
+                "pluginId"    -> p.apiV1Identifier,
+                "createdAt"   -> p.createdAt.toString,
+                "name"        -> p.name,
+                "owner"       -> p.ownerName,
+                "description" -> p.description,
+                "href"        -> s"/${p.ownerName}/${p.slug}",
+                "members"     -> writeMembers(members.getOrElse(p.id.value, Seq.empty)),
+                "channels"    -> toJson(Version.Stability.values.map(_.value.capitalize)),
+                "recommended" -> toJson(recommendedVersion),
+                "category"    -> obj("title" -> p.category.title, "icon" -> p.category.icon),
+                "views"       -> 0,
+                "downloads"   -> 0,
+                "stars"       -> 0
+              )
             )
-          )
+          }
       }
-    }
+    } yield r
   }
 
   def writeVersion(
@@ -132,28 +132,38 @@ trait OreRestfulApiV1 extends OreWrites {
       p: Project,
       c: FakeChannel,
       author: Option[String]
-  ): JsObject = {
-    val dependencies: List[JsObject] = v.dependencies.map { dependency =>
-      obj("pluginId" -> dependency.pluginId, "version" -> dependency.version)
-    }
-    val json = obj(
-      "id"            -> v.id.value,
-      "createdAt"     -> v.createdAt.toString,
-      "name"          -> v.versionString,
-      "dependencies"  -> dependencies,
-      "pluginId"      -> p.pluginId,
-      "channel"       -> toJson(c),
-      "fileSize"      -> v.fileSize,
-      "md5"           -> v.hash,
-      "staffApproved" -> v.reviewState.isChecked,
-      "reviewState"   -> v.reviewState.toString,
-      "href"          -> ("/" + v.url(p)),
-      "tags"          -> JsArray.empty,
-      "downloads"     -> 0,
-      "description"   -> v.description
-    )
+  ): UIO[JsObject] = {
+    val query = for {
+      a <- TableQuery[AssetTable]
+      if a.isMain && a.versionId === v.id.value
+      p <- TableQuery[PluginTable] if a.id === p.assetId
+    } yield (a, p)
 
-    author.fold(json)(a => json + (("author", JsString(a))))
+    service.runDBIO(query.result.head).map {
+      case (asset, plugin) =>
+        val dependencies: List[JsObject] = plugin.dependencyIds.zip(plugin.dependencyVersions).map {
+          case (depId, depVersion) =>
+            obj("pluginId" -> depId, "version" -> depVersion)
+        }
+        val json = obj(
+          "id"            -> v.id.value,
+          "createdAt"     -> v.createdAt.toString,
+          "name"          -> v.slug,
+          "dependencies"  -> dependencies,
+          "pluginId"      -> p.apiV1Identifier,
+          "channel"       -> toJson(c),
+          "fileSize"      -> asset.filesize,
+          "md5"           -> asset.hash,
+          "staffApproved" -> v.reviewState.isChecked,
+          "reviewState"   -> v.reviewState.toString,
+          "href"          -> ("/" + v.url(p)),
+          "tags"          -> JsArray.empty,
+          "downloads"     -> 0,
+          "description"   -> v.description
+        )
+
+        author.fold(json)(a => json + (("author", JsString(a))))
+    }
   }
 
   private def queryProjectRV = {
@@ -161,7 +171,7 @@ trait OreRestfulApiV1 extends OreWrites {
       hp <- TableQuery[ApiV1ProjectsTable]
       p  <- TableQuery[ProjectTable] if hp.id === p.id
       v  <- TableQuery[VersionTable]
-      if p.id === v.projectId && v.versionString === ((hp.promotedVersions ~> 0) +>> "version_string")
+      if p.id === v.projectId && v.name === ((hp.promotedVersions ~> 0) +>> "version_string")
       if Visibility.isPublicFilter[ProjectTable](p)
     } yield (p, v)
   }
@@ -174,7 +184,7 @@ trait OreRestfulApiV1 extends OreWrites {
     */
   def getProject(pluginId: String): UIO[Option[JsValue]] = {
     val query = queryProjectRV.filter {
-      case (p, _) => p.pluginId === pluginId
+      case (p, _) => p.apiV1Identifier === pluginId
     }
     for {
       project <- service.runDBIO(query.result.headOption)
@@ -211,7 +221,7 @@ trait OreRestfulApiV1 extends OreWrites {
         }
       }
       .getOrElse(queryVersions(onlyPublic))
-      .filter { case (p, _, _, _) => p.pluginId.toLowerCase === pluginId.toLowerCase }
+      .filter { case (p, _, _, _) => p.apiV1Identifier.toLowerCase === pluginId.toLowerCase }
       .sortBy { case (_, v, _, _) => v.createdAt.desc }
 
     val maxLoad = this.config.ore.projects.initVersionLoad
@@ -221,13 +231,11 @@ trait OreRestfulApiV1 extends OreWrites {
 
     for {
       data <- service.runDBIO(limited.result) // Get Project Version Channel and AuthorName
-    } yield {
-      val list = data.map {
+      list <- ZIO.foreach(data) {
         case (p, v, _, uName) =>
           writeVersion(v, p, FakeChannel.fromVersion(v), uName)
       }
-      toJson(list)
-    }
+    } yield toJson(list)
   }
 
   /**
@@ -241,18 +249,16 @@ trait OreRestfulApiV1 extends OreWrites {
 
     val filtered = queryVersions().filter {
       case (p, v, _, _) =>
-        p.pluginId.toLowerCase === pluginId.toLowerCase &&
-          v.versionString.toLowerCase === name.toLowerCase
+        p.apiV1Identifier.toLowerCase === pluginId.toLowerCase &&
+          v.slug.toLowerCase === name.toLowerCase
     }
 
     for {
       data <- service.runDBIO(filtered.result.headOption) // Get Project Version Channel and AuthorName
-    } yield {
-      data.map {
-        case (p, v, _, uName) =>
-          writeVersion(v, p, FakeChannel.fromVersion(v), uName)
+      r <- data.fold[UIO[Option[JsValue]]](UIO.succeed(None)) {
+        case (p, v, _, uName) => writeVersion(v, p, FakeChannel.fromVersion(v), uName).map(Some.apply)
       }
-    }
+    } yield r
   }
 
   private def queryVersions(onlyPublic: Boolean = true) =
@@ -275,7 +281,7 @@ trait OreRestfulApiV1 extends OreWrites {
       pluginId: String,
       parentId: Option[DbRef[Page]]
   )(implicit projectBase: ProjectBase[UIO]): OptionT[UIO, JsValue] = {
-    OptionT(projectBase.withPluginId(pluginId)).semiflatMap { project =>
+    OptionT(projectBase.withApiV1Identifier(pluginId)).semiflatMap { project =>
       for {
         pages <- service.runDBIO(project.pages(ModelView.raw(Page)).sortBy(_.name).result)
       } yield {
@@ -301,7 +307,7 @@ trait OreRestfulApiV1 extends OreWrites {
     for {
       s <- TableQuery[ProjectStarsTable] if s.userId.inSetBind(users.map(_.id.value))
       p <- TableQuery[ProjectTable] if s.projectId === p.id
-    } yield (s.userId, p.pluginId)
+    } yield (s.userId, p.apiV1Identifier)
 
   /**
     * Returns a Json value of Users.
@@ -378,7 +384,7 @@ trait OreRestfulApiV1 extends OreWrites {
       pluginId: String,
       version: String
   )(implicit projectBase: ProjectBase[UIO]): OptionT[UIO, JsValue] =
-    OptionT(projectBase.withPluginId(pluginId)).map(_ => JsArray.empty)
+    OptionT(projectBase.withApiV1Identifier(pluginId)).map(_ => JsArray.empty)
 
   /**
     * Get the Tag Color information from an ID

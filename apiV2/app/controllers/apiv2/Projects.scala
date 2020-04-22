@@ -152,7 +152,6 @@ class Projects(
           Created(
             APIV2.Project(
               project.createdAt,
-              project.pluginId,
               project.name,
               APIV2.ProjectNamespace(project.ownerName, project.slug),
               Nil,
@@ -227,7 +226,7 @@ class Projects(
 
             val renameOp = edits.name.fold(ZIO.unit: ZIO[Any, Result, Unit]) { newName =>
               val doRename = projects
-                .withPluginId(pluginId)
+                .withApiV1Identifier(pluginId)
                 .get
                 .orDieWith(_ => new Exception("impossible"))
                 .flatMap(projects.rename(_, newName).absolve)
@@ -238,7 +237,7 @@ class Projects(
 
             val transferOp = edits.namespace.owner.fold(ZIO.unit: ZIO[Any, Result, Unit]) { newOwner =>
               val doTransfer = for {
-                project <- projects.withPluginId(pluginId).someOrFail(NotFound)
+                project <- projects.withApiV1Identifier(pluginId).someOrFail(NotFound)
                 user    <- users.withName(newOwner)(OreMDC.NoMDC).value.someOrFail(NotFound)
                 userRole <- project
                   .memberships[Task, ProjectUserRole, ProjectRoleTable]
@@ -310,7 +309,7 @@ class Projects(
     ApiAction(Permission.ManageProjectMembers, APIScope.ProjectScope(pluginId))
       .asyncF(parseCirce.decodeJson[List[Projects.ProjectMemberUpdate]]) { implicit r =>
         for {
-          project <- projects.withPluginId(pluginId).someOrFail(NotFound)
+          project <- projects.withApiV1Identifier(pluginId).someOrFail(NotFound)
           resolvedUsers <- ZIO.foreach(r.body) { m =>
             users.withName(m.user)(OreMDC.NoMDC).tupleLeft(m.role).value.someOrFail(NotFound)
           }
@@ -374,7 +373,7 @@ class Projects(
         val newVisibility = request.body.visibility
         val changerId     = request.user.get.id
 
-        projects.withPluginId(pluginId).someOrFail(NotFound).flatMap { project =>
+        projects.withApiV1Identifier(pluginId).someOrFail(NotFound).flatMap { project =>
           val forumVisbility =
             if (Visibility.isPublic(newVisibility) != Visibility.isPublic(project.visibility))
               service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob).unit
@@ -416,7 +415,7 @@ class Projects(
   def projectData(pluginId: String): Action[AnyContent] =
     ApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF { implicit r =>
       for {
-        project <- projects.withPluginId(pluginId).get.orElseFail(NotFound)
+        project <- projects.withApiV1Identifier(pluginId).get.orElseFail(NotFound)
         data    <- ProjectData.of[ZIO[Blocking, Throwable, *]](project).orDie
       } yield Ok(
         Json.obj(
@@ -445,7 +444,7 @@ class Projects(
   def hardDeleteProject(pluginId: String): Action[AnyContent] =
     ApiAction(Permission.HardDeleteProject, APIScope.ProjectScope(pluginId)).asyncF { implicit r =>
       projects
-        .withPluginId(pluginId)
+        .withApiV1Identifier(pluginId)
         .someOrFail(NotFound)
         .flatMap(doHardDeleteProject(_))
         .as(NoContent)

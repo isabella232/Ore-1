@@ -211,7 +211,7 @@ final class ApiV1Controller(
           val query = Query.apply(
             (
               queryApiKey(formData.apiKey, project.id),
-              project.versions(ModelView.later(Version)).exists(_.versionString === name)
+              project.versions(ModelView.later(Version)).exists(_.slug === name)
             )
           )
 
@@ -247,17 +247,16 @@ final class ApiV1Controller(
                 BadRequest(JsArray(es.toList.view.zipWithIndex.map(t => error(t._2.toString, t._1)).toSeq))
               }
             }
-            .map {
+            .semiflatMap {
               case (newProject, newVersion, _) =>
-                Created(
-                  api.writeVersion(
-                    newVersion,
-                    newProject,
-                    FakeChannel("Channel", TagColor.Green, isNonReviewed = false),
-                    None
-                  )
+                api.writeVersion(
+                  newVersion,
+                  newProject,
+                  FakeChannel("Channel", TagColor.Green, isNonReviewed = false),
+                  None
                 )
             }
+            .map(res => Created(res))
         }
         .merge
     }

@@ -42,7 +42,7 @@ abstract class OreBaseController(implicit val oreComponents: OreControllerCompon
     projects.withSlug(author, slug).get.orElseFail(notFound)
 
   private def versionFindFunc(versionString: String, canSeeHiden: Boolean): VersionTable => Rep[Boolean] = v => {
-    val versionMatches = v.versionString.toLowerCase === versionString.toLowerCase
+    val versionMatches = v.slug.toLowerCase === versionString.toLowerCase
     val isVisible      = if (canSeeHiden) true.bind else v.visibility === (Visibility.Public: Visibility)
     versionMatches && isVisible
   }

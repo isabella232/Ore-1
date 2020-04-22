@@ -306,7 +306,7 @@ trait Actions extends Calls with ActionHelpers { self =>
     def executionContext: ExecutionContext = ec
 
     def refine[A](request: OreRequest[A]): Future[Either[Result, ProjectRequest[A]]] =
-      maybeProjectRequest(request, projects.withPluginId(pluginId).get)
+      maybeProjectRequest(request, projects.withApiV1Identifier(pluginId).get)
   }
 
   private def maybeProjectRequest[A](
@@ -395,7 +395,8 @@ trait Actions extends Calls with ActionHelpers { self =>
 
   def authedProjectActionById(pluginId: String)(
       implicit ec: ExecutionContext
-  ): ActionRefiner[AuthRequest, AuthedProjectRequest] = authedProjectActionImpl(projects.withPluginId(pluginId).get)
+  ): ActionRefiner[AuthRequest, AuthedProjectRequest] =
+    authedProjectActionImpl(projects.withApiV1Identifier(pluginId).get)
 
   def organizationAction(organization: String)(
       implicit ec: ExecutionContext

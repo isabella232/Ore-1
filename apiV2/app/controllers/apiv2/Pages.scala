@@ -79,7 +79,7 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
               insertNewPage(projectId, Some(parentId))
           }
         } else {
-          projects.withPluginId(pluginId).get.orElseFail(NotFound).map(_.id).flatMap(insertNewPage(_, None))
+          projects.withApiV1Identifier(pluginId).get.orElseFail(NotFound).map(_.id).flatMap(insertNewPage(_, None))
         }
 
       if (page == Page.homeName && content.fold(0)(_.length) < Page.minLength)

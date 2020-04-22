@@ -28,7 +28,8 @@ class PluginFileWithData(val path: Path, val user: Model[User], val data: Plugin
   lazy val dependencyIds: Seq[String]              = data.dependencies.map(_.pluginId)
   lazy val dependencyVersions: Seq[Option[String]] = data.dependencies.map(_.version)
 
-  lazy val versionString: String = StringUtils.slugify(data.version.get)
+  lazy val versionName: String = StringUtils.compact(data.version.get)
+  lazy val versionSlug: String = StringUtils.slugify(data.version.get)
 
   lazy val (platformWarnings: List[String], versionedPlatforms: List[VersionedPlatform]) =
     Platform.createVersionedPlatforms(dependencyIds, dependencyVersions).run
@@ -43,18 +44,13 @@ class PluginFileWithData(val path: Path, val user: Model[User], val data: Plugin
       stability: Version.Stability,
       releaseType: Option[Version.ReleaseType]
   ): Version = Version(
+    name = versionName,
+    slug = versionSlug,
     projectId = projectId,
-    versionString = versionString,
-    dependencyIds = dependencyIds.toList,
-    dependencyVersions = dependencyVersions.toList,
-    fileSize = fileSize,
-    hash = md5,
     authorId = Some(user.id),
     description = description,
-    fileName = fileName,
     createForumPost = createForumPost,
     tags = Version.VersionTags(
-      usesMixin = data.containsMixins,
       stability = stability,
       releaseType = releaseType
     )

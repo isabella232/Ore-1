@@ -225,7 +225,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
 
   private def sendVersion(project: Project, version: Model[Version], token: Option[String])(
       implicit req: ProjectRequest[_]
-  ): UIO[Result] = {
+  ): IO[Result, Result] = {
     checkConfirmation(version, token).flatMap { passed =>
       if (passed)
         _sendVersion(project, version)
@@ -276,16 +276,25 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
     }
   }
 
-  private def _sendVersion(project: Project, version: Model[Version])(implicit req: ProjectRequest[_]): UIO[Result] =
-    this.stats.versionDownloaded(version) {
-      UIO.succeed {
-        Ok.sendPath(
-          projectFiles
-            .getVersionDir(project.ownerName, project.name, version.name)
-            .resolve(version.fileName)
-        )
+  private def _sendVersion(project: Project, version: Model[Version])(
+      implicit req: ProjectRequest[_]
+  ): IO[Result, Result] =
+    ModelView
+      .now(Asset)
+      .find(a => a.isMain && a.versionId === version.id.value)
+      .toZIO
+      .orElseFail(NotFound)
+      .flatMap { asset =>
+        this.stats.versionDownloaded(version) {
+          UIO.succeed {
+            Ok.sendPath(
+              projectFiles
+                .getVersionDir(project.ownerName, project.name, version.name)
+                .resolve(asset.filename)
+            )
+          }
+        }
       }
-    }
 
   private val MultipleChoices = new Status(MULTIPLE_CHOICES)
 
@@ -366,7 +375,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
                     "post" := self
                       .confirmDownload(author, slug, target, Some(dlType.value), Some(token), None)
                       .absoluteURL(),
-                    "url" := self.downloadJarById(project.pluginId, version.name, Some(token)).absoluteURL(),
+                    "url" := self.downloadJarById(project.apiV1Identifier, version.name, Some(token)).absoluteURL(),
                     "curl" := curlInstruction,
                     "token" := token
                   )
@@ -505,7 +514,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
       p  <- TableQuery[ProjectTable] if hp.id === p.id
       v  <- TableQuery[VersionTable]
       if hp.id === id
-      if p.id === v.projectId && v.versionString === ((hp.promotedVersions ~> 0) +>> "version_string")
+      if p.id === v.projectId && v.name === ((hp.promotedVersions ~> 0) +>> "version_string")
     } yield v
 
   /**
@@ -548,7 +557,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
             )
           )
         } else {
-          val fileName = version.fileName
+          val fileName = version.slug
           val path     = projectFiles.getVersionDir(project.ownerName, project.name, version.name).resolve(fileName)
           project.user[Task].orDie.flatMap { projectOwner =>
             import cats.tagless._

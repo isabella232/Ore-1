@@ -37,7 +37,6 @@ import slick.lifted.{Rep, TableQuery}
   *
   * <p>Note: As a general rule, do not handle actions / results in model classes</p>
   *
-  * @param pluginId               Plugin ID
   * @param ownerName              The owner Author for this project
   * @param ownerId                User ID of Project owner
   * @param name                   Name of plugin
@@ -49,7 +48,7 @@ import slick.lifted.{Rep, TableQuery}
   * @param notes                  JSON notes
   */
 case class Project(
-    pluginId: String,
+    apiV1Identifier: String,
     ownerName: String,
     ownerId: DbRef[User],
     name: String,

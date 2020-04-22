@@ -124,7 +124,7 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
       service
         .runDBIO(
           TableQuery[ProjectTable]
-            .filter(_.pluginId === pluginId)
+            .filter(_.apiV1Identifier === pluginId)
             .map(_.id)
             .result
             .headOption

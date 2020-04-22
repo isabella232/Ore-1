@@ -23,6 +23,6 @@ case class Dependency(pluginId: String, version: Option[String]) {
     * @return Project if dependency is on Ore, empty otherwise.
     */
   def project[F[_]: ModelService]: OptionT[F, Model[Project]] =
-    ModelView.now(Project).find(_.pluginId === pluginId)
+    ModelView.now(Project).find(_.apiV1Identifier === pluginId)
 
 }

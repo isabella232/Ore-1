@@ -147,8 +147,8 @@ final class Application(forms: OreForms)(
       (
         service.runDbCon(AppQueries.getUnhealtyProjects(config.ore.projects.staleAge).to[Vector]),
         service.runDbCon(AppQueries.erroredJobs.to[Vector]),
-        projects.missingFile.flatMap(versions => versions.toVector.traverse(v => v.project[Task].orDie.tupleLeft(v)))
-      ).parMapN { (unhealtyProjects, erroredJobs, missingFileProjects) =>
+        projects.missingFile
+      ).parMapN { (unhealtyProjects, erroredJobs, missingFiles) =>
         val noTopicProjects = unhealtyProjects.filter(p => p.topicId.isEmpty || p.postId.isEmpty)
         val staleProjects = unhealtyProjects
           .filter(_.lastUpdated > new Timestamp(new Date().getTime - config.ore.projects.staleAge.toMillis))
@@ -158,7 +158,7 @@ final class Application(forms: OreForms)(
             noTopicProjects,
             staleProjects,
             notPublic,
-            Model.unwrapNested(missingFileProjects),
+            missingFiles,
             erroredJobs
           )
         )

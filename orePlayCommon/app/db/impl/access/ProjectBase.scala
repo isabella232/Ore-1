@@ -6,7 +6,7 @@ import db.impl.query.SharedQueries
 import ore.OreConfig
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.schema.{PageTable, ProjectTable, VersionTable}
+import ore.db.impl.schema.{AssetTable, PageTable, ProjectTable, VersionTable}
 import ore.db.{DbRef, Model, ModelService}
 import ore.member.Joinable
 import ore.models.Job
@@ -31,7 +31,7 @@ import zio.Task
 @autoFunctorK
 trait ProjectBase[+F[_]] {
 
-  def missingFile: F[Seq[Model[Version]]]
+  def missingFile: F[Seq[(String, String, String, String)]]
 
   /**
     * Returns the Project with the specified owner name and name.
@@ -57,7 +57,7 @@ trait ProjectBase[+F[_]] {
     * @param pluginId Plugin ID
     * @return         Project if found, None otherwise
     */
-  def withPluginId(pluginId: String): F[Option[Model[Project]]]
+  def withApiV1Identifier(pluginId: String): F[Option[Model[Project]]]
 
   /**
     * Returns true if the Project's desired slug is available.
@@ -114,23 +114,22 @@ object ProjectBase {
       projectJoinable: Joinable[F, Project]
   ) extends ProjectBase[F] {
 
-    def missingFile: F[Seq[Model[Version]]] = {
+    def missingFile: F[Seq[(String, String, String, String)]] = {
       def allVersions =
         for {
-          v <- TableQuery[VersionTable]
+          a <- TableQuery[AssetTable]
+          v <- TableQuery[VersionTable] if a.versionId === v.id
           p <- TableQuery[ProjectTable] if v.projectId === p.id
-        } yield (p.ownerName, p.name, v)
-
-      println(s"Foobar: ${allVersions.result.statements.toVector}")
+        } yield (p.ownerName, p.name, v.name, a.filename)
 
       service.runDBIO(allVersions.result).flatMap { versions =>
         fileIO
           .traverseLimited(versions.toVector) {
-            case t @ (ownerNamer, name, version) =>
+            case t @ (ownerNamer, projectName, versionName, fileName) =>
               val res = F
                 .attempt(
-                  F.delay(this.fileManager.getVersionDir(ownerNamer, name, version.name))
-                    .flatMap(versionDir => fileIO.notExists(versionDir.resolve(version.fileName)))
+                  F.delay(this.fileManager.getVersionDir(ownerNamer, projectName, versionName))
+                    .flatMap(versionDir => fileIO.notExists(versionDir.resolve(fileName)))
                 )
                 .map {
                   case Left(_)      => false //Invalid file name
@@ -141,7 +140,7 @@ object ProjectBase {
           }
           .map {
             _.collect {
-              case ((_, _, v), true) => v
+              case (t, true) => t
             }
           }
       }
@@ -159,8 +158,8 @@ object ProjectBase {
         .find(p => p.ownerName.toLowerCase === owner.toLowerCase && p.slug.toLowerCase === slug.toLowerCase)
         .value
 
-    def withPluginId(pluginId: String): F[Option[Model[Project]]] =
-      ModelView.now(Project).find(equalsIgnoreCase(_.pluginId, pluginId)).value
+    def withApiV1Identifier(pluginId: String): F[Option[Model[Project]]] =
+      ModelView.now(Project).find(equalsIgnoreCase(_.apiV1Identifier, pluginId)).value
 
     def isNamespaceAvailable(owner: String, slug: String): F[Boolean] =
       withSlug(owner, slug).map(_.isEmpty)

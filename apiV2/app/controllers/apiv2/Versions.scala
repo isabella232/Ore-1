@@ -206,14 +206,14 @@ class Versions(
       }
     }
 
-  def showVersionChangelog(pluginId: String, name: String): Action[AnyContent] =
+  def showVersionChangelog(pluginId: String, slug: String): Action[AnyContent] =
     CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF {
       service
         .runDBIO(
           TableQuery[ProjectTable]
             .join(TableQuery[VersionTable])
             .on(_.id === _.projectId)
-            .filter(t => t._1.pluginId === pluginId && t._2.versionString === name)
+            .filter(t => t._1.apiV1Identifier === pluginId && t._2.slug === slug)
             .map(_._2.description)
             .result
             .headOption
@@ -221,12 +221,12 @@ class Versions(
         .map(_.fold(NotFound: Result)(a => Ok(APIV2.VersionChangelog(a))))
     }
 
-  def updateChangelog(pluginId: String, name: String): Action[APIV2.VersionChangelog] =
+  def updateChangelog(pluginId: String, slug: String): Action[APIV2.VersionChangelog] =
     ApiAction(Permission.EditVersion, APIScope.ProjectScope(pluginId))
       .asyncF(parseCirce.decodeJson[APIV2.VersionChangelog]) { implicit request =>
         for {
-          project <- projects.withPluginId(pluginId).someOrFail(NotFound)
-          version <- project.versions(ModelView.now(Version)).find(_.versionString === name).value.someOrFail(NotFound)
+          project <- projects.withApiV1Identifier(pluginId).someOrFail(NotFound)
+          version <- project.versions(ModelView.now(Version)).find(_.slug === slug).value.someOrFail(NotFound)
           oldDescription = version.description.getOrElse("")
           newDescription = request.body.changelog.trim
           _ <- if (newDescription.length < Page.maxLength) ZIO.unit
@@ -287,7 +287,7 @@ class Versions(
 
     for {
       user    <- ZIO.fromOption(request.user).orElseFail(BadRequest(ApiError("No user found for session")))
-      project <- projects.withPluginId(pluginId).get.orElseFail(NotFound)
+      project <- projects.withApiV1Identifier(pluginId).get.orElseFail(NotFound)
       file    <- fileF
       pluginFile <- factory
         .collectErrorsForVersionUpload(PluginUpload(file.ref, file.filename), user, project)
@@ -307,17 +307,12 @@ class Versions(
         } yield {
           val apiVersion = APIV2QueryVersion(
             OffsetDateTime.now(),
-            pluginFile.versionString,
-            pluginFile.dependencyIds.toList,
-            pluginFile.dependencyVersions.toList,
+            pluginFile.versionName,
+            pluginFile.versionSlug,
             Visibility.Public,
             0,
-            pluginFile.fileSize,
-            pluginFile.md5,
-            pluginFile.fileName,
             Some(user.name),
             ReviewState.Unreviewed,
-            pluginFile.data.containsMixins,
             Version.Stability.Stable,
             None,
             pluginFile.versionedPlatforms.map(_.id),
@@ -376,17 +371,12 @@ class Versions(
 
           val apiVersion = APIV2QueryVersion(
             version.createdAt,
-            version.versionString,
-            version.dependencyIds,
-            version.dependencyVersions,
+            version.name,
+            version.slug,
             version.visibility,
             0,
-            version.fileSize,
-            version.hash,
-            version.fileName,
             Some(user.name),
             version.reviewState,
-            version.tags.usesMixin,
             version.tags.stability,
             version.tags.releaseType,
             platforms.map(_.platform).toList,

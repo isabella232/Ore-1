@@ -7,7 +7,7 @@ import db.impl.access.ProjectBase
 import ore.data.user.notification.NotificationType
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.schema.VersionTable
+import ore.db.impl.schema.{AssetTable, VersionTable}
 import ore.db.{DbRef, Model, ModelService}
 import ore.member.MembershipDossier
 import ore.models.{Job, JobInfo}
@@ -98,7 +98,7 @@ trait ProjectFactory {
     */
   private def versionExists(projectId: DbRef[Project], hash: String, versionString: String): UIO[Boolean] = {
     val hashExistsBaseQuery = for {
-      v <- TableQuery[VersionTable]
+      v <- TableQuery[AssetTable]
       if v.projectId === projectId
       if v.hash === hash
     } yield v.id
@@ -112,8 +112,8 @@ trait ProjectFactory {
         .getOrElseF(ZIO.dieMessage(s"No project found for id $projectId"))
       versionExistsQuery = project
         .versions(ModelView.later(Version))
-        .exists(_.versionString.toLowerCase === versionString.toLowerCase)
-      res <- service.runDBIO(Query((hashExistsQuery, versionExistsQuery)).map(t => t._1 && t._2).result.head)
+        .exists(_.slug.toLowerCase === versionString.toLowerCase)
+      res <- service.runDBIO(Query((hashExistsQuery, versionExistsQuery)).map(t => t._1 || t._2).result.head)
     } yield res
   }
 
@@ -123,11 +123,9 @@ trait ProjectFactory {
     for {
       _ <- ZIO.fromOption(hasUserUploadError(uploader)).flip
       plugin <- processPluginUpload(uploadData, uploader)
-        .ensure("error.version.invalidPluginId")(_.data.id.contains(project.pluginId))
         .ensure("error.version.illegalVersion")(!_.data.version.contains("recommended"))
-      _             <- ZIO.unit.filterOrFail(_ => plugin.data.id.contains(project.pluginId))("error.plugin.invalidPluginId")
       _             <- ZIO.unit.filterOrFail(_ => plugin.data.version.isDefined)("error.plugin.noVersion")
-      versionExists <- versionExists(project.id, plugin.md5, plugin.versionString)
+      versionExists <- versionExists(project.id, plugin.md5, plugin.versionSlug)
       _ <- {
         if (versionExists && this.config.ore.projects.fileValidate) ZIO.fail("error.version.duplicate")
         else ZIO.unit
@@ -162,7 +160,7 @@ trait ProjectFactory {
     val name = template.name
     val slug = slugify(name)
     val project = Project(
-      pluginId = template.pluginId,
+      apiV1Identifier = template.apiV1Identifier,
       ownerId = ownerId,
       ownerName = ownerName,
       name = name,
@@ -176,13 +174,13 @@ trait ProjectFactory {
 
     for {
       t <- (
-        this.projects.withPluginId(template.pluginId).map(_.isDefined),
+        this.projects.withApiV1Identifier(template.apiV1Identifier).map(_.isDefined),
         this.projects.exists(ownerName, name),
         this.projects.isNamespaceAvailable(ownerName, slug)
       ).parTupled
       (existsId, existsName, available) = t
       _          <- cond(!existsName, "project with that name already exists")
-      _          <- cond(!existsId, "project with that plugin id already exists")
+      _          <- cond(!existsId, "project with that api identifier already exists")
       _          <- cond(available, "slug not available")
       _          <- cond(config.isValidProjectName(name), "invalid name")
       newProject <- service.insert(project)

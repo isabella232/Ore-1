@@ -142,6 +142,15 @@ SELECT p.id,
                      LIMIT 5)) AS promoted_versions
 FROM projects p;
 
+SELECT dep.dep_id, dep.dep_ver, dep_p.*
+FROM project_version_assets pva
+         JOIN project_version_plugins pvp ON pva.id = pvp.asset_id,
+     unnest(pvp.dependency_ids, pvp.dependency_versions) AS dep(dep_id, dep_ver)
+         LEFT JOIN project_version_plugins dep_pvp ON dep.dep_id = dep_pvp.pluginid
+         LEFT JOIN project_version_assets dep_pva ON dep_pvp.asset_id = dep_pva.id
+         LEFT JOIN projects dep_p ON dep_pva.project_id = dep_p.id
+WHERE pva.version_id = :vid;
+
 # --- !Downs
 
 DROP MATERIALIZED VIEW promoted_versions;

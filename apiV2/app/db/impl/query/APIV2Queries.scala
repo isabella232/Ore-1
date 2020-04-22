@@ -117,7 +117,6 @@ object APIV2Queries extends DoobieOreProtocol {
 
     val base =
       sql"""|SELECT p.created_at,
-            |       p.plugin_id,
             |       p.name,
             |       p.owner_name,
             |       p.slug,
@@ -398,17 +397,12 @@ object APIV2Queries extends DoobieOreProtocol {
   ): Fragment = {
     val base =
       sql"""|SELECT pv.created_at,
-            |       pv.version_string,
-            |       pv.dependency_ids,
-            |       pv.dependency_versions,
+            |       pv.name,
+            |       pv.slug,
             |       pv.visibility,
             |       coalesce((SELECT sum(pvd.downloads) FROM project_versions_downloads pvd WHERE p.id = pvd.project_id AND pv.id = pvd.version_id), 0),
-            |       pv.file_size,
-            |       pv.hash,
-            |       pv.file_name,
             |       u.name,
             |       pv.review_state,
-            |       pv.uses_mixin,
             |       pv.stability,
             |       pv.release_type,
             |       coalesce(array_agg(pvp.platform) FILTER ( WHERE pvp.platform IS NOT NULL ), ARRAY []::TEXT[]),

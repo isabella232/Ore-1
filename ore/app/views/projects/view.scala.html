@@ -18,7 +18,7 @@ Base template for Project overview.
     <script @CSPNonce.attr>
             window.PROJECT_OWNER = "@p.project.ownerName";
             window.PROJECT_SLUG = "@p.project.slug";
-            window.PROJECT_ID = "@p.project.pluginId";
+            window.PROJECT_ID = "@p.project.apiV1Identifier";
     </script>
     <script src="@assetsFinder.path("lib/ore-client/project.js")"></script>
 }

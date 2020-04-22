@@ -156,7 +156,7 @@ final class Reviews(forms: OreForms)(
           Notification(
             userId = userId,
             notificationType = NotificationType.VersionReviewed,
-            messageArgs = NonEmptyList.of("notification.project.reviewed", project.slug, version.versionString)
+            messageArgs = NonEmptyList.of("notification.project.reviewed", project.slug, version.name)
           )
         }
       }

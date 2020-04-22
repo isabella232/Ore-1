@@ -24,7 +24,7 @@
     <div class="row">
         <div class="col-md-12  header-flags">
             <div class="clearfix">
-                <h1 class="pull-left">@project.name <i>@version.versionString</i></h1>
+                <h1 class="pull-left">@project.name <i>@version.name</i></h1>
             </div>
             <p class="user date pull-left">
                 <a href="@routes.Users.showProjects(project.ownerName)">
@@ -37,7 +37,7 @@
                     <span class="btn-group-sm">
                         <a href="#" class="btn btn-info btn-skip-review">@if(version.reviewState != ReviewState.Backlog) { Remove from queue } else { Add to queue }</a>
                         <a href="@projectRoutes.show(project.ownerName, project.slug, "")" class="btn btn-info">Project Page</a>
-                        <a href="@versionRoutes.downloadJar(project.ownerName, project.slug, version.versionString, None)" class="btn btn-info">Download File</a>
+                        <a href="@versionRoutes.downloadJar(project.ownerName, project.slug, version.slug, None)" class="btn btn-info">Download File</a>
                     </span>
                     <span class="btn-group-sm">
                     @if(mostRecentUnfinishedReview.isDefined) {

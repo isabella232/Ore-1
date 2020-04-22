@@ -15,7 +15,7 @@ import ore.data.Prompt
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.query.UserQueries
-import ore.db.impl.schema.{ApiKeyTable, PageTable, ProjectTable, UserTable, VersionTable}
+import ore.db.impl.schema.{ApiKeyTable, AssetTable, PageTable, ProjectTable, UserTable, VersionTable}
 import ore.db.{DbRef, Model}
 import ore.models.user.notification.{InviteFilter, NotificationFilter}
 import ore.models.user.{FakeUser, _}
@@ -360,7 +360,7 @@ class Users(
       pv <- TableQuery[VersionTable] if p.id === pv.projectId
       _ = use(pv)
       if u.name === user
-    } yield (p.slug, pv.versionString)
+    } yield (p.slug, pv.slug)
 
     val pageQuery = for {
       u  <- TableQuery[UserTable]

@@ -7,7 +7,7 @@
 @(noTopicProjects: Seq[UnhealtyProject],
   staleProjects: Seq[UnhealtyProject],
   notPublicProjects: Seq[UnhealtyProject],
-  missingFileProjects: Seq[(Version, Project)],
+  missingFiles: Seq[(String, String, String, String)],
   erroredJobs: Seq[Job])(implicit request: OreRequest[_], messages: Messages, config: OreConfig, flash: Flash, assetsFinder: AssetsFinder)
 
 @projectRoutes = @{controllers.project.routes.Projects}
@@ -105,10 +105,10 @@
                     <h4 class="panel-title">@messages("admin.health.missingFile")</h4>
                 </div>
                 <div class="panel-body list-group list-group-health">
-                @missingFileProjects.map { case (version, project) =>
+                @missingFiles.map { case (owner, project, version, asset) =>
                 <div class="list-group-item">
-                    <a href="@Calls.showVersion(project.ownerName, project.slug, version.name)">
-                        <strong>@project.namespace/@version.name</strong>
+                    <a href="@Calls.showVersion(owner, project, version)">
+                        <strong>@project/@owner/@version/@asset</strong>
                 </a>
                 </div>
                 }
