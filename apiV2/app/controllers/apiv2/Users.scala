@@ -20,8 +20,8 @@ import enumeratum.values.{StringEnum, StringEnumEntry}
 import io.circe._
 import io.circe.derivation.annotations.SnakeCaseJsonCodec
 import io.circe.syntax._
-import zio.interop.catz._
 import zio.ZIO
+import zio.interop.catz._
 
 class Users(
     val errorHandler: HttpErrorHandler,
@@ -39,7 +39,7 @@ class Users(
       sortDescending: Boolean,
       limit: Option[Long],
       offset: Long
-  ): Action[AnyContent] = ApiAction(Permission.ViewPublicInfo, APIScope.GlobalScope).asyncF { r =>
+  ): Action[AnyContent] = ApiAction(Permission.ViewPublicInfo, APIScope.GlobalScope).asyncF {
     val realLimit  = limitOrDefault(limit, config.ore.users.authorPageSize)
     val realOffset = offsetOrZero(offset)
 
