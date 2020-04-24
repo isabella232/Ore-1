@@ -1,11 +1,15 @@
 {
+  alwaysTryLogin: true,
   app: {
-    baseUrl: "localhost:9000"
+    baseUrl: "http://localhost:9000"
   },
   ore: {
     projects: {
       maxDescLen: 120,
       maxNameLen: 25
+    },
+    users: {
+      maxTaglineLen: 100
     }
   },
   sponge: {

@@ -51,7 +51,6 @@ final class Application(forms: OreForms)(
   def javascriptRoutes: Action[AnyContent] = Action { implicit request =>
     Ok(
       JavaScriptReverseRouter("jsRoutes")(
-        controllers.project.routes.javascript.Projects.show,
         controllers.project.routes.javascript.Projects.showFlags,
         controllers.project.routes.javascript.Projects.showNotes,
         controllers.project.routes.javascript.Projects.showStargazers,
@@ -60,11 +59,26 @@ final class Application(forms: OreForms)(
         controllers.project.routes.javascript.Projects.setWatching,
         controllers.project.routes.javascript.Projects.flag,
         controllers.project.routes.javascript.Versions.download,
-        controllers.routes.javascript.Users.showProjects,
+        controllers.routes.javascript.Users.editApiKeys,
         controllers.routes.javascript.Users.logIn,
+        controllers.routes.javascript.Users.signUp,
+        controllers.routes.javascript.Users.logOut,
+        controllers.routes.javascript.Users.showAuthors,
+        controllers.routes.javascript.Users.showStaff,
+        controllers.routes.javascript.Users.showNotifications,
+        controllers.routes.javascript.Users.saveTagline,
         controllers.routes.javascript.Application.showLog,
         controllers.routes.javascript.Application.linkOut,
-        controllers.routes.javascript.Reviews.showReviews
+        controllers.routes.javascript.Application.showActivities,
+        controllers.routes.javascript.Application.userAdmin,
+        controllers.routes.javascript.Application.swagger,
+        controllers.routes.javascript.Application.showFlags,
+        controllers.routes.javascript.Application.showProjectVisibility,
+        controllers.routes.javascript.Application.showQueue,
+        controllers.routes.javascript.Application.showStats,
+        controllers.routes.javascript.Application.showHealth,
+        controllers.routes.javascript.Reviews.showReviews,
+        controllers.routes.javascript.Organizations.showCreator
       )
     ).as("text/javascript")
   }

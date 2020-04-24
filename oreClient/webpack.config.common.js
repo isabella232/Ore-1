@@ -11,20 +11,20 @@ const modulesDir = Path.resolve(__dirname, 'node_modules');
 
 const outputDir = process.env.FROM_SBT === 'true' ?
     Path.resolve(__dirname, 'target', 'web', 'public', 'main', 'build') :
-    Path.resolve(__dirname, 'build');
+    Path.resolve(__dirname, 'dist');
 
 module.exports = {
     entry: {
+        'font-awesome': Path.resolve(entryDir, 'font-awesome.js'),
         main: Path.resolve(resourcesDir, 'scss', 'main.scss'),
         home: Path.resolve(entryDir, 'home.js'),
-        'font-awesome': Path.resolve(entryDir, 'font-awesome.js'),
         'user-profile': Path.resolve(entryDir, 'user-profile.js'),
     },
     output: {
         path: outputDir,
         filename: '[name].js',
-        publicPath: '/dist/',
-        libraryTarget: 'umd'
+        libraryTarget: 'umd',
+        publicPath: '/'
     },
     plugins: [
         new VueLoaderPlugin(),
@@ -47,16 +47,28 @@ module.exports = {
             },
             {
                 test: /\.css$/,
-                use: [MiniCssExtractPlugin.loader, 'css-loader', 'postcss-loader'],
+                use: [process.env.NODE_ENV !== 'production' && process.env.FROM_SBT !== 'true' ? 'vue-style-loader' : MiniCssExtractPlugin.loader, 'css-loader', 'postcss-loader'],
             },
             {
                 test: /\.scss$/,
-                use: [MiniCssExtractPlugin.loader, 'css-loader', 'postcss-loader', 'sass-loader'],
+                use: [process.env.NODE_ENV !== 'production' && process.env.FROM_SBT !== 'true' ? 'vue-style-loader' : MiniCssExtractPlugin.loader, 'css-loader', 'postcss-loader', 'sass-loader'],
             },
             {
                 test: /\.json5$/i,
                 loader: 'json5-loader',
                 type: 'javascript/auto',
+            },
+            {
+                test: /\.(png|jpe?g|gif|svg)$/i,
+                use: [
+                    {
+                        loader: 'file-loader',
+                        options: {
+                            publicPath: process.env.FROM_SBT === 'true' ? '/assets/lib/ore-client' : undefined,
+                            esModule: false
+                        }
+                    },
+                ],
             },
         ]
     },
@@ -68,6 +80,9 @@ module.exports = {
         modules: [
             modulesDir
         ]
+    },
+    devServer: {
+        historyApiFallback: true
     },
     optimization: {
         splitChunks: {

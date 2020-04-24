@@ -31,9 +31,9 @@
 
                 <!-- User info -->
                 <p class="user date pull-left">
-                    <a :href="routes.Users.showProjects(project.namespace.owner).absoluteURL()">
+                    <router-link :to="{name: 'user_projects', params: {user: project.namespace.owner}}">
                         <strong>{{ project.namespace.owner }}</strong>
-                    </a>
+                    </router-link>
                     released this version on {{ prettifyDate(versionObj.created_at) }}
                 </p>
 
@@ -380,6 +380,16 @@
     import {clearFromDefaults} from "../../utils";
     import uniqWith from "lodash/uniqWith";
     import isEqual from "lodash/isEqual";
+    import ClipboardJS from "clipboard";
+    import moment from 'moment';
+
+    const clipboardManager = new ClipboardJS('.copy-url');
+    clipboardManager.on('success', function(e) {
+        const element = $('.btn-download').tooltip({title: 'Copied!', placement: 'bottom', trigger: 'manual'}).tooltip('show');
+        setTimeout(function () {
+            element.tooltip('destroy');
+        }, 2200);
+    });
 
     export default {
         components: {

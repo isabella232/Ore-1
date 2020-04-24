@@ -1,4 +1,5 @@
 import {parseJsonOrNull} from "./utils";
+import config from './config.json5';
 
 $.ajaxSettings.traditional = true;
 
@@ -11,7 +12,7 @@ export class API {
                 const isBodyRequest = (method === "POST" || method === "PUT" || method === "PATCH");
 
                 $.ajax({
-                    url: '/api/v2/' + url,
+                    url: config.app.baseUrl + '/api/v2/' + url,
                     method: method,
                     dataType: 'json',
                     contentType: isFormData ? false : 'application/json',
@@ -19,8 +20,12 @@ export class API {
                     processData: !(isFormData || isBodyRequest),
                     headers: {
                         'Authorization': 'OreApi session=' + session,
-                        'Csrf-Token': csrf
-                    }
+                        'Csrf-Token': typeof csrf !== 'undefined' ? csrf : undefined
+                    },
+                    xhrFields: {
+                        //Technically not needed, but some internal compat stuff assumes cookies will be present
+                        withCredentials: true
+                    },
                 }).done((data) => {
                     resolve(data);
                 }).fail((xhr) => {
@@ -46,13 +51,19 @@ export class API {
             const date = new Date();
             date.setTime(date.getTime() + 60000);
 
-            if (window.isLoggedIn) {
+            if (this.hasUser()) {
                 session = parseJsonOrNull(localStorage.getItem('api_session'));
                 if (session === null || !isNaN(new Date(session.expires).getTime()) && new Date(session.expires) < date) {
                     return $.ajax({
-                        url: '/api/v2/authenticate/user',
+                        url: config.app.baseUrl + '/api/v2/authenticate/user',
                         method: 'POST',
-                        dataType: 'json'
+                        dataType: 'json',
+                        xhrFields: {
+                            withCredentials: true
+                        },
+                        headers: {
+                            'Csrf-Token': typeof csrf !== 'undefined' ? csrf : undefined
+                        }
                     }).done((data) => {
                         if (data.type !== 'user') {
                             reject('Expected user session from user authentication');
@@ -70,7 +81,7 @@ export class API {
                 session = parseJsonOrNull(localStorage.getItem('public_api_session'));
                 if (session === null || !isNaN(new Date(session.expires).getTime()) && new Date(session.expires) < date) {
                     $.ajax({
-                        url: '/api/v2/authenticate',
+                        url: config.app.baseUrl + '/api/v2/authenticate',
                         method: 'POST',
                         dataType: 'json'
                     }).done((data) => {
@@ -91,7 +102,7 @@ export class API {
     }
 
     static hasUser() {
-        return window.isLoggedIn;
+        return window.isLoggedIn || config.alwaysTryLogin;
     }
 
     static invalidateSession() {
