@@ -12,26 +12,14 @@ import ProjectVersions from "../pages/project/ProjectVersions";
 import Project from "../pages/project/Project";
 import VersionPage from "../pages/project/VersionPage";
 import NewVersion from "../pages/project/NewVersion";
+import NewProject from "../pages/project/NewProject";
 import User from "../pages/user/User";
 
-import topStore from "../stores/top"
-import projectModule from "../stores/project"
-import globalModule from "../stores/global"
-import userModule from "../stores/user"
+import {store} from '../stores/index'
 import UserProjects from "../pages/user/UserProjects";
 
 Vue.use(VueRouter);
-Vue.use(Vuex);
 Vue.component('font-awesome-icon', FontAwesomeIcon);
-
-const store = new Vuex.Store({
-    ...topStore,
-    modules: {
-        project: projectModule,
-        global: globalModule,
-        user: userModule
-    }
-});
 
 store.dispatch('global/loadUser');
 
@@ -57,8 +45,12 @@ const router = new VueRouter({
             ]
         },
         {
+            path: '/projects/new',
+            name: 'new_project',
+            component: NewProject
+        },
+        {
             path: '/:owner/:slug/',
-            name: 'project',
             component: Project,
             props: true,
             children: [
@@ -106,6 +98,11 @@ const router = new VueRouter({
         }
     ]
 });
+
+router.beforeEach((to, from, next) => {
+    store.commit('dismissAllAlerts');
+    next();
+})
 
 const app = new Vue({
     el: '#home',

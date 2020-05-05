@@ -1,5 +1,6 @@
 import {parseJsonOrNull} from "./utils";
 import config from './config.json5';
+import {store} from './stores/index'
 
 $.ajaxSettings.traditional = true;
 
@@ -38,6 +39,27 @@ export class API {
                             reject(error);
                         });
                     } else {
+                        if(xhr.status === 400) {
+                            if(xhr.responseJSON.user_error) {
+                                store.commit({
+                                    type: 'addAlert',
+                                    level: 'error',
+                                    message: xhr.responseJSON.user_error
+                                });
+                            } else if(xhr.responseJSON.api_error) {
+                                store.commit({
+                                    type: 'addAlert',
+                                    level: 'error',
+                                    message: xhr.responseJSON.api_error
+                                })
+                            } else if(xhr.responseJSON.api_errors) {
+                                store.commit({
+                                    type: 'addAlerts',
+                                    level: 'error',
+                                    messages: xhr.responseJSON.api_errors
+                                })
+                            }
+                        }
                         reject(xhr.status)
                     }
                 })

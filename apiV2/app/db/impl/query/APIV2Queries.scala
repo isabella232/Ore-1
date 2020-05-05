@@ -149,7 +149,7 @@ object APIV2Queries extends DoobieOreProtocol {
              |       p.license_name,
              |       p.license_url,
              |       p.forum_sync
-             |  FROM projects p JOIN project_stats ps ON p.id = ps.id JOIN promoted_versions ppv on p.id = ppv.project_id""".stripMargin
+             |  FROM projects p JOIN project_stats ps ON p.id = ps.id""".stripMargin
 
     val visibilityFrag =
       if (canSeeHidden) None
@@ -764,7 +764,7 @@ object APIV2Queries extends DoobieOreProtocol {
           |       (1::BIT(64) << 9)
           |    FROM organizations o
           |             JOIN users ou ON o.user_id = ou.id
-          |             LEFT JOIN organization_members om ON o.id = om.organization_id AND om.user_id = $uploader
+          |             LEFT JOIN user_organization_roles om ON o.id = om.organization_id AND om.user_id = $uploader
           |             LEFT JOIN global_trust gt ON gt.user_id = om.user_id
           |             LEFT JOIN organization_trust ot ON ot.user_id = om.user_id AND ot.organization_id = o.id
           |    WHERE o.name = $orgName;""".stripMargin.query[(DbRef[User], Boolean)]
