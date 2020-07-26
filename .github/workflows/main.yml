@@ -1,0 +1,75 @@
+name: Ore CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        java: [1.8, 1.11]
+
+    env:
+      PGPORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_DATABASE: postgres
+
+    services:
+      postgres:
+        image: postgres:12.2
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up JDK
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ matrix.java }}
+
+      - name: Cache sbt Ivy cache
+        uses: actions/cache@v1
+        with:
+          path: ~/.ivy2/cache
+          key: ${{ runner.os }}-sbt-ivy-cache-${{ hashFiles('**.sbt', 'project/**/*.scala') }}
+          restore-keys: ${{ runner.os }}-sbt-ivy-cache
+
+      - name: Cache sbt Coursier cache
+        uses: actions/cache@v1
+        with:
+          path: ~/.cache/coursier
+          key: ${{ runner.os }}-sbt-coursier-cache-${{ hashFiles('**.sbt', 'project/**/*.scala') }}
+          restore-keys: ${{ runner.os }}-sbt-coursier-cache
+
+      - name: Cache sbt
+        uses: actions/cache@v1
+        with:
+          path: ~/.sbt
+          key: ${{ runner.os }}-sbt-${{ hashFiles('**.sbt', 'project/**/*.scala', 'project/build.properties') }}
+          restore-keys: ${{ runner.os }}-sbt
+
+      - name: Initialize postgres extensions
+        env:
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        run: |
+          psql -h localhost -p ${{ env.PGPORT }} -U ${{ env.DB_USERNAME }} -c "CREATE EXTENSION pgcrypto;"
+          psql -h localhost -p ${{ env.PGPORT }} -U ${{ env.DB_USERNAME }} -c "CREATE EXTENSION hstore;"
+
+      - name: Copy config files
+        run: |
+          cp ore/conf/application.conf.template ore/conf/application.conf
+          cp jobs/src/main/resources/application.conf.template jobs/src/main/resources/application.conf
+
+      - name: Run compile
+        run: sbt "oreAll/compile;ore/test;ore/assets"

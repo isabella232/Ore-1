@@ -1,7 +1,5 @@
 package db.impl
 
-import scala.concurrent.{ExecutionContext, Future}
-
 import play.api.inject.ApplicationLifecycle
 
 import db.impl.access.ProjectBase
@@ -17,8 +15,7 @@ import zio.clock.Clock
 import zio.{Schedule, RIO, Task, UIO, ZIO, duration}
 
 class DbUpdateTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.Runtime[Clock])(
-    implicit ec: ExecutionContext,
-    projects: ProjectBase[Task],
+    implicit projects: ProjectBase[Task],
     service: ModelService[Task]
 ) {
 
@@ -39,9 +36,9 @@ class DbUpdateTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: 
       .tapInput(_ => UIO(Logger.debug("Processing stats")))
 
   private def runningTask(task: RIO[Clock, Unit], schedule: Schedule[Clock, Any, Int]) = {
-    val safeTask: ZIO[Clock, Unit, Unit] = task.flatMapError(e => UIO(Logger.error("Running DB task failed", e)))
+    val safeTask: ZIO[Clock, Nothing, Unit] = task.catchAll(e => UIO(Logger.error("Running DB task failed", e)))
 
-    runtime.unsafeRun(safeTask.repeat(schedule).fork)
+    runtime.unsafeRunToFuture(safeTask.repeat(schedule))
   }
 
   private val homepageTask = runningTask(projects.refreshHomePage(Logger), homepageSchedule)
@@ -65,10 +62,7 @@ class DbUpdateTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: 
       runManyInTransaction(StatTrackerQueries.processVersionDownloads),
     statSchedule
   )
-  lifecycle.addStopHook { () =>
-    Future {
-      runtime.unsafeRun(homepageTask.interrupt)
-      runtime.unsafeRun(statsTask.interrupt)
-    }
-  }
+
+  lifecycle.addStopHook(() => homepageTask.cancel())
+  lifecycle.addStopHook(() => statsTask.cancel())
 }
