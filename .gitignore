@@ -191,6 +191,7 @@ RUNNING_PID
 gradle
 .gradle
 build
+oreClient/dist
 
 # Hydra
 project/hydra.sbt

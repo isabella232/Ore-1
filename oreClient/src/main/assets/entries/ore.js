@@ -5,19 +5,11 @@ import VueRouter from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 import TopPage from '../pages/TopPage'
-import Home from '../pages/Home'
-import ProjectDiscussion from '../pages/project/ProjectDiscussion'
-import ProjectSettings from '../pages/project/ProjectSettings'
-import ProjectDocs from '../pages/project/ProjectDocs'
-import ProjectVersions from '../pages/project/ProjectVersions'
-import Project from '../pages/project/Project'
-import VersionPage from '../pages/project/VersionPage'
-import NewVersion from '../pages/project/NewVersion'
-import NewProject from '../pages/project/NewProject'
-import User from '../pages/user/User'
 
 import { store } from '../stores/index'
-import UserProjects from '../pages/user/UserProjects'
+import NProgress from 'nprogress'
+
+const ProjectDocs = import(/* webpackChunkName: "project-docs" */'../pages/project/ProjectDocs');
 
 Vue.use(VueRouter)
 Vue.component('FontAwesomeIcon', FontAwesomeIcon)
@@ -31,34 +23,34 @@ const router = new VueRouter({
     {
       path: '/',
       name: 'home',
-      component: Home,
+      component: () => import(/* webpackChunkName: "home" */'../pages/Home'),
     },
     {
       path: '/:user',
-      component: User,
+      component: () => import(/* webpackChunkName: "user" */'../pages/user/User'),
       props: true,
       children: [
         {
           path: '',
           name: 'user_projects',
-          component: UserProjects,
+          component: import(/* webpackChunkName: "user-projects" */'../pages/user/UserProjects'),
         },
       ],
     },
     {
       path: '/projects/new',
       name: 'new_project',
-      component: NewProject,
+      component: () => import(/* webpackChunkName: "new-project" */'../pages/project/NewProject'),
     },
     {
       path: '/:owner/:slug/',
-      component: Project,
+      component: () => import(/* webpackChunkName: "project" */'../pages/project/Project'),
       props: true,
       children: [
         {
           path: '',
           name: 'project_home',
-          component: ProjectDocs,
+          component: () => ProjectDocs,
           props: {
             page: ['Home'],
           },
@@ -66,34 +58,34 @@ const router = new VueRouter({
         {
           path: 'pages/:page+',
           name: 'pages',
-          component: ProjectDocs,
+          component: () => ProjectDocs,
           props: true,
         },
         {
           path: 'versions',
           name: 'versions',
-          component: ProjectVersions,
+          component: () => import(/* webpackChunkName: "project-versions" */'../pages/project/ProjectVersions'),
         },
         {
           path: 'versions/new',
           name: 'new_version',
-          component: NewVersion,
+          component: () => import(/* webpackChunkName: "project-version-new" */'../pages/project/NewVersion'),
         },
         {
           path: 'versions/:version',
           name: 'version',
-          component: VersionPage,
+          component: () => import(/* webpackChunkName: "project-version" */'../pages/project/VersionPage'),
           props: true,
         },
         {
           path: 'discuss',
           name: 'discussion',
-          component: ProjectDiscussion,
+          component: () => import(/* webpackChunkName: "project-discussion" */'../pages/project/ProjectDiscussion'),
         },
         {
           path: 'settings',
           name: 'settings',
-          component: ProjectSettings,
+          component: () => import(/* webpackChunkName: "project-settings" */'../pages/project/ProjectSettings'),
         },
       ],
     },
@@ -103,6 +95,17 @@ const router = new VueRouter({
 router.beforeEach((to, from, next) => {
   store.commit('dismissAllAlerts')
   next()
+})
+
+router.beforeResolve((to, from, next) => {
+  if (to.name) {
+    NProgress.start()
+  }
+  next()
+})
+
+router.afterEach((to, from) => {
+  NProgress.done()
 })
 
 // eslint-disable-next-line no-new

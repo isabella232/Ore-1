@@ -1,7 +1,7 @@
 const Path = require('path')
 const VueLoaderPlugin = require('vue-loader/lib/plugin')
 const MiniCssExtractPlugin = require('mini-css-extract-plugin')
-// const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
+//const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 const rootDir = Path.resolve(__dirname)
 const resourcesDir = Path.resolve(rootDir, 'src', 'main', 'assets')
@@ -17,18 +17,19 @@ module.exports = {
   entry: {
     'font-awesome': Path.resolve(entryDir, 'font-awesome.js'),
     main: Path.resolve(resourcesDir, 'scss', 'main.scss'),
-    home: Path.resolve(entryDir, 'home.js'),
+    ore: Path.resolve(entryDir, 'ore.js'),
   },
   output: {
     path: outputDir,
     filename: '[name].js',
+    chunkFilename: '[name].js',
     libraryTarget: 'umd',
     publicPath: '/',
   },
   plugins: [
     new VueLoaderPlugin(),
     new MiniCssExtractPlugin(),
-    // new BundleAnalyzerPlugin()
+    //new BundleAnalyzerPlugin()
   ],
   module: {
     rules: [
@@ -97,16 +98,9 @@ module.exports = {
   optimization: {
     splitChunks: {
       cacheGroups: {
-        vendors: {
-          name: 'vendors',
-          chunks: 'initial',
-          test: /[\\/]node_modules[\\/]/,
-          priority: 10,
-          enforce: true,
-        },
         commons: {
           name: 'commons',
-          chunks: 'initial',
+          chunks: 'all',
           minChunks: 2,
         },
       },
