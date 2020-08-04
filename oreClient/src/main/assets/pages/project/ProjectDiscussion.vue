@@ -41,8 +41,8 @@
 <script>
 import { mapState } from 'vuex'
 import NProgress from 'nprogress'
-import moment from 'moment'
 import config from '../../config.json5'
+import { genericError } from '../../utils'
 
 export default {
   data() {
@@ -67,7 +67,8 @@ export default {
   watch: {
     project: {
       handler(val, oldVal) {
-        if (!oldVal || val.plugin_id !== oldVal.plugin_id) {
+        // eslint-disable-next-line camelcase
+        if (val && val.plugin_id !== oldVal?.plugin_id) {
           this.updateData(val.external.discourse.topic_id)
         }
       },
@@ -79,7 +80,7 @@ export default {
       return document.location.pathname
     },
     formatDate(date) {
-      return moment(date).format('MMM D, YYYY')
+      return new Date(date).toLocaleDateString('default', { year: 'numeric', month: 'long', day: 'numeric' })
     },
     updateData(topicId) {
       NProgress.start()
@@ -96,7 +97,7 @@ export default {
           this.discourseData = data
         })
         .fail((xhr) => {
-          // TODO
+          genericError(this, 'An error occoured when loading discussions')
         })
     },
   },

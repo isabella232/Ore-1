@@ -201,13 +201,12 @@
 import isEqual from 'lodash/isEqual'
 import NProgress from 'nprogress'
 import { mapState } from 'vuex'
-import moment from 'moment'
 import { API } from '../../api'
 import Editor from '../../components/Editor'
 import MemberList from '../../components/MemberList'
 import { Category } from '../../enums'
 import PageList from '../../components/PageList'
-import { numberWithCommas } from '../../utils'
+import { genericError, notFound, numberWithCommas } from '../../utils'
 
 export default {
   components: {
@@ -285,7 +284,8 @@ export default {
     },
     project: {
       handler(val, oldVal) {
-        if (!oldVal || val.plugin_id !== oldVal.plugin_id) {
+        // eslint-disable-next-line camelcase
+        if (val && val.plugin_id !== oldVal?.plugin_id) {
           this.updatePage(true)
         }
       },
@@ -294,10 +294,6 @@ export default {
   },
   methods: {
     updatePage(fetchPages) {
-      if (!this.project) {
-        return
-      }
-
       NProgress.start()
       API.request('projects/' + this.project.plugin_id + '/_pages/' + this.joinedPage)
         .then((response) => {
@@ -312,8 +308,9 @@ export default {
           this.description = ''
 
           if (error === 404) {
-            // TODO
+            notFound(this)
           } else {
+            genericError(this, `Could not navigate to the page "${this.joinedPage}"`)
           }
         })
 
@@ -324,7 +321,7 @@ export default {
       }
     },
     parseDate(rawDate) {
-      return moment(rawDate).format('MMM DD[,] YYYY')
+      return new Date(rawDate).toLocaleDateString('default', { year: 'numeric', month: 'long', day: 'numeric' })
     },
     parseCategory(category) {
       return Category.fromId(category).name
@@ -379,14 +376,13 @@ export default {
       API.request('projects/' + this.project.plugin_id + '/_pages/' + this.joinedPage, 'PUT', {
         name: this.currentPage.name[this.currentPage.name.length - 1],
         content: newContent,
-      }).then((res) => {
+      }).then(() => {
         this.description = newContent
-      }) // TODO: Handle error here
+      })
     },
     deletePage() {
       const page = this.requestPage
       const pageSlug = page.parent ? page.parent + '/' + page.name : page.name
-      // TODO
 
       API.request('projects/' + this.project.plugin_id + '/_pages/' + pageSlug, 'DELETE')
         .then((res) => {

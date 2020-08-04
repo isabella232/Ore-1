@@ -490,7 +490,13 @@ import BtnHide from '../../components/BtnHide'
 import CSRFField from '../../components/CSRFField'
 import MemberList from '../../components/MemberList'
 import Icon from '../../components/Icon'
-import { avatarUrl as avatarUrlUtils, cleanEmptyObject, clearFromDefaults, nullIfEmpty } from '../../utils'
+import {
+  avatarUrl as avatarUrlUtils,
+  cleanEmptyObject,
+  clearFromDefaults,
+  genericError,
+  nullIfEmpty,
+} from '../../utils'
 import { Category } from '../../enums'
 import { API } from '../../api'
 import config from '../../config.json5'
@@ -628,16 +634,14 @@ export default {
               type: 'project/updateProject',
               project: result,
             })
-            this.sendingChanges = false
             this.updateDataFromProject(result, this)
 
             if (changedName || changedOwner) {
               this.$router.replace({ name: 'settings', params: result.namespace })
             }
           })
-          .catch((failed) => {
+          .finally(() => {
             this.sendingChanges = false
-            // TODO
           })
       } else {
         // Some "illusion" of the change being acknowledged is always good
@@ -650,9 +654,11 @@ export default {
     updateIcon() {
       const form = document.getElementById('form-icon')
       const data = new FormData(form)
-      const iconUrl = '/' + this.project.namespace.owner + '/' + this.project.namespace.slug + '/icon'
+      const iconUrl =
+        config.app.baseUrl + '/' + this.project.namespace.owner + '/' + this.project.namespace.slug + '/icon'
       fetch(iconUrl, {
-        credentials: 'same-origin',
+        credentials: 'include',
+        mode: 'cors',
         method: 'post',
         body: data,
       }).then((res) => {
@@ -662,15 +668,17 @@ export default {
           // Makes sure we update the image
           this.iconUrl = iconUrl + '?temp=' + Math.random()
         } else {
-          // TODO
+          genericError(this, 'An error occoured when setting the icon')
         }
       })
     },
     resetIcon() {
       const data = new FormData(document.getElementById('form-icon'))
-      const iconUrl = '/' + this.project.namespace.owner + '/' + this.project.namespace.slug + '/icon'
+      const iconUrl =
+        config.app.baseUrl + '/' + this.project.namespace.owner + '/' + this.project.namespace.slug + '/icon'
       fetch(iconUrl + '/reset', {
-        credentials: 'same-origin',
+        credentials: 'include',
+        mode: 'cors',
         method: 'post',
         body: data,
       }).then((res) => {
@@ -679,13 +687,14 @@ export default {
           // Makes sure we update the image
           this.iconUrl = iconUrl + '?temp=' + Math.random()
         } else {
-          // TODO
+          genericError(this, 'An error occoured when resetting the icon')
         }
       })
     },
     getDeployKey(project) {
-      fetch('/api/v1/projects/' + project.plugin_id + '/keys', {
-        credentials: 'same-origin',
+      fetch(config.app.baseUrl + '/api/v1/projects/' + project.plugin_id + '/keys', {
+        credentials: 'include',
+        mode: 'cors',
       }).then((res) => {
         if (res.ok) {
           res.json().then((json) => {
@@ -694,7 +703,7 @@ export default {
         } else if (res.status === 404) {
           // Do nothing
         } else {
-          // TODO
+          genericError(this, 'An error occoured when getting the deploy key')
         }
       })
     },
@@ -702,9 +711,10 @@ export default {
       this.showDeployKeySpinner = true
       const data = new FormData()
       data.append('csrfToken', window.csrf)
-      fetch('/api/v1/projects/' + this.project.plugin_id + '/keys/new', {
+      fetch(config.app.baseUrl + '/api/v1/projects/' + this.project.plugin_id + '/keys/new', {
         method: 'POST',
-        credentials: 'same-origin',
+        credentials: 'include',
+        mode: 'cors',
         body: data,
       }).then((res) => {
         this.showDeployKeySpinner = false
@@ -716,7 +726,7 @@ export default {
             }
           })
         } else {
-          // TODO
+          genericError(this, 'An error occoured when generating the deploy key')
         }
       })
     },
@@ -725,16 +735,17 @@ export default {
       const data = new FormData()
       data.append('id', this.deployKey.id)
       data.append('csrfToken', window.csrf)
-      fetch('/api/v1/projects/' + this.project.plugin_id + '/keys/revoke', {
+      fetch(config.app.baseUrl + '/api/v1/projects/' + this.project.plugin_id + '/keys/revoke', {
         method: 'POST',
-        credentials: 'same-origin',
+        credentials: 'include',
+        mode: 'cors',
         body: data,
       }).then((res) => {
         this.showDeployKeySpinner = false
         if (res.ok) {
           this.deployKey = null
         } else {
-          // TODO
+          genericError(this, 'An error occoured when revoking the deploy key')
         }
       })
     },

@@ -535,13 +535,12 @@ import NProgress from 'nprogress'
 import uniqWith from 'lodash/uniqWith'
 import isEqual from 'lodash/isEqual'
 import ClipboardJS from 'clipboard'
-import moment from 'moment'
 import Editor from '../../components/Editor'
 import { API } from '../../api'
 import { Platform, ReleaseType, Stability } from '../../enums'
 import config from '../../config.json5'
 import BtnHide from '../../components/BtnHide'
-import { clearFromDefaults } from '../../utils'
+import { clearFromDefaults, genericError, notFound } from '../../utils'
 
 const clipboardManager = new ClipboardJS('.copy-url')
 clipboardManager.on('success', function (e) {
@@ -657,7 +656,11 @@ export default {
                   if (error === 404) {
                     this.dependencyObs.push(depObj)
                   } else {
-                    // TODO
+                    this.$store.commit({
+                      type: 'addAlert',
+                      level: 'warning',
+                      message: 'An error occoured when getting the project for the dependency ' + dependency.plugin_id,
+                    })
                   }
                 })
             }
@@ -667,8 +670,9 @@ export default {
           this.versionObj = null
 
           if (error === 404) {
-            // TODO
+            notFound(this)
           } else {
+            genericError(this, 'An error occoured when getting the version')
           }
         })
 
@@ -677,7 +681,7 @@ export default {
       })
     },
     prettifyDate(date) {
-      return moment(date).format('LL') // TODO
+      return new Date(date).toLocaleDateString('default', { year: 'numeric', month: 'long', day: 'numeric' })
     },
     // https://stackoverflow.com/a/18650828/7207457
     formatBytes(bytes, decimals = 2) {
