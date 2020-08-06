@@ -12,7 +12,7 @@
               <btn-hide
                 :current-visibility="project.visibility"
                 :endpoint="'projects/' + project.plugin_id + '/visibility'"
-                emit-location="project/setVisibility"
+                commit-location="project/setVisibility"
               />
             </template>
           </div>
@@ -274,6 +274,41 @@
               <div class="clearfix" />
             </div>
 
+            <div v-if="permissions.includes('edit_admin_settings')" class="setting">
+              <div class="setting-description">
+                <h4>Manual Discourse settings</h4>
+                <p>
+                  Edit Discourse settings for a project manually here. There are no sanity checks here, so make sure to
+                  get it right.
+                </p>
+              </div>
+              <div class="setting-content">
+                <div class="form-group">
+                  <label for="discourseTopicId">Topic id:</label>
+                  <input id="discourseTopicId" v-model="discourseTopicId" class="form-control" type="number" />
+                </div>
+
+                <div class="form-group">
+                  <label for="discoursePostId">Post id:</label>
+                  <input id="discoursePostId" v-model="discoursePostId" class="form-control" type="number" />
+                </div>
+
+                <div class="form-group">
+                  <input id="discourseSendUpdate" v-model="discourseSendUpdate" type="checkbox" />
+                  <label for="discourseSendUpdate">Update topic</label>
+                </div>
+                <button
+                  id="btn-discourse-update"
+                  data-toggle="modal"
+                  data-target="#modal-discourse-update"
+                  class="btn btn-warning"
+                >
+                  Update Topic
+                </button>
+              </div>
+              <div class="clearfix" />
+            </div>
+
             <!-- Rename -->
             <div class="setting">
               <div class="setting-description">
@@ -381,102 +416,60 @@
       </div>
     </div>
 
-    <div id="modal-rename" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="label-rename">
-      <div class="modal-dialog" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-label="Cancel">
-              <span aria-hidden="true">&times;</span>
-            </button>
-            <h4 id="label-rename" class="modal-title">
-              Rename project
-            </h4>
-          </div>
-          <div class="modal-body">
-            Changing your projects name can have undesired consequences. We will not setup any redirects.
-          </div>
-          <div class="modal-footer">
-            <div class="form-inline">
-              <button type="button" class="btn btn-default" data-dismiss="modal">
-                Close
-              </button>
-              <button name="rename" class="btn btn-warning" @click="sendProjectUpdate({ name: newName })">
-                Rename
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <modal
+      ref="renameModal"
+      name="rename"
+      title="Rename project"
+      button-label="Rename"
+      :on-submit="() => sendProjectUpdate({ name: newName })"
+    >
+      Changing your projects name can have undesired consequences. We will not setup any redirects.
+    </modal>
 
-    <div id="modal-transfer" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="label-transfer">
-      <div class="modal-dialog" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-label="Cancel">
-              <span aria-hidden="true">&times;</span>
-            </button>
-            <h4 id="label-transfer" class="modal-title">
-              Transfer project ownership
-            </h4>
-          </div>
-          <div class="modal-body">
-            Changing the owner of a project can have undesired consequences. We will not setup any redirects.
-          </div>
-          <div class="modal-footer">
-            <div class="form-inline">
-              <button type="button" class="btn btn-default" data-dismiss="modal">
-                Close
-              </button>
-              <button
-                name="transfer"
-                class="btn btn-warning"
-                @click="sendProjectUpdate({ namespace: { owner: newOwner } })"
-              >
-                Transfer
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <modal
+      ref="discourseUpdateModal"
+      name="discourse-update"
+      title="Update Discourse settings"
+      button-label="Update topic"
+      :on-submit="updateDiscourseTopic"
+    >
+      Make sure the new values are correct. Wrong values here can have negative side effects.
+      <dl>
+        <dt>Topic id:</dt>
+        <dd>{{ discourseTopicId }}</dd>
+        <dt>Post id:</dt>
+        <dd>{{ discoursePostId }}</dd>
+      </dl>
+    </modal>
 
-    <div id="modal-delete" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="label-delete">
-      <div class="modal-dialog" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-label="Cancel">
-              <span aria-hidden="true">&times;</span>
-            </button>
-            <h4 id="label-delete" class="modal-title">
-              Delete project
-            </h4>
-          </div>
-          <div class="modal-body">
-            Are you sure you want to delete your Project? This action cannot be undone. Please explain why you want to
-            delete it.
-            <br />
-            <textarea v-model="deleteReason" name="comment" class="textarea-delete-comment form-control" rows="3" />
-            <br />
-            <div class="alert alert-warning">
-              WARNING: You or anybody else will not be able to use the plugin ID "{0}" in the future if you continue. If
-              you are deleting your project to recreate it, please do not delete your project and contact the Ore staff
-              for help.
-            </div>
-          </div>
-          <div class="modal-footer">
-            <div class="form-inline">
-              <button type="button" class="btn btn-default" data-dismiss="modal" @click="resetDeleteData">
-                Close
-              </button>
-              <button name="delete" class="btn btn-danger" @click="deleteProject">
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+    <modal
+      ref="transferModal"
+      name="transfer"
+      title="Transfer project ownership"
+      button-label="Transfer"
+      :on-submit="() => sendProjectUpdate({ namespace: { owner: newOwner } })"
+    >
+      Changing the owner of a project can have undesired consequences. We will not setup any redirects.
+    </modal>
+
+    <modal
+      ref="deleteModal"
+      name="delete"
+      title="Delete project"
+      button-label="Delete"
+      :on-submit="deleteProject"
+      :on-close="resetDeleteData"
+    >
+      Are you sure you want to delete your Project? This action cannot be undone. Please explain why you want to delete
+      it.
+      <br />
+      <textarea v-model="deleteReason" name="comment" class="textarea-delete-comment form-control" rows="3" />
+      <br />
+      <div class="alert alert-warning">
+        WARNING: You or anybody else will not be able to use the plugin ID "{0}" in the future if you continue. If you
+        are deleting your project to recreate it, please do not delete your project and contact the Ore staff for help.
       </div>
-    </div>
+    </modal>
   </div>
   <div v-else>
     <FontAwesomeIcon :icon="['fas', 'spinner']" spin />
@@ -500,6 +493,7 @@ import {
 import { Category } from '../../enums'
 import { API } from '../../api'
 import config from '../../config.json5'
+import Modal from '../../components/Modal'
 
 export default {
   components: {
@@ -507,6 +501,7 @@ export default {
     MemberList,
     CSRFField,
     Icon,
+    Modal,
   },
   data() {
     // Seems project hasn't been initialized yet, so we use the store directly
@@ -519,6 +514,7 @@ export default {
       selectedLogo: false,
       deleteReason: '',
       hardDelete: false,
+      discourseSendUpdate: true,
     }
 
     if (project) {
@@ -541,6 +537,8 @@ export default {
         summary: null,
         iconUrl: null,
         ...alwaysPresent,
+        discourseTopicId: null,
+        discoursePostId: null,
       }
     }
   },
@@ -616,6 +614,8 @@ export default {
       self.forumSync = project.settings.forum_sync
       self.summary = project.summary
       self.iconUrl = project.icon_url
+      self.discourseTopicId = project.external.discourse.topic_id
+      self.discoursePostId = project.external.discourse.post_id
     },
     avatarUrl(name) {
       return avatarUrlUtils(name)
@@ -623,8 +623,8 @@ export default {
     sendProjectUpdate(update) {
       if (Object.entries(update).length) {
         this.sendingChanges = true
-        $('#modal-rename').modal('hide')
-        $('#modal-transfer').modal('hide')
+        this.$refs.renameModal.hide()
+        this.$refs.transferModal.hide()
         const changedName = this.project.name !== this.newName
         const changedOwner = this.project.namespace.owner !== this.newOwner
 
@@ -749,6 +749,20 @@ export default {
         }
       })
     },
+    updateDiscourseTopic() {
+      API.request(`projects/${this.project.plugin_id}/external/_discourse`, 'POST', {
+        topic_id: this.discourseTopicId === '' ? null : this.discourseTopicId,
+        post_id: this.discoursePostId === '' ? null : this.discoursePostId,
+        update_topic: this.discourseSendUpdate,
+      }).then(() => {
+        this.$refs.discourseUpdateModal.hide()
+        this.$store.commit({
+          type: 'addAlert',
+          level: 'success',
+          message: 'Updated discourse settings',
+        })
+      })
+    },
     resetDeleteData() {
       this.hardDelete = false
       this.deleteReason = ''
@@ -757,7 +771,7 @@ export default {
       if (this.hardDelete) {
         API.request('projects/' + this.project.plugin_id, 'DELETE').then((res) => {
           this.$store.commit('project/clearProject')
-          $('#modal-delete').modal('hide')
+          this.$refs.deleteModal.hide()
           this.$router.push({ name: 'home' })
         })
       } else {
@@ -770,10 +784,10 @@ export default {
               type: 'project/setVisibility',
               visibility: 'softDelete',
             })
-            $('#modal-delete').modal('hide')
+            this.$refs.deleteModal.hide()
           } else {
             this.$store.commit('project/clearProject')
-            $('#modal-delete').modal('hide')
+            this.$refs.deleteModal.hide()
             this.$router.push({ name: 'home' })
           }
         })

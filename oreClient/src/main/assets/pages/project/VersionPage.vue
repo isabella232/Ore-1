@@ -404,127 +404,92 @@
             </li>
           </ul>
         </div>
+
+        <div v-if="editVersion && permissions.includes('edit_admin_settings')" class="panel panel-default">
+          <div class="panel-heading">
+            <h3 clasS="panel-title">
+              Discourse settings
+            </h3>
+          </div>
+          <ul class="list-group">
+            <li class="list-group-item" style="padding-bottom: 20px;">
+              <div class="form-inline">
+                <label for="setPostId">Post id</label>
+                <input id="setPostId" v-model="discoursePostId" type="number" class="form-control pull-right" />
+              </div>
+            </li>
+            <li class="list-group-item" style="padding-bottom: 20px;">
+              <div class="form-inline">
+                <label for="updatePost">Update post</label>
+                <input id="updatePost" v-model="discourseSendUpdate" type="checkbox" class="form-control pull-right" />
+              </div>
+            </li>
+            <li class="list-group-item">
+              <button
+                id="btn-discourse-update"
+                data-toggle="modal"
+                data-target="#modal-discourse-update"
+                class="btn btn-warning"
+              >
+                Update post
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
 
-    <div
+    <modal
+      ref="discourseUpdateModal"
+      name="discourse-update"
+      title="Update Discourse settings"
+      button-label="Update post"
+      :on-submit="updateDiscoursePost"
+    >
+      Make sure the new values are correct. Wrong values here can have negative side effects.
+      <dl>
+        <dt>Post id:</dt>
+        <dd>{{ discoursePostId }}</dd>
+      </dl>
+    </modal>
+
+    <modal
       v-if="permissions.includes('delete_version') && publicVersions !== 1"
-      id="modal-delete"
-      class="modal fade"
-      tabindex="-1"
-      role="dialog"
-      aria-labelledby="label-delete"
+      ref="deleteModal"
+      name="delete"
+      title="Delete version"
+      button-label="Delete"
+      :on-submit="() => setVisibility('softDelete')"
+      :on-close="() => (modalComment = '')"
     >
-      <div class="modal-dialog" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-label="Cancel" @click="modalComment = ''">
-              <span aria-hidden="true">&times;</span>
-            </button>
-            <h4 id="label-delete" class="modal-title">
-              Delete version
-            </h4>
-          </div>
-          <div class="modal-body">
-            Are you sure you want to delete this version? This action cannot be undone. You will not be able to reuse
-            this version string later. Please explain why you want to delete it.
-            <textarea v-model="modalComment" name="comment" class="textarea-delete-comment form-control" rows="3" />
-          </div>
-          <div class="modal-footer">
-            <div class="form-inline">
-              <button type="button" class="btn btn-default" data-dismiss="modal" @click="modalComment = ''">
-                Close
-              </button>
-              <input
-                type="submit"
-                name="delete"
-                value="Delete"
-                class="btn btn-danger"
-                @click="setVisibility('softDelete')"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      Are you sure you want to delete this version? This action cannot be undone. You will not be able to reuse this
+      version string later. Please explain why you want to delete it.
+      <textarea v-model="modalComment" name="comment" class="textarea-delete-comment form-control" rows="3" />
+    </modal>
 
-    <div
+    <modal
       v-if="permissions.includes('reviewer') && versionObj.visibility === 'softDelete'"
-      id="modal-restore"
-      class="modal fade"
-      tabindex="-1"
-      role="dialog"
-      aria-labelledby="label-restore"
+      ref="restoreModal"
+      name="restore"
+      title="Restore deleted"
+      button-label="Restore"
+      :on-submit="() => setVisibility('public')"
+      :on-close="() => (modalComment = '')"
     >
-      <div class="modal-dialog" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-label="Cancel" @click="modalComment = ''">
-              <span aria-hidden="true">&times;</span>
-            </button>
-            <h4 id="label-restore" class="modal-title">
-              Restore deleted
-            </h4>
-          </div>
-          <div class="modal-body">
-            <textarea v-model="modalComment" name="comment" class="textarea-delete-comment form-control" rows="3" />
-          </div>
-          <div class="modal-footer">
-            <div class="form-inline">
-              <button type="button" class="btn btn-default" data-dismiss="modal" @click="modalComment = ''">
-                Close
-              </button>
-              <input
-                type="submit"
-                name="delete"
-                value="Restore deleted"
-                class="btn btn-success"
-                @click="setVisibility('public')"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <textarea v-model="modalComment" name="comment" class="textarea-delete-comment form-control" rows="3" />
+    </modal>
 
-    <div
+    <modal
       v-if="permissions.includes('reviewer') && permissions.includes('hard_delete_version')"
-      id="modal-harddelete"
-      class="modal fade"
-      tabindex="-1"
-      role="dialog"
-      aria-labelledby="label-harddelete"
+      ref="hardDeleteModal"
+      name="harddelete"
+      title="Hard delete"
+      button-label="Hard delete"
+      :on-close="() => (modalComment = '')"
+      :on-submit="hardDeleteVersion"
     >
-      <div class="modal-dialog" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-label="Cancel" @click="modalComment = ''">
-              <span aria-hidden="true">&times;</span>
-            </button>
-            <h4 id="label-harddelete" class="modal-title">
-              Hard delete
-            </h4>
-          </div>
-          <div class="modal-body">
-            <textarea v-model="modalComment" name="comment" class="textarea-delete-comment form-control" rows="3" />
-          </div>
-          <div class="modal-footer">
-            <div class="form-inline">
-              <button type="button" class="btn btn-default" data-dismiss="modal" @click="modalComment = ''">
-                Close
-              </button>
-              <input
-                type="submit"
-                name="delete"
-                value="Hard delete"
-                class="btn btn-danger"
-                @click="hardDeleteVersion"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <textarea v-model="modalComment" name="comment" class="textarea-delete-comment form-control" rows="3" />
+    </modal>
   </div>
   <div v-else />
 </template>
@@ -541,6 +506,7 @@ import { Platform, ReleaseType, Stability } from '../../enums'
 import config from '../../config.json5'
 import BtnHide from '../../components/BtnHide'
 import { clearFromDefaults, genericError, notFound } from '../../utils'
+import Modal from '../../components/Modal'
 
 const clipboardManager = new ClipboardJS('.copy-url')
 clipboardManager.on('success', function (e) {
@@ -554,6 +520,7 @@ clipboardManager.on('success', function (e) {
 
 export default {
   components: {
+    Modal,
     Editor,
     BtnHide,
   },
@@ -578,6 +545,8 @@ export default {
       editReleaseType: null,
       editPlatforms: [],
       spinIcon: false,
+      discoursePostId: null,
+      discourseSendUpdate: true,
     }
   },
   computed: {
@@ -709,15 +678,28 @@ export default {
         visibility,
         comment: this.modalComment,
       }).then((res) => {
-        $('#modal-restore').modal('hide')
-        $('#modal-delete').modal('hide')
+        this.$refs.restoreModal.hide()
+        this.$refs.deleteModal.hide()
 
         this.versionObj.visibility = visibility
       })
     },
+    updateDiscoursePost() {
+      API.request(`projects/${this.project.plugin_id}/versions/${this.versionObj.name}/external/_discourse`, 'POST', {
+        post_id: this.discoursePostId === '' ? null : this.discoursePostId,
+        update_post: this.discourseSendUpdate,
+      }).then(() => {
+        this.$refs.discourseUpdateModal.hide()
+        this.$store.commit({
+          type: 'addAlert',
+          level: 'success',
+          message: 'Updated discourse settings',
+        })
+      })
+    },
     hardDeleteVersion() {
       API.request('projects/' + this.project.plugin_id + '/versions/' + this.versionObj.name, 'DELETE').then((res) => {
-        $('#modal-harddelete').modal('hide')
+        this.$refs.hardDeleteModal.hide()
 
         this.$router.push({ name: 'versions' })
       })
@@ -732,6 +714,8 @@ export default {
       this.editStability = this.versionObj.tags.stability
       this.editReleaseType = this.versionObj.tags.release_type
       this.editPlatforms = this.versionObj.tags.platforms.map(this.simplifyPlatform)
+      this.discoursePostId = this.versionObj.external.discourse.post_id
+      this.discourseSendUpdate = true
     },
     cancelEdit() {
       this.editVersion = false
