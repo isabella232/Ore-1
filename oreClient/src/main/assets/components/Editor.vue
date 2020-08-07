@@ -3,7 +3,7 @@
     <!-- Edit -->
     <button
       type="button"
-      class="btn btn-sm btn-edit btn-page btn-default"
+      class="btn btn-sm btn-edit-top btn-page btn-default"
       :class="editClasses"
       title="Edit"
       @click="state = 'edit'"
@@ -56,16 +56,15 @@
       </modal>
     </template>
 
-    <div v-if="state === 'edit'" class="page-edit">
-      <textarea v-model="rawData" name="content" class="form-control" @change="$emit('change', rawData)" />
+    <div v-show="state === 'edit'" class="page-edit">
+      <textarea ref="editor" />
     </div>
     <!-- eslint-disable-next-line vue/no-v-html -->
-    <div v-else-if="state === 'preview'" class="page-preview page-rendered" v-html="previewCooked" />
+    <div v-if="state === 'preview'" class="page-preview page-rendered" v-html="previewCooked" />
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div v-else-if="state === 'display'" class="page-content page-rendered" v-html="cooked" />
   </div>
   <div v-else>
-    <!-- Saved window -->
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div class="page-content page-rendered" v-html="cooked" />
   </div>
@@ -77,6 +76,9 @@ import markdownItAnchor from 'markdown-it-anchor'
 import markdownItWikilinks from 'markdown-it-wikilinks'
 import markdownItTaskLists from 'markdown-it-task-lists'
 import Modal from './Modal'
+
+import CodeMirror from 'codemirror'
+import 'codemirror/mode/markdown/markdown'
 
 const md = markdownIt({
   html: true,
@@ -121,6 +123,8 @@ export default {
     return {
       state: 'display',
       rawData: this.raw,
+      cm: null,
+      focused: false,
     }
   },
   computed: {
@@ -140,6 +144,7 @@ export default {
       return {
         'editor-tab-active': this.state === 'edit',
         'editor-tab-inactive': this.state !== 'edit',
+        'editor-focused': this.focused,
         ...this.buttonStateClasses,
       }
     },
@@ -151,14 +156,71 @@ export default {
     },
   },
   watch: {
-    raw(newVal, oldVal) {
-      this.rawData = newVal
+    raw(val) {
+      this.rawData = val
+      if (this.cm) {
+        this.cm.setValue(val)
+      }
     },
+    state(newVal, oldVal) {
+      if (newVal === 'edit') {
+        this.initCodeMirror()
+      } else if (oldVal === 'edit') {
+        this.destroyCodeMirror()
+      }
+    },
+  },
+  mounted() {
+    if (this.state === 'edit') {
+      this.initCodeMirror()
+    }
+  },
+  beforeDestroy() {
+    this.destroyCodeMirror()
   },
   methods: {
     reset() {
       this.rawData = this.raw
       this.state = 'display'
+    },
+    initCodeMirror() {
+      if (!this.$refs.editor) {
+        setTimeout(this.initCodeMirror, 50)
+        return
+      }
+
+      this.cm = CodeMirror.fromTextArea(this.$refs.editor, {
+        mode: {
+          name: 'markdown',
+          xml: false,
+        },
+        lineWrapping: true,
+        addModeClass: true,
+        viewportMargin: Infinity,
+        spellcheck: true,
+      })
+      this.cm.setValue(this.rawData)
+
+      this.cm.on('changes', (cm) => {
+        this.rawData = cm.getValue()
+        this.$emit('change', this.rawData)
+      })
+
+      this.cm.on('focus', () => (this.focused = true))
+      this.cm.on('blur', () => (this.focused = false))
+
+      this.$nextTick(() => this.cm.refresh())
+    },
+    destroyCodeMirror() {
+      if (!this.cm) {
+        return
+      }
+
+      const elem = this.cm.doc.cm.getWrapperElement()
+      if (elem?.remove) {
+        elem.remove()
+      }
+      this.cm = null
     },
   },
 }
