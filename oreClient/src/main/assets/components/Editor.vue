@@ -75,10 +75,11 @@ import markdownIt from 'markdown-it'
 import markdownItAnchor from 'markdown-it-anchor'
 import markdownItWikilinks from 'markdown-it-wikilinks'
 import markdownItTaskLists from 'markdown-it-task-lists'
-import Modal from './Modal'
 
 import CodeMirror from 'codemirror'
 import 'codemirror/mode/markdown/markdown'
+
+import Modal from './Modal'
 
 const md = markdownIt({
   html: true,
