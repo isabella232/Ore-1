@@ -1,8 +1,6 @@
 ThisBuild / turbo := true
+ThisBuild / usePipelining := true
 ThisBuild / scalaVersion := Settings.scalaVer
-
-//ThisBuild / semanticdbEnabled := true
-Global / semanticdbVersion := "4.2.3"
 
 lazy val db = project.settings(
   Settings.commonSettings,
@@ -190,8 +188,7 @@ lazy val ore = project
       Deps.circeDerivation,
       Deps.circeParser,
       Deps.macwire,
-      Deps.periscopeAkka,
-      Deps.zioZmx
+      Deps.periscopeAkka
     ),
     libraryDependencies ++= Deps.flexmarkDeps,
     libraryDependencies ++= Seq(
@@ -217,7 +214,11 @@ lazy val ore = project
     scalaJSProjects := Seq(oreClient),
     pipelineStages in Assets += scalaJSPipeline,
     WebKeys.exportedMappings in Assets := Seq(),
-    PlayKeys.playMonitoredFiles += (oreClient / baseDirectory).value / "assets"
+    PlayKeys.playMonitoredFiles += (oreClient / baseDirectory).value / "assets",
+    //sbt 1.4 workaround
+    play.sbt.PlayInternalKeys.playCompileEverything ~= (_.map(
+      _.copy(compilations = sbt.internal.inc.Compilations.of(Seq.empty))
+    ))
   )
 
 lazy val oreAll =

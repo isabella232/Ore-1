@@ -1,6 +1,7 @@
 import scala.language.higherKinds
 
 import java.sql.Connection
+import java.time.Duration
 import javax.inject.Provider
 
 import scala.annotation.unused
@@ -67,7 +68,6 @@ import slick.jdbc.{JdbcDataSource, JdbcProfile}
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.interop.catz.implicits._
-import zio.zmx.Diagnostics
 import zio.{ExecutionStrategy, Exit, Runtime, Schedule, Task, UIO, ZEnv, ZIO, ZManaged}
 
 class OreApplicationLoader extends ApplicationLoader {
@@ -96,7 +96,6 @@ class OreComponents(context: ApplicationLoader.Context)
 
   use(prefix) //Gets around unused warning
   eager(applicationEvolutions)
-  eager(zmxDiagnostics)
 
   val logger = Logger("Bootstrap")
 
@@ -147,10 +146,6 @@ class OreComponents(context: ApplicationLoader.Context)
   implicit lazy val impActorSystem: ActorSystem = actorSystem
 
   implicit lazy val runtime: Runtime[ZEnv] = Runtime.default
-
-  lazy val zmxDiagnostics: Diagnostics = applicationManaged(
-    zio.zmx.Diagnostics.live("localhost", config.diagnostics.zmx.port).build
-  )
 
   override lazy val evolutionsReader = new OreEvolutionsReader(environment)
 
@@ -284,7 +279,7 @@ class OreComponents(context: ApplicationLoader.Context)
 
   def runWhenEvolutionsDone(action: UIO[Unit]): Unit = {
     val isDone    = ZIO.effectTotal(applicationEvolutions.upToDate)
-    val waitCheck = Schedule.doUntilM[Unit](_ => isDone) && Schedule.fixed(zio.duration.Duration.fromNanos(100))
+    val waitCheck = Schedule.recurWhileM((_: Unit) => isDone) && Schedule.fixed(Duration.ofMillis(20))
 
     runtime.unsafeRunAsync(ZIO.unit.repeat(waitCheck).andThen(action)) {
       case Exit.Success(_) => ()
