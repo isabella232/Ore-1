@@ -1,7 +1,10 @@
 package db.impl.access
 
+import scala.concurrent.duration._
+import scala.jdk.DurationConverters._
+
 import ore.OreConfig
-import ore.auth.SpongeAuthApi
+import ore.auth.{AuthUser, SpongeAuthApi}
 import ore.data.user.notification.NotificationType
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
@@ -17,7 +20,7 @@ import cats.data.NonEmptyList
 import cats.syntax.all._
 import com.typesafe.scalalogging
 import zio.interop.catz._
-import zio.{IO, UIO, ZIO}
+import zio.{IO, Schedule, UIO, ZIO}
 
 trait OrganizationBase {
 
@@ -50,9 +53,9 @@ object OrganizationBase {
     * Default live implementation of [[OrganizationBase]]
     */
   class OrganizationBaseF(
-                           implicit val service: ModelService[UIO],
-                           config: OreConfig,
-                           auth: SpongeAuthApi,
+      implicit val service: ModelService[UIO],
+      config: OreConfig,
+      auth: SpongeAuthApi
   ) extends OrganizationBase {
 
     private val Logger    = scalalogging.Logger("Organizations")
@@ -80,9 +83,31 @@ object OrganizationBase {
       val dummyEmail   = name.replaceAll("[^a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]", "") + '@' + config.ore.orgs.dummyEmailDomain
       val spongeResult = logging *> auth.createDummyUser(name, dummyEmail)
 
+      def waitTilUserExists(authUser: AuthUser) = {
+        val hasUser = ModelView.now(User).get(authUser.id).isDefined
+
+        //Do a quick check first if the user is already present
+        hasUser.flatMap {
+          case true => ZIO.succeed(true)
+          case false =>
+            val untilHasUser = Schedule.recurUntilM[Any, Any](_ => hasUser)
+            val sleepWhileWaiting =
+              Schedule.exponential(50.millis.toJava).fold(0.seconds)(_ + _.toScala).untilOutput(_ > 20.seconds)
+
+            ZIO.unit.repeat(untilHasUser && sleepWhileWaiting) *> hasUser
+        }
+      }
+
       // Check for error
       spongeResult
         .flatMapError(err => ZIO.effectTotal(MDCLogger.debug("<FAILURE> " + err)).as(err))
+        .flatMap { spongeUser =>
+          waitTilUserExists(spongeUser).flatMap {
+            case true => ZIO.succeed(spongeUser)
+            // Exit early if we never got the user
+            case false => ZIO.fail(List("Timed out while waiting for SSO sync"))
+          }
+        }
         .flatMap { spongeUser =>
           MDCLogger.debug("<SUCCESS> " + spongeUser)
           // Next we will create the Organization on Ore itself. This contains a
