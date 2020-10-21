@@ -1,7 +1,5 @@
 package controllers
 
-import scala.language.higherKinds
-
 import scala.concurrent.ExecutionContext
 
 import play.api.http.FileMimeTypes
@@ -30,10 +28,10 @@ trait OreControllerComponents extends ControllerComponents {
 
 trait OreControllerEffects[F[_]] {
   def service: ModelService[F]
-  def sso: SSOApi[F]
-  def users: UserBase[F]
+  def sso: SSOApi
+  def users: UserBase
   def projects: ProjectBase[F]
-  def organizations: OrganizationBase[F]
+  def organizations: OrganizationBase
 }
 
 case class DefaultOreControllerComponents(
@@ -53,8 +51,8 @@ case class DefaultOreControllerComponents(
 
 case class DefaultOreControllerEffects[F[_]](
     service: ModelService[F],
-    sso: SSOApi[F],
-    users: UserBase[F],
+    sso: SSOApi,
+    users: UserBase,
     projects: ProjectBase[F],
-    organizations: OrganizationBase[F]
+    organizations: OrganizationBase
 ) extends OreControllerEffects[F]
