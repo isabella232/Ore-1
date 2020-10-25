@@ -135,7 +135,7 @@ lazy val oreClient = project
     Assets / webpackDevConfig := baseDirectory.value / "webpack.config.dev.js",
     Assets / webpackProdConfig := baseDirectory.value / "webpack.config.prod.js",
     //webpackMonitoredDirectories in Assets += baseDirectory.value / "src" / "main" / "assets",
-    includeFilter in webpackMonitoredFiles in Assets := "*.vue" || "*.js",
+    Assets / webpackMonitoredFiles / includeFilter := "*.vue" || "*.js",
     webpackMonitoredFiles in Assets ++= Seq(
       baseDirectory.value / "webpack.config.common.js",
       baseDirectory.value / ".postcssrc.js",
