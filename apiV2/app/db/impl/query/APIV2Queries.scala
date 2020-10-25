@@ -23,7 +23,6 @@ import ore.permission.role.Role
 
 import cats.Reducible
 import cats.data.NonEmptyList
-import cats.instances.list._
 import cats.syntax.all._
 import doobie._
 import doobie.implicits._
