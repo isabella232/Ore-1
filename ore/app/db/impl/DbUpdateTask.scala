@@ -1,7 +1,5 @@
 package db.impl
 
-import scala.concurrent.{ExecutionContext, Future}
-
 import play.api.inject.ApplicationLifecycle
 
 import db.impl.access.ProjectBase
@@ -12,37 +10,37 @@ import ore.util.OreMDC
 
 import cats.syntax.all._
 import com.typesafe.scalalogging
-import doobie.`enum`.TransactionIsolation
 import doobie.implicits._
 import zio.clock.Clock
-import zio.{Schedule, RIO, Task, UIO, ZIO, duration}
+import zio._
 
 class DbUpdateTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.Runtime[Clock])(
-    implicit ec: ExecutionContext,
-    projects: ProjectBase[Task],
-    service: ModelService[Task]
+    implicit service: ModelService[Task]
 ) {
 
-  val interval: duration.Duration = duration.Duration.fromScala(config.ore.materializedUpdateInterval)
+  val interval: duration.Duration = duration.Duration.fromScala(config.ore.homepage.updateInterval)
 
   private val Logger               = scalalogging.Logger.takingImplicit[OreMDC]("DbUpdateTask")
   implicit private val mdc: OreMDC = OreMDC.NoMDC
 
   Logger.info("DbUpdateTask starting")
 
-  private val materializedViewsSchedule: Schedule[Clock, Any, Int] = Schedule
-    .fixed(interval)
-    .tapInput(_ => UIO(Logger.debug(s"Updating homepage view")))
-
-  private val statSchedule: Schedule[Clock, Any, Int] =
+  private val materializedViewsSchedule: Schedule[Any, Unit, Unit] =
     Schedule
       .fixed(interval)
-      .tapInput(_ => UIO(Logger.debug("Processing stats")))
+      .unit
+      .tapInput((_: Unit) => UIO(Logger.debug(s"Updating homepage view")))
 
-  private def runningTask(task: RIO[Clock, Unit], schedule: Schedule[Clock, Any, Int]) = {
-    val safeTask: ZIO[Clock, Unit, Unit] = task.flatMapError(e => UIO(Logger.error("Running DB task failed", e)))
+  private val statSchedule: Schedule[Any, Unit, Unit] =
+    Schedule
+      .fixed(interval)
+      .unit
+      .tapInput((_: Unit) => UIO(Logger.debug("Processing stats")))
 
-    runtime.unsafeRun(safeTask.repeat(schedule).fork)
+  private def runningTask(task: RIO[Clock, Unit], schedule: Schedule[Any, Unit, Unit]) = {
+    val safeTask: ZIO[Clock, Nothing, Unit] = task.catchAll(e => UIO(Logger.error("Running DB task failed", e)))
+
+    runtime.unsafeRunToFuture(safeTask.repeat(schedule))
   }
 
   private val materializedViewsTask = runningTask(
@@ -54,29 +52,15 @@ class DbUpdateTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: 
     materializedViewsSchedule
   )
 
-  private def runManyInTransaction(updates: Seq[doobie.Update0]) = {
-    import cats.instances.list._
-    import doobie._
-
-    service
-      .runDbCon(
-        for {
-          _ <- HC.setTransactionIsolation(TransactionIsolation.TransactionRepeatableRead)
-          _ <- updates.toList.traverse_(_.run)
-        } yield ()
-      )
-      .retry(Schedule.forever)
-  }
+  private def runMany(updates: Seq[doobie.Update0]) =
+    service.runDbCon(updates.toList.traverse_(_.run))
 
   private val statsTask = runningTask(
-    runManyInTransaction(StatTrackerQueries.processProjectViews) *>
-      runManyInTransaction(StatTrackerQueries.processVersionDownloads),
+    runMany(StatTrackerQueries.processProjectViews) *>
+      runMany(StatTrackerQueries.processVersionDownloads),
     statSchedule
   )
-  lifecycle.addStopHook { () =>
-    Future {
-      runtime.unsafeRun(materializedViewsTask.interrupt)
-      runtime.unsafeRun(statsTask.interrupt)
-    }
-  }
+
+  lifecycle.addStopHook(() => materializedViewsTask.cancel())
+  lifecycle.addStopHook(() => statsTask.cancel())
 }

@@ -2,16 +2,16 @@ package controllers.apiv2
 
 import java.time.OffsetDateTime
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 import play.api.inject.ApplicationLifecycle
-import play.api.mvc.{ActionBuilder, ActionFilter, ActionFunction, ActionRefiner, AnyContent, Request, Result}
+import play.api.mvc._
 
 import controllers.apiv2.helpers.{APIScope, ApiError, ApiErrors}
-import controllers.{OreBaseController, OreControllerComponents}
 import controllers.sugar.CircePlayController
 import controllers.sugar.Requests.{ApiAuthInfo, ApiRequest}
+import controllers.{OreBaseController, OreControllerComponents}
 import db.impl.query.APIV2Queries
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.{OrganizationTable, ProjectTable, UserTable}
@@ -86,10 +86,6 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
   def apiAction(scope: APIScope): ActionRefiner[Request, ApiRequest] = new ActionRefiner[Request, ApiRequest] {
     def executionContext: ExecutionContext = ec
 
-    def permissionIn(scope: Scope, apiInfo: ApiAuthInfo): UIO[Permission] =
-      if (scope == GlobalScope) ZIO.succeed(apiInfo.globalPerms)
-      else apiInfo.key.fold(ZIO.succeed(apiInfo.globalPerms))(_.permissionsIn(scope))
-
     override protected def refine[A](request: Request[A]): Future[Either[Result, ApiRequest[A]]] = {
       def unAuth(msg: String) = Unauthorized(ApiError(msg)).withHeaders(WWW_AUTHENTICATE -> "OreApi")
 
@@ -104,7 +100,7 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
           .orElseFail(unAuth("Invalid session"))
         scopePerms <- {
           val res: IO[Result, Permission] =
-            apiScopeToRealScope(scope).flatMap(permissionIn(_, info)).orElseFail(NotFound)
+            apiScopeToRealScope(scope).flatMap(info.permissionIn(_)).orElseFail(NotFound)
           res
         }
         res <- {
@@ -120,16 +116,17 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
 
   def apiScopeToRealScope(scope: APIScope): IO[Unit, Scope] = scope match {
     case APIScope.GlobalScope => UIO.succeed(GlobalScope)
-    case APIScope.ProjectScope(pluginId) =>
+    case APIScope.ProjectScope(projectOwner, projectSlug) =>
       service
         .runDBIO(
           TableQuery[ProjectTable]
-            .filter(_.apiV1Identifier === pluginId)
+            .filter(p => p.ownerName === projectOwner && p.slug.toLowerCase === projectSlug.toLowerCase)
             .map(_.id)
             .result
             .headOption
         )
         .get
+        .orElseFail(())
         .map(ProjectScope)
     case APIScope.OrganizationScope(organizationName) =>
       val q = for {
@@ -141,28 +138,44 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
       service
         .runDBIO(q.result.headOption)
         .get
+        .orElseFail(())
         .map(OrganizationScope)
   }
 
-  def createApiScope(pluginId: Option[String], organizationName: Option[String]): Either[Result, APIScope] =
-    (pluginId, organizationName) match {
-      case (Some(_), Some(_)) =>
-        Left(BadRequest(ApiError("Can't check for project and organization permissions at the same time")))
-      case (Some(plugId), None)  => Right(APIScope.ProjectScope(plugId))
-      case (None, Some(orgName)) => Right(APIScope.OrganizationScope(orgName))
-      case (None, None)          => Right(APIScope.GlobalScope)
-    }
+  def createApiScope(
+      projectOwner: Option[String],
+      projectSlug: Option[String],
+      organizationName: Option[String]
+  ): Either[Result, APIScope] = {
+    val projectOwnerName = projectOwner.zip(projectSlug)
 
-  def permissionsInApiScope(pluginId: Option[String], organizationName: Option[String])(
+    if ((projectOwner.isDefined || projectSlug.isDefined) && projectOwnerName.isEmpty) {
+      Left(BadRequest(ApiError("You need to specify both the project owner and slug at the same time, not just one")))
+    } else {
+      (projectOwnerName, organizationName) match {
+        case (Some(_), Some(_)) =>
+          Left(BadRequest(ApiError("Can't check for project and organization permissions at the same time")))
+        case (Some((owner, name)), None) => Right(APIScope.ProjectScope(owner, name))
+        case (None, Some(orgName))       => Right(APIScope.OrganizationScope(orgName))
+        case (None, None)                => Right(APIScope.GlobalScope)
+      }
+    }
+  }
+
+  def permissionsInApiScope(
+      projectOwner: Option[String],
+      projectSlug: Option[String],
+      organizationName: Option[String]
+  )(
       implicit request: ApiRequest[_]
   ): IO[Result, (APIScope, Permission)] =
     for {
-      apiScope <- ZIO.fromEither(createApiScope(pluginId, organizationName))
+      apiScope <- ZIO.fromEither(createApiScope(projectOwner, projectSlug, organizationName))
       scope    <- apiScopeToRealScope(apiScope).orElseFail(NotFound)
       perms    <- request.permissionIn(scope)
     } yield (apiScope, perms)
 
-  def permApiAction(perms: Permission, scope: APIScope): ActionFilter[ApiRequest] = new ActionFilter[ApiRequest] {
+  def permApiAction(perms: Permission): ActionFilter[ApiRequest] = new ActionFilter[ApiRequest] {
     override protected def executionContext: ExecutionContext = ec
 
     override protected def filter[A](request: ApiRequest[A]): Future[Option[Result]] =
@@ -192,7 +205,7 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
     }
 
   def ApiAction(perms: Permission, scope: APIScope): ActionBuilder[ApiRequest, AnyContent] =
-    Action.andThen(apiAction(scope)).andThen(permApiAction(perms, scope))
+    Action.andThen(apiAction(scope)).andThen(permApiAction(perms))
 
   def CachingApiAction(perms: Permission, scope: APIScope): ActionBuilder[ApiRequest, AnyContent] =
     ApiAction(perms, scope).andThen(cachingAction)

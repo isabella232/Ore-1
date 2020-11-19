@@ -1,9 +1,9 @@
 package ore.models.user
 
-import java.time.{Instant, OffsetDateTime, ZoneOffset}
+import java.time.{Duration, Instant, OffsetDateTime, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.DurationConverters._
 
 import play.api.inject.ApplicationLifecycle
 
@@ -15,18 +15,16 @@ import ore.util.OreMDC
 
 import com.typesafe.scalalogging
 import zio.clock.Clock
-import zio.duration.Duration
 import zio.{Schedule, UIO, ZIO}
 
 class UserTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.Runtime[Clock])(
-    implicit ec: ExecutionContext,
-    service: ModelService[UIO]
+    implicit service: ModelService[UIO]
 ) {
 
   private val Logger               = scalalogging.Logger.takingImplicit[OreMDC]("UserTask")
   implicit private val mdc: OreMDC = OreMDC.NoMDC
 
-  val interval: Duration = zio.duration.Duration.fromScala(config.ore.api.session.checkInterval)
+  val interval: Duration = config.ore.api.session.checkInterval.toJava
 
   private val action = zio.clock
     .currentTime(TimeUnit.MILLISECONDS)
@@ -35,15 +33,13 @@ class UserTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.
     .flatMap(now => service.deleteWhere(ApiSession)(_.expires < now))
     .unit
 
-  private val schedule: Schedule[Clock, Any, Int] = Schedule.fixed(interval)
+  private val schedule: Schedule[Any, Unit, Unit] =
+    Schedule.fixed(interval).unit.tapInput((_: Unit) => UIO(Logger.debug(s"Deleting old API sessions")))
 
   Logger.info("DbUpdateTask starting")
-  //TODO: Repeat in case of failure
-  private val task = runtime.unsafeRun(action.sandbox.option.unit.repeat(schedule).fork)
+  private val task = runtime.unsafeRunToFuture(
+    action.catchAllCause(cause => UIO.effectTotal(Logger.error(cause.prettyPrint))).repeat(schedule)
+  )
 
-  lifecycle.addStopHook { () =>
-    Future {
-      runtime.unsafeRun(task.interrupt)
-    }
-  }
+  lifecycle.addStopHook(() => task.cancel())
 }

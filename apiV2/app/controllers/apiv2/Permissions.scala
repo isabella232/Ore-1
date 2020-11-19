@@ -6,10 +6,8 @@ import play.api.mvc.{Action, AnyContent}
 
 import controllers.OreControllerComponents
 import controllers.apiv2.helpers.{APIScope, APIScopeType}
-import models.protocols.APIV2
 import ore.permission.{NamedPermission, Permission}
 
-import io.circe._
 import io.circe.derivation.annotations.SnakeCaseJsonCodec
 
 class Permissions(
@@ -20,9 +18,13 @@ class Permissions(
 ) extends AbstractApiV2Controller(lifecycle) {
   import Permissions._
 
-  def showPermissions(pluginId: Option[String], organizationName: Option[String]): Action[AnyContent] =
+  def showPermissions(
+      projectOwner: Option[String],
+      projectSlug: Option[String],
+      organizationName: Option[String]
+  ): Action[AnyContent] =
     CachingApiAction(Permission.None, APIScope.GlobalScope).asyncF { implicit request =>
-      permissionsInApiScope(pluginId, organizationName).map {
+      permissionsInApiScope(projectOwner, projectSlug, organizationName).map {
         case (scope, perms) =>
           Ok(
             KeyPermissions(
@@ -35,13 +37,14 @@ class Permissions(
 
   def has(
       checkPermissions: Seq[NamedPermission],
-      pluginId: Option[String],
+      projectOwner: Option[String],
+      projectSlug: Option[String],
       organizationName: Option[String]
   )(
       check: (Seq[Permission], Permission) => Boolean
   ): Action[AnyContent] =
     CachingApiAction(Permission.None, APIScope.GlobalScope).asyncF { implicit request =>
-      permissionsInApiScope(pluginId, organizationName).map {
+      permissionsInApiScope(projectOwner, projectSlug, organizationName).map {
         case (scope, perms) =>
           Ok(PermissionCheck(scope.tpe, check(checkPermissions.map(_.permission), perms)))
       }
@@ -49,20 +52,22 @@ class Permissions(
 
   def hasAll(
       permissions: Seq[NamedPermission],
-      pluginId: Option[String],
+      projectOwner: Option[String],
+      projectSlug: Option[String],
       organizationName: Option[String]
   ): Action[AnyContent] =
-    has(permissions, pluginId, organizationName)((seq, perm) => seq.forall(perm.has(_)))
+    has(permissions, projectOwner, projectSlug, organizationName)((seq, perm) => seq.forall(perm.has(_)))
 
   def hasAny(
       permissions: Seq[NamedPermission],
-      pluginId: Option[String],
+      projectOwner: Option[String],
+      projectSlug: Option[String],
       organizationName: Option[String]
   ): Action[AnyContent] =
-    has(permissions, pluginId, organizationName)((seq, perm) => seq.exists(perm.has(_)))
+    has(permissions, projectOwner, projectSlug, organizationName)((seq, perm) => seq.exists(perm.has(_)))
 }
 object Permissions {
-  import APIV2.namedPermissionCodec
+  import models.protocols.APIV2.namedPermissionCodec
 
   @SnakeCaseJsonCodec case class KeyPermissions(
       `type`: APIScopeType,

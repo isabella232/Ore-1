@@ -6,17 +6,16 @@ import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
 import ore.db.access.ModelView
-import ore.db.impl.schema.{ProjectTable, VersionTable}
 import ore.db.impl.OrePostgresDriver.api._
+import ore.db.impl.schema.{ProjectTable, VersionTable}
 import ore.db.{Model, ObjId}
 import ore.discourse.DiscourseError
-import ore.models.{Job, JobInfo}
 import ore.models.project.{Project, Version}
+import ore.models.{Job, JobInfo}
 
 import akka.pattern.CircuitBreakerOpenException
 import com.typesafe.scalalogging
 import cats.syntax.all._
-import cats.instances.either._
 import slick.lifted.TableQuery
 import zio._
 import zio.clock.Clock
@@ -166,7 +165,7 @@ object JobsProcessor {
 
         case DiscourseError.UnknownError(messages, tpe, extras) =>
           val e = s"""|Encountered error when executing Discourse request
-                      |Job: ${job.obj}
+                      |Job: ${job.obj.withoutError}
                       |Type: $tpe
                       |Messages: ${messages.mkString("\n  ", "\n  ", "")}
                       |Extras: ${extras.mkString("\n  ", "\n  ", "")}""".stripMargin
@@ -174,7 +173,7 @@ object JobsProcessor {
           retryInConfig(Some(e), Some(s"unknown_error_$tpe"))(_.jobs.timeouts.unknownError)
         case DiscourseError.StatusError(statusCode, message) =>
           val e = s"""|Encountered status error when executing Discourse request
-                      |Job: ${job.obj}
+                      |Job: ${job.obj.withoutError}
                       |Status code: $statusCode
                       |Message: ${message.getOrElse("None")}""".stripMargin
 

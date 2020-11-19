@@ -1,12 +1,13 @@
 package controllers.apiv2
 
+import java.net.URLEncoder
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
 import play.api.http.HttpErrorHandler
 import play.api.i18n.Lang
 import play.api.inject.ApplicationLifecycle
-import play.api.mvc.{Action, AnyContent, Result}
+import play.api.mvc.{Action, AnyContent, RequestHeader, Result}
 
 import controllers.OreControllerComponents
 import controllers.apiv2.helpers._
@@ -19,30 +20,27 @@ import ore.OreConfig
 import ore.data.project.Category
 import ore.data.user.notification.NotificationType
 import ore.db.Model
-import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.ProjectRoleTable
 import ore.models.Job
 import ore.models.project.factory.{ProjectFactory, ProjectTemplate}
-import ore.models.project.{Project, ProjectSortingStrategy, Version, Visibility}
+import ore.models.project.{Project, ProjectSortingStrategy, Version}
 import ore.models.user.role.ProjectUserRole
-import ore.models.user.{LoggedActionProject, LoggedActionType, Notification}
+import ore.models.user.{LoggedActionProject, LoggedActionType}
 import ore.permission.Permission
-import ore.util.OreMDC
-import util.{PartialUtils, PatchDecoder, UserActionLogger}
+import ore.util.{OreMDC, StringUtils}
 import util.syntax._
+import util.{PartialUtils, PatchDecoder, UserActionLogger}
 
 import cats.data.{NonEmptyList, Validated, ValidatedNel}
 import cats.syntax.all._
-import com.typesafe.scalalogging
 import io.circe._
 import io.circe.derivation.annotations.SnakeCaseJsonCodec
 import io.circe.syntax._
 import squeal.category._
 import squeal.category.macros.Derive
-import squeal.category.syntax.all._
-import zio.{IO, Task, UIO, ZIO}
 import zio.blocking.Blocking
 import zio.interop.catz._
+import zio.{Task, UIO, ZIO}
 
 class Projects(
     factory: ProjectFactory,
@@ -52,9 +50,6 @@ class Projects(
     implicit oreComponents: OreControllerComponents
 ) extends AbstractApiV2Controller(lifecycle) {
   import Projects._
-
-  private val Logger    = scalalogging.Logger("ApiV2Projects")
-  private val MDCLogger = scalalogging.Logger.takingImplicit[OreMDC](Logger.underlying)
 
   def listProjects(
       q: Option[String],
@@ -131,10 +126,6 @@ class Projects(
         implicit val lang: Lang = user.langOrDefault
 
         for {
-          _ <- ZIO
-            .fromOption(factory.hasUserUploadError(user))
-            .flip
-            .mapError(e => BadRequest(UserError(messagesApi(e))))
           canUpload <- {
             if (settings.ownerName == user.name) ZIO.succeed((user.id.value, true))
             else
@@ -180,31 +171,53 @@ class Projects(
                 ),
                 project.settings.forumSync
               ),
-              _root_.controllers.project.routes.Projects.showIcon(project.ownerName, project.slug).absoluteURL()
+              _root_.controllers.project.routes.Projects.showIcon(project.ownerName, project.slug).absoluteURL(),
+              APIV2.ProjectExternal(
+                APIV2.ProjectExternalDiscourse(
+                  None,
+                  None
+                )
+              )
             )
           )
         }
     }
 
-  def showProject(pluginId: String): Action[AnyContent] =
-    CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF { implicit request =>
-      val dbCon = APIV2Queries
-        .singleProjectQuery(pluginId, request.globalPermissions.has(Permission.SeeHidden), request.user.map(_.id))
-        .option
+  //We need to let this one pass through to the redirect if it fails. Need a bit extra code to do that
+  def showProject(projectOwner: String, projectSlug: String): Action[AnyContent] =
+    CachingApiAction(Permission.None, APIScope.GlobalScope).asyncF { implicit request =>
+      apiScopeToRealScope(APIScope.ProjectScope(projectOwner, projectSlug))
+        .mapError[Either[Unit, Unit]](_ => Right(()))
+        .flatMap(request.permissionIn(_))
+        .filterOrFail(_.has(Permission.ViewPublicInfo))(Left(()))
+        .flatMap { _ =>
+          val dbCon = APIV2Queries
+            .singleProjectQuery(
+              projectOwner,
+              projectSlug,
+              request.globalPermissions.has(Permission.SeeHidden),
+              request.user.map(_.id)
+            )
+            .option
 
-      service.runDbCon(dbCon).get.flatten.bimap(_ => NotFound, Ok(_))
+          service.runDbCon(dbCon).get.flatten.orElseFail(Left(())).map(Ok(_))
+        }
+        .flatMapError {
+          case Left(_)  => ZIO.succeed(NotFound)
+          case Right(_) => tryRedirectToNewUrls(projectOwner, projectSlug).merge
+        }
     }
 
-  def showProjectDescription(pluginId: String): Action[AnyContent] =
-    CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF {
-      service.runDbCon(APIV2Queries.getPage(pluginId, "Home").option).get.orElseFail(NotFound).map {
+  def showProjectDescription(projectOwner: String, projectSlug: String): Action[AnyContent] =
+    CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
+      service.runDbCon(APIV2Queries.getPage(projectOwner, projectSlug, "Home").option).get.orElseFail(NotFound).map {
         case (_, _, _, contents) =>
           Ok(Json.obj("description" := contents))
       }
     }
 
-  def editProject(pluginId: String): Action[Json] =
-    ApiAction(Permission.EditProjectSettings, APIScope.ProjectScope(pluginId))
+  def editProject(projectOwner: String, projectSlug: String): Action[Json] =
+    ApiAction(Permission.EditProjectSettings, APIScope.ProjectScope(projectOwner, projectSlug))
       .asyncF(parseCirce.json) { implicit request =>
         val res: ValidatedNel[String, EditableProject] = PartialUtils.decodeAndValidate(
           EditableProjectF.patchDecoder,
@@ -226,7 +239,7 @@ class Projects(
 
             val renameOp = edits.name.fold(ZIO.unit: ZIO[Any, Result, Unit]) { newName =>
               val doRename = projects
-                .withApiV1Identifier(pluginId)
+                .withSlug(projectOwner, projectSlug)
                 .get
                 .orDieWith(_ => new Exception("impossible"))
                 .flatMap(projects.rename(_, newName).absolve)
@@ -237,7 +250,7 @@ class Projects(
 
             val transferOp = edits.namespace.owner.fold(ZIO.unit: ZIO[Any, Result, Unit]) { newOwner =>
               val doTransfer = for {
-                project <- projects.withApiV1Identifier(pluginId).someOrFail(NotFound)
+                project <- projects.withSlug(projectOwner, projectSlug).someOrFail(NotFound)
                 user    <- users.withName(newOwner)(OreMDC.NoMDC).value.someOrFail(NotFound)
                 userRole <- project
                   .memberships[Task, ProjectUserRole, ProjectRoleTable]
@@ -254,14 +267,19 @@ class Projects(
               checkIsOwner("transfer project") *> doTransfer
             }
 
-            val update = service.runDbCon(APIV2Queries.updateProject(pluginId, withoutNameAndOwner).run)
+            val newOwner = edits.namespace.owner.getOrElse(projectOwner)
+            val newSlug  = edits.name.fold(projectSlug)(StringUtils.slugify)
+
+            //We need to be careful and use the new name and slug if they were changed
+            val update = service.runDbCon(APIV2Queries.updateProject(newOwner, newSlug, withoutNameAndOwner).run)
 
             //We need two queries two queries as we use the generic update function
             val get = service
               .runDbCon(
                 APIV2Queries
                   .singleProjectQuery(
-                    pluginId,
+                    newOwner,
+                    newSlug,
                     request.globalPermissions.has(Permission.SeeHidden),
                     request.user.map(_.id)
                   )
@@ -282,24 +300,26 @@ class Projects(
         }
       }
 
-  def projectMembersAction(pluginId: String, limit: Option[Long], offset: Long)(
-      implicit r: ApiRequest[_]
-  ): ZIO[Any, Nothing, Result] = {
-    service
-      .runDbCon(
-        APIV2Queries
-          .projectMembers(pluginId, limitOrDefault(limit, 25), offsetOrZero(offset))
-          .to[Vector]
-      )
-      .map { xs =>
-        val users =
-          if (r.scopePermission.has(Permission.ManageProjectMembers)) xs
-          else xs.filter(_.role.isAccepted)
+  def showMembers(projectOwner: String, projectSlug: String, limit: Option[Long], offset: Long): Action[AnyContent] =
+    CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF { implicit r =>
+      Members.membersAction(APIV2Queries.projectMembers(projectOwner, projectSlug, _, _), limit, offset)
+    }
 
-        Ok(users.asJson)
+  def updateMembers(projectOwner: String, projectSlug: String): Action[List[Members.MemberUpdate]] =
+    ApiAction(Permission.ManageProjectMembers, APIScope.ProjectScope(projectOwner, projectSlug))
+      .asyncF(parseCirce.decodeJson[List[Members.MemberUpdate]]) { implicit r =>
+        Members.updateMembers[Project, ProjectUserRole, ProjectRoleTable](
+          getSubject = projects.withSlug(projectOwner, projectSlug).someOrFail(NotFound),
+          allowOrgMembers = true,
+          getMembersQuery = APIV2Queries.projectMembers(projectOwner, projectSlug, _, _),
+          createRole = ProjectUserRole(_, _, _),
+          roleCompanion = ProjectUserRole,
+          notificationType = NotificationType.ProjectInvite,
+          notificationLocalization = "notification.project.invite"
+        )
       }
-  }
 
+<<<<<<<
   def showMembers(pluginId: String, limit: Option[Long], offset: Long): Action[AnyContent] =
     CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF(implicit r =>
       projectMembersAction(pluginId, limit, offset)
@@ -348,6 +368,15 @@ class Projects(
 
   def showProjectStats(pluginId: String, fromDateString: String, toDateString: String): Action[AnyContent] =
     CachingApiAction(Permission.IsProjectMember, APIScope.ProjectScope(pluginId)).asyncF {
+=======
+  def showProjectStats(
+      projectOwner: String,
+      projectSlug: String,
+      fromDateString: String,
+      toDateString: String
+  ): Action[AnyContent] =
+    CachingApiAction(Permission.IsProjectMember, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
+>>>>>>>
       import Ordering.Implicits._
 
       def parseDate(dateStr: String) =
@@ -362,11 +391,15 @@ class Projects(
         (fromDate, toDate) = t
         _ <- ZIO.unit.filterOrFail(_ => fromDate < toDate)(BadRequest(ApiError("From date is after to date")))
         res <- service.runDbCon(
-          APIV2Queries.projectStats(pluginId, fromDate, toDate).to[Vector].map(APIV2ProjectStatsQuery.asProtocol)
+          APIV2Queries
+            .projectStats(projectOwner, projectSlug, fromDate, toDate)
+            .to[Vector]
+            .map(APIV2ProjectStatsQuery.asProtocol)
         )
       } yield Ok(res.asJson)
     }
 
+<<<<<<<
   def setProjectVisibility(pluginId: String): Action[EditVisibility] =
     ApiAction(Permission.None, APIScope.ProjectScope(pluginId)).asyncF(parseCirce.decodeJson[EditVisibility]) {
       implicit request =>
@@ -409,13 +442,37 @@ class Projects(
           )(LoggedActionProject.apply)
 
           permChecks *> (forumVisbility <&> projectAction) *> log.as(NoContent)
+=======
+  def setProjectVisibility(projectOwner: String, projectSlug: String): Action[EditVisibility] =
+    ApiAction(Permission.None, APIScope.ProjectScope(projectOwner, projectSlug))
+      .asyncF(parseCirce.decodeJson[EditVisibility]) { implicit request =>
+        projects.withSlug(projectOwner, projectSlug).someOrFail(NotFound).flatMap { project =>
+          request.body.process(
+            project,
+            request.user.get.id,
+            request.scopePermission,
+            Permission.DeleteProject,
+            service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob).unit,
+            doHardDeleteProject,
+            (newV, oldV) =>
+              UserActionLogger
+                .logApi(
+                  request,
+                  LoggedActionType.ProjectVisibilityChange,
+                  project.id,
+                  newV,
+                  oldV
+                )(LoggedActionProject.apply)
+                .unit
+          )
+>>>>>>>
         }
-    }
+      }
 
-  def projectData(pluginId: String): Action[AnyContent] =
-    ApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF { implicit r =>
+  def projectData(projectOwner: String, projectSlug: String): Action[AnyContent] =
+    ApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF { implicit r =>
       for {
-        project <- projects.withApiV1Identifier(pluginId).get.orElseFail(NotFound)
+        project <- projects.withSlug(projectOwner, projectSlug).get.orElseFail(NotFound)
         data    <- ProjectData.of[ZIO[Blocking, Throwable, *]](project).orDie
       } yield Ok(
         Json.obj(
@@ -441,14 +498,54 @@ class Projects(
     )(LoggedActionProject.apply)
   }
 
-  def hardDeleteProject(pluginId: String): Action[AnyContent] =
-    ApiAction(Permission.HardDeleteProject, APIScope.ProjectScope(pluginId)).asyncF { implicit r =>
+  def hardDeleteProject(projectOwner: String, projectSlug: String): Action[AnyContent] =
+    ApiAction(Permission.HardDeleteProject, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF { implicit r =>
       projects
-        .withApiV1Identifier(pluginId)
+        .withSlug(projectOwner, projectSlug)
         .someOrFail(NotFound)
         .flatMap(doHardDeleteProject(_))
         .as(NoContent)
     }
+
+  def editDiscourseSettings(projectOwner: String, projectSlug: String): Action[Projects.DiscourseModifyTopicSettings] =
+    ApiAction(Permission.EditAdminSettings, APIScope.ProjectScope(projectOwner, projectSlug))
+      .asyncF(parseCirce.decodeJson[Projects.DiscourseModifyTopicSettings]) { implicit request =>
+        projects
+          .withSlug(projectOwner, projectSlug)
+          .someOrFail(NotFound)
+          .flatMap { project =>
+            val update = service.update(project)(_.copy(topicId = request.body.topicId, postId = request.body.postId))
+            val addJob = service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob)
+
+            update.as(NoContent) <* addJob.when(request.body.updateTopic)
+          }
+      }
+
+  def redirectPluginId(pluginId: String, path: String): Action[AnyContent] = Action.asyncF { implicit request =>
+    tryRedirectToNewUrls(pluginId, path)
+  }
+
+  def tryRedirectToNewUrls(pluginId: String, path: String)(
+      implicit request: RequestHeader
+  ): ZIO[Any, Status, Result] = {
+    if (request.getQueryString("ore-dont-pluginid-redirect").contains("true")) {
+      ZIO.succeed(NotFound)
+    } else {
+      projects
+        .withPluginId(pluginId)
+        .get
+        .map { project =>
+          val urlOwner = URLEncoder.encode(project.ownerName, "UTF-8")
+          val urlSlug  = URLEncoder.encode(project.slug, "UTF-8")
+          println(s"/api/v2/projects/$urlOwner/$urlSlug/$path")
+          Redirect(
+            s"/api/v2/projects/$urlOwner/$urlSlug/$path",
+            request.queryString ++ Map("ore-dont-pluginid-redirect" -> Seq("true"))
+          )
+        }
+        .orElseFail(NotFound)
+    }
+  }
 }
 object Projects {
   import APIV2.{categoryCodec, visibilityCodec, permissionRoleCodec}
@@ -547,13 +644,9 @@ object Projects {
     def asFactoryTemplate: ProjectTemplate = ProjectTemplate(name, pluginId, category, description)
   }
 
-  @SnakeCaseJsonCodec case class EditVisibility(
-      visibility: Visibility,
-      comment: String
-  )
-
-  @SnakeCaseJsonCodec case class ProjectMemberUpdate(
-      user: String,
-      role: ore.permission.role.Role
+  @SnakeCaseJsonCodec case class DiscourseModifyTopicSettings(
+      topicId: Option[Int],
+      postId: Option[Int],
+      updateTopic: Boolean
   )
 }

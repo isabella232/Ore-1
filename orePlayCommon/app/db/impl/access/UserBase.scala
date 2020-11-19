@@ -2,8 +2,8 @@ package db.impl.access
 
 import scala.language.higherKinds
 
+import java.time.OffsetDateTime
 import java.time.temporal.ChronoUnit
-import java.time.{Instant, OffsetDateTime, ZoneOffset}
 import java.util.UUID
 
 import play.api.mvc.Request
@@ -125,7 +125,7 @@ object UserBase {
     }
 
     def createSession(user: Model[User]): F[Model[Session]] = {
-      val maxAge     = config.play.sessionMaxAge
+      val maxAge     = config.ore.session.maxAge
       val expiration = OffsetDateTime.now().plus(maxAge.toMillis, ChronoUnit.MILLIS)
       val token      = UUID.randomUUID().toString
       service.insert(Session(expiration, user.id, token))

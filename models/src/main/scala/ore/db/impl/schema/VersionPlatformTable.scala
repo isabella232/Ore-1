@@ -1,8 +1,8 @@
 package ore.db.impl.schema
 
 import ore.db.DbRef
-import ore.models.project.{Version, VersionPlatform}
 import ore.db.impl.OrePostgresDriver.api._
+import ore.models.project.{Version, VersionPlatform}
 
 class VersionPlatformTable(tag: Tag) extends ModelTable[VersionPlatform](tag, "project_version_platforms") {
 
@@ -12,7 +12,10 @@ class VersionPlatformTable(tag: Tag) extends ModelTable[VersionPlatform](tag, "p
   def platformCoarseVersion = column[Option[String]]("platform_coarse_version")
 
   override def * =
-    (id.?, createdAt.?, (versionId, platform, platformVersion, platformCoarseVersion)) <> (mkApply(
-      (VersionPlatform.apply _).tupled
-    ), mkUnapply(VersionPlatform.unapply))
+    (id.?, createdAt.?, (versionId, platform, platformVersion, platformCoarseVersion)).<>(
+      mkApply(
+        (VersionPlatform.apply _).tupled
+      ),
+      mkUnapply(VersionPlatform.unapply)
+    )
 }

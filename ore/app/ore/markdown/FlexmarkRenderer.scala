@@ -15,7 +15,7 @@ import com.vladsch.flexmark.ext.gfm.tasklist.TaskListExtension
 import com.vladsch.flexmark.ext.tables.TablesExtension
 import com.vladsch.flexmark.ext.typographic.TypographicExtension
 import com.vladsch.flexmark.ext.wikilink.WikiLinkExtension
-import com.vladsch.flexmark.html.renderer.{LinkResolverContext, LinkStatus, LinkType, ResolvedLink}
+import com.vladsch.flexmark.html.renderer.{LinkResolverBasicContext, LinkStatus, LinkType, ResolvedLink}
 import com.vladsch.flexmark.html.{HtmlRenderer, LinkResolver, LinkResolverFactory}
 import com.vladsch.flexmark.parser.Parser
 import com.vladsch.flexmark.util.ast.Node
@@ -75,13 +75,14 @@ object FlexmarkRenderer {
 
       override def affectsGlobalScope(): Boolean = false
 
-      override def apply(context: LinkResolverContext): LinkResolver = new ExternalLinkResolver(this.config)
+      override def apply(context: LinkResolverBasicContext): LinkResolver = new ExternalLinkResolver(this.config)
     }
     // scalafix:on
   }
 
   private class ExternalLinkResolver(config: OreConfig) extends LinkResolver {
-    override def resolveLink(node: Node, context: LinkResolverContext, link: ResolvedLink): ResolvedLink = {
+
+    override def resolveLink(node: Node, context: LinkResolverBasicContext, link: ResolvedLink): ResolvedLink = {
       if (link.getLinkType == LinkType.IMAGE || node.isInstanceOf[MailLink]) { //scalafix:ok
         link
       } else {
@@ -100,7 +101,7 @@ object FlexmarkRenderer {
             controllers.routes.Application.linkOut(urlString).toString
           }
         } else {
-          val trustedUrlHosts = this.config.app.trustedUrlHosts
+          val trustedUrlHosts = this.config.application.trustedUrlHosts
           val checkSubdomain = (trusted: String) =>
             trusted(0) == '.' && (host.endsWith(trusted) || host == trusted.substring(1))
           if (host == null || trustedUrlHosts.exists(trusted => trusted == host || checkSubdomain(trusted))) { // scalafix:ok

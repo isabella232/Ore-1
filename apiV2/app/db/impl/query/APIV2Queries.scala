@@ -1,7 +1,6 @@
 package db.impl.query
 
-import java.sql.Timestamp
-import java.time.{LocalDate, LocalDateTime}
+import java.time.LocalDate
 
 import play.api.mvc.RequestHeader
 
@@ -24,19 +23,18 @@ import ore.permission.role.Role
 
 import cats.Reducible
 import cats.data.NonEmptyList
-import cats.instances.list._
-import cats.kernel.Monoid
 import cats.syntax.all._
-import squeal.category._
-import squeal.category.syntax.all._
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
+import doobie.postgres.circe.jsonb.implicits._
 import doobie.implicits.javasql._
 import doobie.implicits.javatime.JavaTimeLocalDateMeta
-import doobie.postgres.circe.jsonb.implicits._
 import doobie.util.Put
+import doobie.util.fragment.Elem
 import io.circe.DecodingFailure
+import squeal.category._
+import squeal.category.syntax.all._
 import zio.ZIO
 import zio.blocking.Blocking
 
@@ -51,7 +49,6 @@ object APIV2Queries extends DoobieOreProtocol {
           |       u.tagline,
           |       u.join_date,
           |       u.read_prompts,
-          |       u.is_locked,
           |       u.language,
           |       ak.name,
           |       ak.owner_id,
@@ -100,7 +97,7 @@ object APIV2Queries extends DoobieOreProtocol {
       .foldSmash1(fr0"ARRAY[", fr",", fr0"]")
 
   def projectSelectFrag(
-      pluginId: Option[String],
+      projectSlug: Option[String],
       category: List[Category],
       platforms: List[(String, Option[String])],
       stability: List[Version.Stability],
@@ -140,7 +137,9 @@ object APIV2Queries extends DoobieOreProtocol {
             |       p.category,
             |       p.description,
             |       ps.last_updated,
-            |       p.visibility,""".stripMargin ++ userActionsTaken ++
+            |       p.visibility,
+            |       p.topic_id,
+            |       p.post_id,""".stripMargin ++ userActionsTaken ++
         fr"""|       p.keywords,
              |       p.homepage,
              |       p.issues,
@@ -149,7 +148,7 @@ object APIV2Queries extends DoobieOreProtocol {
              |       p.license_name,
              |       p.license_url,
              |       p.forum_sync
-             |  FROM projects p JOIN project_stats ps ON p.id = ps.id JOIN promoted_versions ppv on p.id = ppv.project_id""".stripMargin
+             |  FROM projects p JOIN project_stats ps ON p.id = ps.id""".stripMargin
 
     val visibilityFrag =
       if (canSeeHidden) None
@@ -167,7 +166,7 @@ object APIV2Queries extends DoobieOreProtocol {
     }
 
     val filters = Fragments.whereAndOpt(
-      pluginId.map(id => fr"p.plugin_id = $id"),
+      projectSlug.map(slug => fr"lower(p.slug) = lower($slug)"),
       NonEmptyList.fromList(category).map(Fragments.in(fr"p.category", _)),
       if (platforms.nonEmpty || stability.nonEmpty) {
         val jsSelect =
@@ -191,7 +190,7 @@ object APIV2Queries extends DoobieOreProtocol {
         val trimmedQ = q.trim
 
         if (exactSearch) {
-          fr"p.slug = $trimmedQ"
+          fr"lower(p.slug) = lower($trimmedQ)"
         } else {
           if (q.endsWith(" ")) fr"p.search_words @@ websearch_to_tsquery('english', $trimmedQ)"
           else fr"p.search_words @@ websearch_to_tsquery_postfix('english', $trimmedQ)"
@@ -208,7 +207,7 @@ object APIV2Queries extends DoobieOreProtocol {
   }
 
   def projectQuery(
-      pluginId: Option[String],
+      projectSlug: Option[String],
       category: List[Category],
       platforms: List[(String, Option[String])],
       stability: List[Version.Stability],
@@ -252,7 +251,7 @@ object APIV2Queries extends DoobieOreProtocol {
     } else order.fragment
 
     val select = projectSelectFrag(
-      pluginId,
+      projectSlug,
       category,
       platforms,
       stability,
@@ -266,7 +265,8 @@ object APIV2Queries extends DoobieOreProtocol {
   }
 
   def singleProjectQuery(
-      pluginId: String,
+      projectOwner: String,
+      projectSlug: String,
       canSeeHidden: Boolean,
       currentUserId: Option[DbRef[User]]
   )(
@@ -275,12 +275,12 @@ object APIV2Queries extends DoobieOreProtocol {
       config: OreConfig
   ): Query0[ZIO[Blocking, Nothing, APIV2.Project]] =
     APIV2Queries.projectQuery(
-      Some(pluginId),
+      Some(projectSlug),
       Nil,
       Nil,
       Nil,
       None,
-      None,
+      Some(projectOwner),
       canSeeHidden,
       currentUserId,
       ProjectSortingStrategy.Default,
@@ -291,7 +291,7 @@ object APIV2Queries extends DoobieOreProtocol {
     )
 
   def projectCountQuery(
-      pluginId: Option[String],
+      projectSlug: Option[String],
       category: List[Category],
       platforms: List[(String, Option[String])],
       stability: List[Version.Stability],
@@ -302,7 +302,7 @@ object APIV2Queries extends DoobieOreProtocol {
       exactSearch: Boolean
   ): Query0[Long] = {
     val select = projectSelectFrag(
-      pluginId,
+      projectSlug,
       category,
       platforms,
       stability,
@@ -315,10 +315,10 @@ object APIV2Queries extends DoobieOreProtocol {
     (sql"SELECT COUNT(*) FROM " ++ Fragments.parentheses(select) ++ fr"sq").query[Long]
   }
 
-  case class Column[A](name: String, mkElem: A => Param.Elem)
+  case class Column[A](name: String, mkElem: A => Elem)
   object Column {
-    def arg[A](name: String)(implicit put: Put[A]): Column[A]         = Column(name, Param.Elem.Arg(_, put))
-    def opt[A](name: String)(implicit put: Put[A]): Column[Option[A]] = Column(name, Param.Elem.Opt(_, put))
+    def arg[A](name: String)(implicit put: Put[A]): Column[A]         = Column(name, Elem.Arg(_, put))
+    def opt[A](name: String)(implicit put: Put[A]): Column[Option[A]] = Column(name, Elem.Opt(_, put))
   }
 
   private def updateTable[F[_[_]]: ApplicativeKC: FoldableKC](
@@ -345,7 +345,7 @@ object APIV2Queries extends DoobieOreProtocol {
     sql"""UPDATE """ ++ Fragment.const(table) ++ updates
   }
 
-  def updateProject(pluginId: String, edits: Projects.EditableProject): Update0 = {
+  def updateProject(projectOwner: String, projectSlug: String, edits: Projects.EditableProject): Update0 = {
     val projectColumns = Projects.EditableProjectF[Column](
       Column.arg("name"),
       Projects.EditableProjectNamespaceF[Column](Column.arg("owner_name")),
@@ -365,29 +365,41 @@ object APIV2Queries extends DoobieOreProtocol {
       )
     )
 
-    import cats.instances.tuple._
     import cats.instances.option._
+    import cats.instances.tuple._
 
-    val (ownerSet, ownerFrom, ownerFilter) = edits.namespace.owner.foldMap { owner =>
+    val (newOwnerSet, newOwnerFrom, newOwnerFilter) = edits.namespace.owner.foldMap { owner =>
       (fr", owner_id = u.id", fr"FROM users u", fr"AND u.name = $owner")
     }
 
-    (updateTable("projects", projectColumns, edits) ++ ownerSet ++ ownerFrom ++ fr" WHERE plugin_id = $pluginId" ++ ownerFilter).update
+    (updateTable("projects", projectColumns, edits) ++ newOwnerSet ++ newOwnerFrom ++ fr" WHERE owner_name = $projectOwner AND lower(slug) = lower($projectSlug) " ++ newOwnerFilter).update
   }
 
-  def projectMembers(pluginId: String, limit: Long, offset: Long): Query0[APIV2.ProjectMember] =
+  def projectMembers(projectOwner: String, projectSlug: String, limit: Long, offset: Long): Query0[APIV2.Member] =
     sql"""|SELECT u.name, r.name, upr.is_accepted
           |  FROM projects p
           |         JOIN user_project_roles upr ON p.id = upr.project_id
           |         JOIN users u ON upr.user_id = u.id
           |         JOIN roles r ON upr.role_type = r.name
-          |  WHERE p.plugin_id = $pluginId
+          |  WHERE p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug)
           |  ORDER BY r.permission & ~B'1'::BIT(64) DESC LIMIT $limit OFFSET $offset""".stripMargin
-      .query[APIV2QueryProjectMember]
+      .query[APIV2QueryMember]
+      .map(_.asProtocol)
+
+  def orgaMembers(organization: String, limit: Long, offset: Long): Query0[APIV2.Member] =
+    sql"""|SELECT u.name, r.name, uor.is_accepted
+          |  FROM organizations o
+          |         JOIN user_organization_roles uor ON o.id = uor.organization_id
+          |         JOIN users u ON uor.user_id = u.id
+          |         JOIN roles r ON uor.role_type = r.name
+          |  WHERE o.name = $organization
+          |  ORDER BY r.permission & ~B'1'::BIT(64) DESC LIMIT $limit OFFSET $offset""".stripMargin
+      .query[APIV2QueryMember]
       .map(_.asProtocol)
 
   def versionSelectFrag(
-      pluginId: String,
+      projectOwner: String,
+      projectSlug: String,
       versionName: Option[String],
       platforms: List[(String, Option[String])],
       stability: List[Version.Stability],
@@ -406,7 +418,8 @@ object APIV2Queries extends DoobieOreProtocol {
             |       pv.stability,
             |       pv.release_type,
             |       coalesce(array_agg(pvp.platform) FILTER ( WHERE pvp.platform IS NOT NULL ), ARRAY []::TEXT[]),
-            |       coalesce(array_agg(pvp.platform_version) FILTER ( WHERE pvp.platform IS NOT NULL ), ARRAY []::TEXT[])
+            |       coalesce(array_agg(pvp.platform_version) FILTER ( WHERE pvp.platform IS NOT NULL ), ARRAY []::TEXT[]),
+            |       pv.post_id
             |    FROM projects p
             |             JOIN project_versions pv ON p.id = pv.project_id
             |             LEFT JOIN users u ON pv.author_id = u.id
@@ -427,7 +440,7 @@ object APIV2Queries extends DoobieOreProtocol {
         }
 
     val filters = Fragments.whereAndOpt(
-      Some(fr"p.plugin_id = $pluginId"),
+      Some(fr"p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug)"),
       versionName.map(v => fr"pv.version_string = $v"),
       if (coarsePlatforms.isEmpty) None
       else
@@ -448,7 +461,8 @@ object APIV2Queries extends DoobieOreProtocol {
   }
 
   def versionQuery(
-      pluginId: String,
+      projectOwner: String,
+      projectSlug: String,
       versionName: Option[String],
       platforms: List[(String, Option[String])],
       stability: List[Version.Stability],
@@ -458,20 +472,31 @@ object APIV2Queries extends DoobieOreProtocol {
       limit: Long,
       offset: Long
   ): Query0[APIV2.Version] =
-    (versionSelectFrag(pluginId, versionName, platforms, stability, releaseType, canSeeHidden, currentUserId) ++ fr"ORDER BY pv.created_at DESC LIMIT $limit OFFSET $offset")
+    (versionSelectFrag(
+      projectOwner,
+      projectSlug,
+      versionName,
+      platforms,
+      stability,
+      releaseType,
+      canSeeHidden,
+      currentUserId
+    ) ++ fr"ORDER BY pv.created_at DESC LIMIT $limit OFFSET $offset")
       .query[APIV2QueryVersion]
       .map(_.asProtocol)
 
   def singleVersionQuery(
-      pluginId: String,
+      projectOwner: String,
+      projectSlug: String,
       versionName: String,
       canSeeHidden: Boolean,
       currentUserId: Option[DbRef[User]]
   ): doobie.Query0[APIV2.Version] =
-    versionQuery(pluginId, Some(versionName), Nil, Nil, Nil, canSeeHidden, currentUserId, 1, 0)
+    versionQuery(projectOwner, projectSlug, Some(versionName), Nil, Nil, Nil, canSeeHidden, currentUserId, 1, 0)
 
   def versionCountQuery(
-      pluginId: String,
+      projectOwner: String,
+      projectSlug: String,
       platforms: List[(String, Option[String])],
       stability: List[Version.Stability],
       releaseType: List[Version.ReleaseType],
@@ -479,21 +504,21 @@ object APIV2Queries extends DoobieOreProtocol {
       currentUserId: Option[DbRef[User]]
   ): Query0[Long] =
     (sql"SELECT COUNT(*) FROM " ++ Fragments.parentheses(
-      versionSelectFrag(pluginId, None, platforms, stability, releaseType, canSeeHidden, currentUserId)
+      versionSelectFrag(projectOwner, projectSlug, None, platforms, stability, releaseType, canSeeHidden, currentUserId)
     ) ++ fr"sq").query[Long]
 
-  def updateVersion(pluginId: String, versionName: String, edits: Versions.DbEditableVersion): Update0 = {
+  def updateVersion(
+      projectOwner: String,
+      projectSlug: String,
+      versionName: String,
+      edits: Versions.DbEditableVersion
+  ): Update0 = {
     val versionColumns = Versions.DbEditableVersionF[Column](
       Column.arg("stability"),
-      Column.opt("release_type"),
-      Versions.VersionedPlatformF[Column](
-        Column.arg("platforms"),
-        Column.arg("platform_versions"),
-        Column.arg("platform_coarse_versions")
-      )
+      Column.opt("release_type")
     )
 
-    (updateTable("projects", versionColumns, edits) ++ fr"WHERE plugin_id = $pluginId AND version_string = $versionName").update
+    (updateTable("project_versions", versionColumns, edits) ++ fr" FROM projects p WHERE project_id = p.id AND p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug) AND version_string = $versionName").update
   }
 
   def userSearchFrag(
@@ -502,7 +527,6 @@ object APIV2Queries extends DoobieOreProtocol {
       roles: Seq[Role],
       excludeOrganizations: Boolean
   ): Fragment = {
-    import betterinterpolator._
     val initialFilters = Fragments.whereAndOpt(
       q.map(s => if (s.endsWith("%")) fr"u.name LIKE $s" else fr"u.name LIKE ${s + "%"}"),
       if (excludeOrganizations) Some(fr"r IS NULL OR r.name != 'Organization'") else None,
@@ -512,22 +536,22 @@ object APIV2Queries extends DoobieOreProtocol {
       if (minProjects > 0) Some(fr"sq.power >= $minProjects") else None
     )
 
-    bsql"""|SELECT sq.created_at, sq.name, sq.tagline, sq.join_date, projects, roles
-           |    FROM (SELECT u.name,
-           |                 u.tagline,
-           |                 u.created_at,
-           |                 u.join_date,
-           |                 count(p.plugin_id)                                           AS projects,
-           |                 array_remove(array_agg(DISTINCT r.name), NULL)               AS roles,
-           |                 coalesce((bit_or(r.permission) & ~B'1'::BIT(64))::BIGINT, 0) AS power
-           |              FROM users u
-           |                       LEFT JOIN project_members_all pma ON u.id = pma.user_id
-           |                       LEFT JOIN projects p ON p.id = pma.id
-           |                       LEFT JOIN user_global_roles ugr ON u.id = ugr.user_id
-           |                       LEFT JOIN roles r ON ugr.role_id = r.id
-           |              $initialFilters
-           |              GROUP BY u.name, u.tagline, u.join_date, u.created_at) sq
-           |    $outerFilters""".stripMargin
+    sql"""|SELECT sq.created_at, sq.name, sq.tagline, sq.join_date, projects, roles
+          |    FROM (SELECT u.name,
+          |                 u.tagline,
+          |                 u.created_at,
+          |                 u.join_date,
+          |                 count(p.plugin_id)                                           AS projects,
+          |                 array_remove(array_agg(DISTINCT r.name), NULL)               AS roles,
+          |                 coalesce((bit_or(r.permission) & ~B'1'::BIT(64))::BIGINT, 0) AS power
+          |              FROM users u
+          |                       LEFT JOIN project_members_all pma ON u.id = pma.user_id
+          |                       LEFT JOIN projects p ON p.id = pma.id
+          |                       LEFT JOIN user_global_roles ugr ON u.id = ugr.user_id
+          |                       LEFT JOIN roles r ON ugr.role_id = r.ID
+          |              $initialFilters
+          |              GROUP BY u.name, u.tagline, u.join_date, u.created_at) sq
+          |    $outerFilters""".stripMargin
   }
 
   def userSearchQuery(
@@ -579,6 +603,37 @@ object APIV2Queries extends DoobieOreProtocol {
           |             LEFT JOIN projects p ON p.id = pma.id
           |    WHERE u.name = $name
           |    GROUP BY u.id""".stripMargin.query[APIV2QueryUser].map(_.asProtocol)
+
+  def organizationQuery(name: String): Query0[APIV2.Organization] =
+    sql"""|SELECT ou.name,
+          |       u.created_at,
+          |       u.name,
+          |       u.tagline,
+          |       u.join_date,
+          |       count(DISTINCT p.plugin_id),
+          |       array_remove(array_agg(DISTINCT r.name), NULL)
+          |    FROM organizations o
+          |             JOIN users u ON o.user_id = u.id
+          |             JOIN users ou ON o.owner_id = ou.id
+          |             LEFT JOIN user_global_roles ugr ON u.id = ugr.user_id
+          |             LEFT JOIN roles r ON ugr.role_id = r.id
+          |             LEFT JOIN project_members_all pma ON u.id = pma.user_id
+          |             LEFT JOIN projects p ON p.id = pma.id
+          |    WHERE u.name = $name
+          |    GROUP BY ou.id, u.id""".stripMargin.query[APIV2QueryOrganization].map(_.asProtocol)
+
+  def getMemberships(user: String) =
+    sql"""|SELECT 'organization', o.name, NULL, NULL, NULL, uor.role_type, uor.is_accepted
+          |    FROM user_organization_roles uor
+          |             JOIN users u ON uor.user_id = u.id
+          |             JOIN organizations o ON uor.organization_id = o.id
+          |    WHERE u.name = $user
+          |UNION
+          |SELECT 'project', NULL, p.plugin_id, p.owner_name, p.slug, upr.role_type, upr.is_accepted
+          |    FROM user_project_roles upr
+          |             JOIN users u ON upr.user_id = u.id
+          |             JOIN projects p ON upr.project_id = p.id
+          |    WHERE u.name = $user""".stripMargin.query[APIV2QueryMembership].map(_.asProtocol)
 
   private def actionFrag(
       table: Fragment,
@@ -690,18 +745,24 @@ object APIV2Queries extends DoobieOreProtocol {
       currentUserId: Option[DbRef[User]]
   ): Query0[Long] = actionCountQuery(Fragment.const("project_watchers"), user, canSeeHidden, currentUserId)
 
-  def projectStats(pluginId: String, startDate: LocalDate, endDate: LocalDate): Query0[APIV2ProjectStatsQuery] =
+  def projectStats(
+      projectOwner: String,
+      projectSlug: String,
+      startDate: LocalDate,
+      endDate: LocalDate
+  ): Query0[APIV2ProjectStatsQuery] =
     sql"""|SELECT CAST(dates.day AS DATE), coalesce(sum(pvd.downloads), 0) AS downloads, coalesce(pv.views, 0) AS views
           |    FROM projects p,
           |         (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates
           |             LEFT JOIN project_versions_downloads pvd ON dates.day = pvd.day
           |             LEFT JOIN project_views pv ON dates.day = pv.day AND pvd.project_id = pv.project_id
-          |    WHERE p.plugin_id = $pluginId
+          |    WHERE p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug)
           |      AND (pvd IS NULL OR pvd.project_id = p.id)
           |    GROUP BY pv.views, dates.day;""".stripMargin.query[APIV2ProjectStatsQuery]
 
   def versionStats(
-      pluginId: String,
+      projectOwner: String,
+      projectSlug: String,
       versionString: String,
       startDate: LocalDate,
       endDate: LocalDate
@@ -711,7 +772,7 @@ object APIV2Queries extends DoobieOreProtocol {
           |         project_versions pv,
           |         (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates
           |             LEFT JOIN project_versions_downloads pvd ON dates.day = pvd.day
-          |    WHERE p.plugin_id = $pluginId
+          |    WHERE p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug)
           |      AND pv.version_string = $versionString
           |      AND (pvd IS NULL OR (pvd.project_id = p.id AND pvd.version_id = pv.id));""".stripMargin
       .query[APIV2VersionStatsQuery]
@@ -722,18 +783,22 @@ object APIV2Queries extends DoobieOreProtocol {
           |       (1::BIT(64) << 9)
           |    FROM organizations o
           |             JOIN users ou ON o.user_id = ou.id
-          |             LEFT JOIN organization_members om ON o.id = om.organization_id AND om.user_id = $uploader
+          |             LEFT JOIN user_organization_roles om ON o.id = om.organization_id AND om.user_id = $uploader
           |             LEFT JOIN global_trust gt ON gt.user_id = om.user_id
           |             LEFT JOIN organization_trust ot ON ot.user_id = om.user_id AND ot.organization_id = o.id
           |    WHERE o.name = $orgName;""".stripMargin.query[(DbRef[User], Boolean)]
 
-  def getPage(pluginId: String, page: String): Query0[(DbRef[Project], DbRef[Page], String, Option[String])] =
+  def getPage(
+      projectOwner: String,
+      projectSlug: String,
+      page: String
+  ): Query0[(DbRef[Project], DbRef[Page], String, Option[String])] =
     sql"""|WITH RECURSIVE pages_rec(n, name, slug, contents, id, project_id) AS (
           |    SELECT 2, pp.name, pp.slug, pp.contents, pp.id, pp.project_id
           |        FROM project_pages pp
           |                 JOIN projects p ON pp.project_id = p.id
-          |        WHERE p.plugin_id = $pluginId
-          |          AND split_part($page, '/', 1) = pp.slug
+          |        WHERE p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug)
+          |          AND lower(split_part($page, '/', 1)) = lower(pp.slug)
           |          AND pp.parent_id IS NULL
           |    UNION
           |    SELECT pr.n + 1, pp.name, pp.slug, pp.contents, pp.id, pp.project_id
@@ -741,19 +806,22 @@ object APIV2Queries extends DoobieOreProtocol {
           |             project_pages pp
           |        WHERE pp.project_id = pr.project_id
           |          AND pp.parent_id = pr.id
-          |          AND split_part($page, '/', pr.n) = pp.slug
+          |          AND lower(split_part($page, '/', pr.n)) = lower(pp.slug)
           |)
           |SELECT pp.project_id, pp.id, pp.name, pp.contents
           |    FROM pages_rec pp
-          |    WHERE pp.slug = split_part($page, '/', array_length(regexp_split_to_array($page, '/'), 1));""".stripMargin
+          |    WHERE lower(pp.slug) = lower(split_part($page, '/', array_length(regexp_split_to_array($page, '/'), 1)));""".stripMargin
       .query[(DbRef[Project], DbRef[Page], String, Option[String])]
 
-  def pageList(pluginId: String): Query0[(DbRef[Project], DbRef[Page], List[String], List[String], Boolean)] =
+  def pageList(
+      projectOwner: String,
+      projectSlug: String
+  ): Query0[(DbRef[Project], DbRef[Page], List[String], List[String], Boolean)] =
     sql"""|WITH RECURSIVE pages_rec(name, slug, id, project_id, navigational) AS (
           |    SELECT ARRAY[pp.name]::TEXT[], ARRAY[pp.slug]::TEXT[], pp.id, pp.project_id, pp.contents IS NULL
           |        FROM project_pages pp
           |                 JOIN projects p ON pp.project_id = p.id
-          |        WHERE p.plugin_id = $pluginId
+          |        WHERE p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug)
           |          AND pp.parent_id IS NULL
           |    UNION
           |    SELECT array_append(pr.name, pp.name::TEXT), array_append(pr.slug, pp.slug::TEXT), pp.id, pp.project_id, pp.contents IS NULL

@@ -2,8 +2,6 @@ package db
 
 import java.time.LocalDate
 
-import play.api.Configuration
-
 import db.impl.query.APIV2Queries
 import ore.OreConfig
 import ore.data.project.Category
@@ -12,13 +10,13 @@ import ore.permission.Permission
 
 import org.junit.runner.RunWith
 import org.scalatestplus.junit.JUnitRunner
+import pureconfig.ConfigSource
+import pureconfig.generic.auto._
 
 @RunWith(classOf[JUnitRunner])
 class APIV2QueriesSpec extends DbSpec {
 
-  implicit val config: OreConfig = new OreConfig(
-    Configuration.load(getClass.getClassLoader, System.getProperties, Map.empty, allowMissingApplicationConf = false)
-  )
+  implicit val config: OreConfig = ConfigSource.default.loadOrThrow[OreConfig]
 
   test("GetApiAuthInfo") {
     check(APIV2Queries.getApiAuthInfo(""))
@@ -73,13 +71,14 @@ class APIV2QueriesSpec extends DbSpec {
   }
 
   test("ProjectMembers") {
-    check(APIV2Queries.projectMembers("Foo", 20L, 0L))
+    check(APIV2Queries.projectMembers("Foo", "bar", 20L, 0L))
   }
 
   test("VersionCountQuery") {
     check(
       APIV2Queries.versionCountQuery(
         "Foo",
+        "Bar",
         List("Foo" -> Some("Bar"), "Baz" -> None),
         canSeeHidden = false,
         stability = List(Version.Stability.Stable),
@@ -94,10 +93,10 @@ class APIV2QueriesSpec extends DbSpec {
   }
 
   test("ProjectStats") {
-    check(APIV2Queries.projectStats("foo", LocalDate.now().minusDays(30), LocalDate.now()))
+    check(APIV2Queries.projectStats("foo", "bar", LocalDate.now().minusDays(30), LocalDate.now()))
   }
 
   test("VersionStats") {
-    check(APIV2Queries.versionStats("foo", "bar", LocalDate.now().minusDays(30), LocalDate.now()))
+    check(APIV2Queries.versionStats("foo", "bar", "baz", LocalDate.now().minusDays(30), LocalDate.now()))
   }
 }

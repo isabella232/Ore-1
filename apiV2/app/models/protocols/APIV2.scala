@@ -53,7 +53,17 @@ object APIV2 {
       visibility: Visibility,
       userActions: UserActions,
       settings: ProjectSettings,
-      iconUrl: String
+      iconUrl: String,
+      external: ProjectExternal
+  )
+
+  @SnakeCaseJsonCodec case class ProjectExternal(
+      discourse: ProjectExternalDiscourse
+  )
+
+  @SnakeCaseJsonCodec case class ProjectExternalDiscourse(
+      topicId: Option[Int],
+      postId: Option[Int]
   )
 
   @SnakeCaseJsonCodec case class CompactProject(
@@ -88,10 +98,26 @@ object APIV2 {
   )
   @SnakeCaseJsonCodec case class ProjectLicense(name: Option[String], url: Option[String])
 
-  //Project member
-  @SnakeCaseJsonCodec case class ProjectMember(
+  @SnakeCaseJsonCodec case class Member(
       user: String,
       role: Role
+  )
+
+  @SnakeCaseJsonCodec case class Membership(
+      scope: String,
+      organization: Option[MembershipOrganization],
+      project: Option[MembershipProject],
+      role: ore.permission.role.Role,
+      isAccepted: Boolean
+  )
+
+  @SnakeCaseJsonCodec case class MembershipOrganization(
+      name: String
+  )
+
+  @SnakeCaseJsonCodec case class MembershipProject(
+      pluginId: String,
+      namespace: ProjectNamespace
   )
 
   @SnakeCaseJsonCodec case class Role(
@@ -111,7 +137,16 @@ object APIV2 {
       stats: VersionStatsAll,
       author: Option[String],
       reviewState: ReviewState,
-      tags: VersionTags
+      tags: VersionTags,
+      external: VersionExternal
+  )
+
+  @SnakeCaseJsonCodec case class VersionExternal(
+      discourse: VersionExternalDiscourse
+  )
+
+  @SnakeCaseJsonCodec case class VersionExternalDiscourse(
+      postId: Option[Int]
   )
 
   @SnakeCaseJsonCodec case class VersionTags(
@@ -141,6 +176,11 @@ object APIV2 {
       joinDate: Option[OffsetDateTime],
       projectCount: Long,
       roles: List[Role]
+  )
+
+  @SnakeCaseJsonCodec case class Organization(
+      owner: String,
+      user: User
   )
 
   @SnakeCaseJsonCodec case class ProjectStatsDay(

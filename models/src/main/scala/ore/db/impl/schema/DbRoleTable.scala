@@ -1,6 +1,6 @@
 package ore.db.impl.schema
 
-import java.time.{Instant, OffsetDateTime}
+import java.time.OffsetDateTime
 
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.{DbRef, Model, ObjId, ObjOffsetDateTime}
@@ -36,6 +36,6 @@ class DbRoleTable(tag: Tag) extends ModelTable[DbRole](tag, "roles") {
         Some((id.unsafeToOption, name, category, permission, title, color, isAssignable, rank))
     }
 
-    (id.?, name, category, permission, title, color, isAssignable, rank.?) <> (applyFunc, unapplyFunc)
+    (id.?, name, category, permission, title, color, isAssignable, rank.?).<>(applyFunc, unapplyFunc)
   }
 }

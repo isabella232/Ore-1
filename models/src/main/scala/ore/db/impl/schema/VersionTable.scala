@@ -3,6 +3,7 @@ package ore.db.impl.schema
 import java.time.OffsetDateTime
 
 import ore.db.DbRef
+import ore.db.impl.OrePostgresDriver
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.table.common.{DescriptionColumn, VisibilityColumn}
 import ore.models.project.{Project, ReviewState, TagColor, Version}
@@ -14,6 +15,15 @@ class VersionTable(tag: Tag)
     with DescriptionColumn[Version]
     with VisibilityColumn[Version] {
 
+  implicit private val listOptionStrType: OrePostgresDriver.DriverJdbcType[List[Option[String]]] =
+    new OrePostgresDriver.SimpleArrayJdbcType[String]("text")
+      .to[List](
+        //DANGER
+        _.map(Option(_)).toList.asInstanceOf[List[String]],
+        _.asInstanceOf[List[Option[String]]].map(_.orNull)
+      )
+      .asInstanceOf[OrePostgresDriver.DriverJdbcType[List[Option[String]]]]
+
   def name            = column[String]("name")
   def slug            = column[String]("slug")
   def projectId       = column[DbRef[Project]]("project_id")
@@ -23,7 +33,6 @@ class VersionTable(tag: Tag)
   def approvedAt      = column[OffsetDateTime]("approved_at")
   def createForumPost = column[Boolean]("create_forum_post")
   def postId          = column[Option[Int]]("post_id")
-
   def stability    = column[Version.Stability]("stability")
   def releaseType  = column[Version.ReleaseType]("release_type")
   def channelName  = column[String]("legacy_channel_name")
@@ -35,9 +44,9 @@ class VersionTable(tag: Tag)
       releaseType.?,
       channelName.?,
       channelColor.?
-    ) <> (Version.VersionTags.tupled, Version.VersionTags.unapply)
+    ).<>(Version.VersionTags.tupled, Version.VersionTags.unapply)
 
-  override def * = {
+  override def * =
     (
       id.?,
       createdAt.?,
@@ -55,6 +64,5 @@ class VersionTable(tag: Tag)
         postId,
         tags
       )
-    ) <> (mkApply((Version.apply _).tupled), mkUnapply(Version.unapply))
-  }
+    ).<>(mkApply((Version.apply _).tupled), mkUnapply(Version.unapply))
 }

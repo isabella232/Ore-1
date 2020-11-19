@@ -3,8 +3,6 @@ package ore.models.project
 import java.time.{Instant, OffsetDateTime, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
-import scala.concurrent.{ExecutionContext, Future}
-
 import play.api.inject.ApplicationLifecycle
 
 import ore.OreConfig
@@ -20,8 +18,7 @@ import zio.{Schedule, UIO, duration}
   * Task that is responsible for publishing New projects
   */
 class ProjectTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.Runtime[Clock])(
-    implicit ec: ExecutionContext,
-    service: ModelService[UIO]
+    implicit service: ModelService[UIO]
 ) {
 
   private val Logger = scalalogging.Logger("ProjectTask")
@@ -45,19 +42,18 @@ class ProjectTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: z
   private val deleteNewProjects =
     createdAtFilterF.flatMap(createdAtFilter => service.deleteWhere(Project)(newFilter && createdAtFilter))
 
-  private val schedule: Schedule[Clock, Any, Int] = Schedule
-    .fixed(interval)
-    .tapInput(_ => UIO(Logger.debug(s"Deleting draft projects")))
+  private val schedule: Schedule[Any, Unit, Unit] =
+    Schedule
+      .fixed(interval)
+      .unit
+      .tapInput((_: Unit) => UIO(Logger.debug(s"Deleting draft projects")))
 
   private val action = (updateFalseNewProjects *> deleteNewProjects).unit.delay(interval)
 
-  //TODO: Repeat in case of failure
-  private val task = runtime.unsafeRun(action.sandbox.option.unit.repeat(schedule).fork)
+  private val task = runtime.unsafeRunToFuture(
+    action.catchAllCause(cause => UIO.effectTotal(Logger.error(cause.prettyPrint))).repeat(schedule)
+  )
 
-  lifecycle.addStopHook { () =>
-    Future {
-      runtime.unsafeRun(task.interrupt)
-    }
-  }
-  Logger.info(s"Initialized. First run in ${this.interval.asScala.toSeconds} seconds.")
+  lifecycle.addStopHook(() => task.cancel())
+  Logger.info(s"Initialized. First run in ${this.interval.getSeconds} seconds.")
 }

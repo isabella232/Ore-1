@@ -1,17 +1,21 @@
 package controllers
 
 import java.io.StringWriter
+import java.net.{InetAddress, NetworkInterface}
 import java.sql.Timestamp
 import java.time.temporal.ChronoUnit
 import java.time.{LocalDate, OffsetDateTime}
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
-import scala.concurrent.duration._
+import scala.concurrent.Future
 import scala.util.Try
 
+import play.api.http.{ContentTypes, HttpErrorHandler, Writeable}
 import play.api.mvc.{Action, ActionBuilder, AnyContent}
 import play.api.routing.JavaScriptReverseRouter
 
+import controllers.sugar.CircePlayController
 import controllers.sugar.Requests.AuthRequest
 import db.impl.query.AppQueries
 import form.OreForms
@@ -20,13 +24,7 @@ import models.viewhelper.{OrganizationData, UserData}
 import ore.db._
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.schema.{
-  LoggedActionOrganizationTable,
-  LoggedActionPageTable,
-  LoggedActionProjectTable,
-  LoggedActionUserTable,
-  LoggedActionVersionTable
-}
+import ore.db.impl.schema._
 import ore.markdown.MarkdownRenderer
 import ore.member.MembershipDossier
 import ore.models.organization.Organization
@@ -35,22 +33,24 @@ import ore.models.user._
 import ore.models.user.role._
 import ore.permission._
 import ore.permission.role.{Role, RoleCategory}
-import util.{Sitemap, UserActionLogger}
 import util.syntax._
+import util.{Sitemap, UserActionLogger}
 import views.{html => views}
 
+import akka.util.{ByteString, Timeout}
 import cats.Order
-import cats.instances.vector._
 import cats.syntax.all._
+import akka.actor.ActorSystem
 import zio.interop.catz._
 import zio.{IO, Task, UIO, ZIO}
 
 /**
   * Main entry point for application.
   */
-final class Application(forms: OreForms)(
+final class Application(forms: OreForms, val errorHandler: HttpErrorHandler)(
     implicit oreComponents: OreControllerComponents,
-    renderer: MarkdownRenderer
+    renderer: MarkdownRenderer,
+    actorSystem: ActorSystem
 ) extends OreBaseController {
 
   private def FlagAction = Authenticated.andThen(PermissionAction[AuthRequest](Permission.ModNotesAndFlags))
@@ -58,7 +58,6 @@ final class Application(forms: OreForms)(
   def javascriptRoutes: Action[AnyContent] = Action { implicit request =>
     Ok(
       JavaScriptReverseRouter("jsRoutes")(
-        controllers.project.routes.javascript.Projects.show,
         controllers.project.routes.javascript.Projects.showFlags,
         controllers.project.routes.javascript.Projects.showNotes,
         controllers.project.routes.javascript.Projects.showStargazers,
@@ -66,13 +65,27 @@ final class Application(forms: OreForms)(
         controllers.project.routes.javascript.Projects.showWatchers,
         controllers.project.routes.javascript.Projects.setWatching,
         controllers.project.routes.javascript.Projects.flag,
-        controllers.project.routes.javascript.Projects.removeMember,
         controllers.project.routes.javascript.Versions.download,
-        controllers.routes.javascript.Users.showProjects,
+        controllers.routes.javascript.Users.editApiKeys,
         controllers.routes.javascript.Users.logIn,
+        controllers.routes.javascript.Users.signUp,
+        controllers.routes.javascript.Users.logOut,
+        controllers.routes.javascript.Users.showAuthors,
+        controllers.routes.javascript.Users.showStaff,
+        controllers.routes.javascript.Users.showNotifications,
+        controllers.routes.javascript.Users.saveTagline,
         controllers.routes.javascript.Application.showLog,
         controllers.routes.javascript.Application.linkOut,
-        controllers.routes.javascript.Reviews.showReviews
+        controllers.routes.javascript.Application.showActivities,
+        controllers.routes.javascript.Application.userAdmin,
+        controllers.routes.javascript.Application.swagger,
+        controllers.routes.javascript.Application.showFlags,
+        controllers.routes.javascript.Application.showProjectVisibility,
+        controllers.routes.javascript.Application.showQueue,
+        controllers.routes.javascript.Application.showStats,
+        controllers.routes.javascript.Application.showHealth,
+        controllers.routes.javascript.Reviews.showReviews,
+        controllers.routes.javascript.Organizations.showCreator
       )
     ).as("text/javascript")
   }
@@ -158,7 +171,7 @@ final class Application(forms: OreForms)(
             noTopicProjects,
             staleProjects,
             notPublic,
-            missingFiles,
+            Model.unwrapNested[Vector[(Version, Project)]](missingFileProjects),
             erroredJobs
           )
         )
@@ -172,6 +185,8 @@ final class Application(forms: OreForms)(
     * @return     Redirect to proper route
     */
   def removeTrail(path: String): Action[AnyContent] = Action(MovedPermanently(s"/$path"))
+
+  def faviconRedirect(): Action[AnyContent] = Action(Redirect(assetsFinder.path("images/favicon.ico")))
 
   /**
     * Show the activities page for a user
@@ -279,7 +294,7 @@ final class Application(forms: OreForms)(
   }
 
   def UserAdminAction: ActionBuilder[AuthRequest, AnyContent] =
-    Authenticated.andThen(PermissionAction(Permission.EditAllUserSettings))
+    Authenticated.andThen(PermissionAction(Permission.EditAdminSettings))
 
   def userAdmin(user: String): Action[AnyContent] = UserAdminAction.asyncF { implicit request =>
     for {
@@ -471,8 +486,45 @@ final class Application(forms: OreForms)(
          |Disallow: /*/*/versions/*/new
          |Disallow: /*/*/versions/*/confirm
 
-         |Sitemap: ${config.app.baseUrl}/sitemap.xml
+         |Sitemap: ${config.application.baseUrl}/sitemap.xml
          |""".stripMargin
     ).as("text/plain")
+  }
+
+  private def isLocalHost(address: String): Boolean = {
+    val ipAddress = InetAddress.getByName(address)
+
+    //https://stackoverflow.com/questions/2406341/how-to-check-if-an-ip-address-is-the-local-host-on-a-multi-homed-system/2406819
+    ipAddress.isAnyLocalAddress || ipAddress.isLoopbackAddress ||
+    Try(NetworkInterface.getByInetAddress(ipAddress) != null).getOrElse(false)
+  }
+
+  import _root_.io.circe.{Json, Encoder}
+  import _root_.io.circe.syntax._
+
+  implicit val jsonWriteable: Writeable[Json] = Writeable(js => ByteString(js.noSpaces), Some(ContentTypes.JSON))
+
+  def actorTree(timeoutMs: Long): Action[AnyContent] = Action.async { request =>
+    implicit val timeout: Timeout = Timeout(timeoutMs, TimeUnit.MILLISECONDS)
+
+    import _root_.io.scalac.periscope.akka.tree.build
+
+    if (isLocalHost(request.remoteAddress)) {
+      build(actorSystem).map(tree => Ok(tree.asJson).as(ContentTypes.JSON))
+    } else {
+      Future.successful(Forbidden("Not localhost"))
+    }
+  }
+
+  def actorCount(timeoutMs: Long): Action[AnyContent] = Action.async { request =>
+    implicit val timeout: Timeout = Timeout(timeoutMs, TimeUnit.MILLISECONDS)
+
+    import _root_.io.scalac.periscope.akka.counter.count
+
+    if (isLocalHost(request.remoteAddress)) {
+      count(actorSystem).map(res => Ok(Json.obj("result" := res)))
+    } else {
+      Future.successful(Forbidden("Not localhost"))
+    }
   }
 }

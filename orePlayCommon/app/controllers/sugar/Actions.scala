@@ -1,7 +1,7 @@
 package controllers.sugar
 
-import java.time.temporal.ChronoUnit
 import java.time.OffsetDateTime
+import java.time.temporal.ChronoUnit
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -29,10 +29,10 @@ import util.syntax._
 
 import cats.syntax.all._
 import com.typesafe.scalalogging
+import zio._
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.interop.catz._
-import zio._
 
 /**
   * A set of actions used by Ore.
@@ -199,37 +199,6 @@ trait Actions extends Calls with ActionHelpers { self =>
 
   // Implementation
 
-  def userLock(redirect: Call)(implicit ec: ExecutionContext): ActionFilter[AuthRequest] =
-    new ActionFilter[AuthRequest] {
-      def executionContext: ExecutionContext = ec
-
-      def filter[A](request: AuthRequest[A]): Future[Option[Result]] = Future.successful {
-        if (!request.user.isLocked) None
-        else Some(Redirect(redirect).withError("error.user.locked"))
-      }
-    }
-
-  def verifiedAction(sso: Option[String], sig: Option[String])(
-      implicit ec: ExecutionContext
-  ): ActionFilter[AuthRequest] = new ActionFilter[AuthRequest] {
-    def executionContext: ExecutionContext = ec
-
-    def filter[A](request: AuthRequest[A]): Future[Option[Result]] = {
-      val auth = for {
-        ssoSome <- ZIO.fromOption(sso)
-        sigSome <- ZIO.fromOption(sig)
-        res     <- self.sso.authenticate(ssoSome, sigSome)(isNonceValid).get
-      } yield res
-
-      zioToFuture(
-        auth.fold(
-          _ => Some(Unauthorized),
-          spongeUser => if (spongeUser.id == request.user.id.value) None else Some(Unauthorized)
-        )
-      )
-    }
-  }
-
   def userEditAction(username: String)(implicit ec: ExecutionContext): ActionFilter[AuthRequest] =
     new ActionFilter[AuthRequest] {
       def executionContext: ExecutionContext = ec
@@ -311,28 +280,23 @@ trait Actions extends Calls with ActionHelpers { self =>
 
   private def maybeProjectRequest[A](
       r: OreRequest[A],
-      projectF: IO[Unit, Model[Project]]
+      projectF: IO[Option[Nothing], Model[Project]]
   ): Future[Either[Result, ProjectRequest[A]]] = {
     implicit val request: OreRequest[A] = r
 
     val projectRequest = for {
       project    <- projectF
       newProject <- processProject(project, request.headerData.currentUser)
-      res <- toProjectRequest(newProject) {
-        case (data, scoped) => new ProjectRequest[A](data, scoped, r.headerData, r)
-      }
+      res        <- toProjectRequest(newProject)(new ProjectRequest[A](_, r.headerData, r))
     } yield res
 
     zioToFuture(projectRequest.orElseFail(notFound).either)
   }
 
-  private def toProjectRequest[T](project: Model[Project])(f: (ProjectData, ScopedProjectData) => T)(
+  private def toProjectRequest[T](project: Model[Project])(f: ProjectData => T)(
       implicit
       request: OreRequest[_]
-  ) = {
-    val projectData = ProjectData.of[ZIO[Blocking, Throwable, *]](project)
-    (projectData.orDie, ScopedProjectData.of[UIO](request.headerData.currentUser, project)).parMapN(f)
-  }
+  ) = ProjectData.of[ZIO[Blocking, Throwable, *]](project).orDie.map(f)
 
   private def processProject(project: Model[Project], optUser: Option[Model[User]]): IO[Unit, Model[Project]] = {
     if (project.visibility == Visibility.Public) {
@@ -346,7 +310,7 @@ trait Actions extends Calls with ActionHelpers { self =>
         }
 
       for {
-        user <- ZIO.fromOption(optUser)
+        user <- ZIO.fromOption(optUser).orElseFail(())
 
         check1 = canEditAndNeedChangeOrApproval(project, user)
         check2 = user.permissionsIn[UIO](GlobalScope).map(_.has(Permission.SeeHidden))
@@ -368,7 +332,7 @@ trait Actions extends Calls with ActionHelpers { self =>
       case _ => UIO.succeed(false)
     }
 
-  def authedProjectActionImpl(projectF: IO[Unit, Model[Project]])(
+  def authedProjectActionImpl(projectF: IO[Option[Nothing], Model[Project]])(
       implicit ec: ExecutionContext
   ): ActionRefiner[AuthRequest, AuthedProjectRequest] = new ActionRefiner[AuthRequest, AuthedProjectRequest] {
 
@@ -378,11 +342,9 @@ trait Actions extends Calls with ActionHelpers { self =>
       implicit val r: AuthRequest[A] = request
 
       val projectRequest = for {
-        project    <- projectF
-        newProject <- processProject(project, Some(request.user))
-        projectRequest <- toProjectRequest(newProject) {
-          case (data, scoped) => new AuthedProjectRequest[A](data, scoped, r.headerData, request)
-        }
+        project        <- projectF
+        newProject     <- processProject(project, Some(request.user))
+        projectRequest <- toProjectRequest(newProject)(new AuthedProjectRequest[A](_, r.headerData, request))
       } yield projectRequest
 
       zioToFuture(projectRequest.orElseFail(notFound).either)
@@ -397,26 +359,6 @@ trait Actions extends Calls with ActionHelpers { self =>
       implicit ec: ExecutionContext
   ): ActionRefiner[AuthRequest, AuthedProjectRequest] =
     authedProjectActionImpl(projects.withApiV1Identifier(pluginId).get)
-
-  def organizationAction(organization: String)(
-      implicit ec: ExecutionContext
-  ): ActionRefiner[OreRequest, OrganizationRequest] = new ActionRefiner[OreRequest, OrganizationRequest] {
-
-    def executionContext: ExecutionContext = ec
-
-    def refine[A](request: OreRequest[A]): Future[Either[Result, OrganizationRequest[A]]] = {
-      implicit val r: OreRequest[A] = request
-
-      val orgaRequest = for {
-        org <- getOrga(organization)
-        orgaRequest <- toOrgaRequest(org) {
-          case (data, scoped) => new OrganizationRequest[A](data, scoped, r.headerData, request)
-        }
-      } yield orgaRequest
-
-      zioToFuture(orgaRequest.orElseFail(notFound).either)
-    }
-  }
 
   def authedOrganizationAction(organization: String)(
       implicit ec: ExecutionContext
@@ -445,9 +387,6 @@ trait Actions extends Calls with ActionHelpers { self =>
   }
 
   def getOrga(organization: String): IO[Unit, Model[Organization]] =
-    organizations.withName(organization).get
-
-  def getUserData(request: OreRequest[_], userName: String): IO[Unit, UserData] =
-    users.withName(userName)(request).semiflatMap(UserData.of(request, _)).toZIO
+    organizations.withName(organization).get.orElseFail(())
 
 }

@@ -7,16 +7,15 @@ import db.impl.access.ProjectBase
 import ore.data.user.notification.NotificationType
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.schema.{AssetTable, VersionTable}
+import ore.db.impl.schema.AssetTable
 import ore.db.{DbRef, Model, ModelService}
 import ore.member.MembershipDossier
-import ore.models.{Job, JobInfo}
+import ore.models.Job
 import ore.models.project._
 import ore.models.project.io._
 import ore.models.user.role.ProjectUserRole
 import ore.models.user.{Notification, User}
 import ore.permission.role.Role
-import ore.util.OreMDC
 import ore.util.StringUtils._
 import ore.{OreConfig, OreEnv}
 import util.FileIO
@@ -24,7 +23,6 @@ import util.syntax._
 
 import cats.data.NonEmptyList
 import cats.syntax.all._
-import com.typesafe.scalalogging
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.{IO, Task, UIO, ZIO}
@@ -46,9 +44,6 @@ trait ProjectFactory {
 
   implicit protected def config: OreConfig
   implicit protected def env: OreEnv
-
-  private val Logger    = scalalogging.Logger("Projects")
-  private val MDCLogger = scalalogging.Logger.takingImplicit[OreMDC](Logger.underlying)
 
   /**
     * Processes incoming [[PluginUpload]] data, verifies it, and loads a new
@@ -121,7 +116,6 @@ trait ProjectFactory {
       implicit messages: Messages
   ): ZIO[Blocking, String, PluginFileWithData] =
     for {
-      _ <- ZIO.fromOption(hasUserUploadError(uploader)).flip
       plugin <- processPluginUpload(uploadData, uploader)
         .ensure("error.version.illegalVersion")(!_.data.version.contains("recommended"))
       _             <- ZIO.unit.filterOrFail(_ => plugin.data.version.isDefined)("error.plugin.noVersion")
@@ -131,17 +125,6 @@ trait ProjectFactory {
         else ZIO.unit
       }
     } yield plugin
-
-  /**
-    * Returns the error ID to display to the User, if any, if they cannot
-    * upload files.
-    *
-    * @return Upload error if any
-    */
-  def hasUserUploadError(user: User): Option[String] =
-    Seq(
-      user.isLocked -> "error.user.locked"
-    ).find(_._1).map(_._2)
 
   /**
     * Starts the construction process of a [[Project]].
@@ -159,15 +142,16 @@ trait ProjectFactory {
   ): IO[String, Model[Project]] = {
     val name = template.name
     val slug = slugify(name)
-    val project = Project(
-      apiV1Identifier = template.apiV1Identifier,
-      ownerId = ownerId,
-      ownerName = ownerName,
-      name = name,
-      slug = slug,
-      category = template.category,
-      description = template.description,
-      visibility = Visibility.New
+    val insertProject = service.insert(
+      Project(
+        template.apiV1Identifier,
+        ownerName,
+        ownerId,
+        name,
+        template.category,
+        template.description,
+        visibility = Visibility.New
+      )
     )
 
     def cond[E](bool: Boolean, e: E) = if (bool) IO.succeed(()) else IO.fail(e)
@@ -183,7 +167,7 @@ trait ProjectFactory {
       _          <- cond(!existsId, "project with that api identifier already exists")
       _          <- cond(available, "slug not available")
       _          <- cond(config.isValidProjectName(name), "invalid name")
-      newProject <- service.insert(project)
+      newProject <- insertProject
       _ <- {
         MembershipDossier
           .projectHasMemberships[UIO]
@@ -192,6 +176,7 @@ trait ProjectFactory {
             ProjectUserRole(ownerId, newProject.id, Role.ProjectOwner, isAccepted = true)
           )
       }
+      _ <- service.insert(Page(newProject.id, Page.homeName, Some(Page.homeMessage), isDeletable = false, None))
     } yield newProject
   }
 
