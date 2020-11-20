@@ -40,8 +40,8 @@ trait Calls {
     */
   def ShowProject(author: String, slug: String): Call = controllers.project.routes.Projects.show(author, slug, "")
 
-  def showVersion(author: String, slug: String, version: String): Call =
-    controllers.project.routes.Projects.show(author, slug, s"versions/$version")
+  def showVersion(author: String, slug: String, versionSlug: String): Call =
+    controllers.project.routes.Projects.show(author, slug, s"versions/$versionSlug")
 
   def showPage(author: String, slug: String, page: String): Call =
     controllers.project.routes.Projects.show(author, slug, s"pages/$page")

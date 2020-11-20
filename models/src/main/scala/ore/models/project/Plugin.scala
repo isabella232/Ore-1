@@ -8,10 +8,8 @@ import slick.lifted.TableQuery
 
 case class Plugin(
     assetId: DbRef[Asset],
-    pluginId: String,
-    version: String,
-    dependencyIds: List[String],
-    dependencyVersions: List[Option[String]]
+    identifier: String,
+    version: String
 )
 object Plugin extends DefaultModelCompanion[Plugin, PluginTable](TableQuery[PluginTable]) {
 

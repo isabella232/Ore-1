@@ -8,7 +8,8 @@ import ore.models.user.User
 case class UnsortedQueueEntry(
     namespace: ProjectNamespace,
     projectName: String,
-    versionString: String,
+    versionName: String,
+    versionSlug: String,
     versionCreatedAt: OffsetDateTime,
     versionAuthor: Option[String],
     reviewerId: Option[DbRef[User]],
@@ -23,7 +24,8 @@ case class UnsortedQueueEntry(
         ReviewedQueueEntry(
           namespace,
           projectName,
-          versionString,
+          versionName,
+          versionSlug,
           versionCreatedAt,
           versionAuthor,
           reviewerId.get,
@@ -37,7 +39,8 @@ case class UnsortedQueueEntry(
         NotStartedQueueEntry(
           namespace,
           projectName,
-          versionString,
+          versionName,
+          versionSlug,
           versionCreatedAt,
           versionAuthor
         )
@@ -48,7 +51,8 @@ case class UnsortedQueueEntry(
 case class ReviewedQueueEntry(
     namespace: ProjectNamespace,
     projectName: String,
-    versionString: String,
+    versionName: String,
+    versionSlug: String,
     versionCreatedAt: OffsetDateTime,
     versionAuthor: Option[String],
     reviewerId: DbRef[User],
@@ -63,7 +67,8 @@ case class ReviewedQueueEntry(
 case class NotStartedQueueEntry(
     namespace: ProjectNamespace,
     projectName: String,
-    versionString: String,
+    versionName: String,
+    versionSlug: String,
     versionCreatedAt: OffsetDateTime,
     versionAuthor: Option[String]
 )

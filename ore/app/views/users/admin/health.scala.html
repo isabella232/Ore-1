@@ -3,11 +3,13 @@
 @import models.querymodels.UnhealtyProject
 @import ore.OreConfig
 @import ore.models.Job
-@import ore.models.project.{Project, Version}
+@import ore.db.DbRef
+@import ore.models.project.Asset
+@import ore.models.project.Project
 @(noTopicProjects: Seq[UnhealtyProject],
   staleProjects: Seq[UnhealtyProject],
   notPublicProjects: Seq[UnhealtyProject],
-  missingFiles: Seq[(String, String, String, String)],
+  missingFiles: Seq[(String, String, Option[String], DbRef[Project], DbRef[Asset], String)],
   erroredJobs: Seq[Job])(implicit request: OreRequest[_], messages: Messages, config: OreConfig, flash: Flash, assetsFinder: AssetsFinder)
 
 @projectRoutes = @{controllers.project.routes.Projects}
@@ -112,11 +114,12 @@
                     <h4 class="panel-title">@messages("admin.health.missingFile")</h4>
                 </div>
                 <div class="panel-body list-group list-group-health">
-                @missingFiles.map { case (owner, project, version, asset) =>
+                @missingFiles.map { case (owner, project, version, projectId, assetId, filename) =>
                 <div class="list-group-item">
-                    <a href="@Calls.showVersion(owner, project, version)">
-                        <strong>@project/@owner/@version/@asset</strong>
-                </a>
+                    <a href="@Calls.showVersion(owner, project, version.getOrElse("unknown"))">
+                        <strong>@project/@owner/@version.getOrElse("unknown")/@filename</strong>
+                        at file location <strong>assets/@projectId/@assetId</strong>
+                    </a>
                 </div>
                 }
                 </div>

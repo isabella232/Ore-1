@@ -12,7 +12,6 @@ import ore.db.impl.schema.{ProjectRoleTable, UserTable}
 import ore.db.{Model, ModelService}
 import ore.models.admin.ProjectVisibilityChange
 import ore.models.project._
-import ore.models.project.io.ProjectFiles
 import ore.models.user.role.ProjectUserRole
 import ore.models.user.{User, UserOwned}
 import ore.permission.role.RoleCategory
@@ -54,7 +53,6 @@ object ProjectData {
   def of[F[_]](project: Model[Project])(
       implicit service: ModelService[F],
       F: MonadError[F, Throwable],
-      files: ProjectFiles[F],
       par: Parallel[F],
       header: RequestHeader,
       config: OreConfig
@@ -82,14 +80,12 @@ object ProjectData {
       members(project),
       service.runDBIO(flagsWithNames.result),
       service.runDBIO(lastVisibilityChangeUserWithUser.result.headOption),
-      project.obj.iconUrl,
       service.runDbCon(SharedQueries.watcherStartProject(project.id).unique)
     ).parMapN {
       case (
           members,
           flagData,
           lastVisibilityChangeInfo,
-          iconUrl,
           starCount
           ) =>
         val noteCount = project.decodeNotes.size
@@ -101,7 +97,7 @@ object ProjectData {
           noteCount,
           lastVisibilityChangeInfo.map(_._1),
           lastVisibilityChangeInfo.flatMap(_._2).getOrElse("Unknown"),
-          iconUrl,
+          project.iconUrl,
           starCount
         )
     }

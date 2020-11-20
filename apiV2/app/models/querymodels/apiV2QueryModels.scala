@@ -52,23 +52,21 @@ case class APIV2QueryProject(
     support: Option[String],
     licenseName: Option[String],
     licenseUrl: Option[String],
-    forumSync: Boolean
+    forumSync: Boolean,
+    hasIconAssetId: Boolean
 ) {
 
   def asProtocol(
-      implicit projectFiles: ProjectFiles[ZIO[Blocking, Nothing, *]],
-      requestHeader: RequestHeader,
+      implicit requestHeader: RequestHeader,
       config: OreConfig
   ): ZIO[Blocking, Nothing, APIV2.Project] = {
-    val iconPath = projectFiles.getIconPath(namespace.ownerName, name)
-    val iconUrlF = iconPath.map(_.isDefined).map {
-      case true  => controllers.project.routes.Projects.showIcon(namespace.ownerName, namespace.slug).absoluteURL()
-      case false => User.avatarUrl(namespace.ownerName)
-    }
+    val iconUrl =
+      if (hasIconAssetId)
+        controllers.project.routes.Projects.showIcon(namespace.ownerName, namespace.slug).absoluteURL()
+      else User.avatarUrl(namespace.ownerName)
 
     for {
       promotedVersionDecoded <- ZIO.fromEither(APIV2QueryProject.decodePromotedVersions(promotedVersions)).orDie
-      iconUrl                <- iconUrlF
     } yield {
       APIV2.Project(
         createdAt,

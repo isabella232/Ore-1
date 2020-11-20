@@ -32,8 +32,9 @@ import util.UserActionLogger
 import views.html.{projects => views}
 
 import cats.syntax.all._
+import zio.blocking.Blocking
 import zio.interop.catz._
-import zio.{IO, Task, UIO, ZIO}
+import zio.{IO, Task, UIO, URIO, ZIO}
 
 /**
   * Controller for handling Project related actions.
@@ -74,15 +75,18 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
       .withSlug(author, slug)
       .get
       .orElseFail(NotFound)
-      .flatMap(project => project.obj.iconUrlOrPath.map(_.fold(Redirect(_), showImage)))
+      .flatMap(p => p.iconUrlOrAsset.fold(url => UIO.succeed(Redirect(url)), showAssetImage(p.id, _)))
   }
 
-  private def showImage(path: Path) = {
-    val lastModified     = Files.getLastModifiedTime(path).toString.getBytes("UTF-8")
-    val lastModifiedHash = MessageDigest.getInstance("MD5").digest(lastModified)
-    val hashString       = Base64.getEncoder.encodeToString(lastModifiedHash)
-    Ok.sendPath(path)
-      .withHeaders(ETAG -> s""""$hashString"""", CACHE_CONTROL -> s"max-age=${1.hour.toSeconds}")
+  private def showAssetImage(projectId: DbRef[Project], assetId: DbRef[Asset]) = {
+    ModelView.now(Asset).get(assetId).toZIO.orElseFail(NotFound).map { asset =>
+      val path             = projectFiles.getAssetPath(projectId, assetId)
+      val lastModified     = Files.getLastModifiedTime(path).toString.getBytes("UTF-8")
+      val lastModifiedHash = MessageDigest.getInstance("MD5").digest(lastModified)
+      val hashString       = Base64.getEncoder.encodeToString(lastModifiedHash)
+      Ok.sendPath(path, fileName = _ => Some(asset.filename))
+        .withHeaders(ETAG -> s""""$hashString"""", CACHE_CONTROL -> s"max-age=${1.hour.toSeconds}")
+    }
   }
 
   /**
@@ -272,28 +276,18 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
       request.body.file("icon") match {
         case None => IO.fail(Redirect(self.show(author, slug, "")).withError("error.noFile"))
         case Some(tmpFile) =>
-          val data = request.data
-          val dir  = projectFiles.getIconDir(data.project.ownerName, data.project.name)
+          val project = request.project
 
-          import zio.blocking._
-
-          val notExist   = effectBlocking(Files.notExists(dir))
-          val createDir  = effectBlocking(Files.createDirectories(dir))
-          val deleteFile = (p: Path) => effectBlocking(Files.delete(p))
-
-          val deleteFiles = effectBlocking(Files.list(dir))
-            .map(_.iterator().asScala)
-            .flatMap(it => ZIO.foreachParN_(config.performance.nioBlockingFibers)(it.to(Iterable))(deleteFile))
-
-          val moveFile = effectBlocking(tmpFile.ref.moveTo(dir.resolve(tmpFile.filename), replace = true))
+          val replace = project.iconAssetId.fold(assets.insertOrGetAsset(project.id, tmpFile.ref.path))(
+            assets.deleteWithReplacement(project.id, _, tmpFile.ref.path)
+          )
 
           //todo data
-          val log = UserActionLogger.log(request.request, LoggedActionType.ProjectIconChanged, data.project.id, "", "")(
+          val log = UserActionLogger.log(request.request, LoggedActionType.ProjectIconChanged, project.id, "", "")(
             LoggedActionProject.apply
           )
 
-          val res = ZIO.whenM(notExist)(createDir) *> deleteFiles *> moveFile *> log.as(Ok)
-          res.orDie
+          replace.flatMap(asset => service.update(project)(_.copy(iconAssetId = Some(asset.id.value)))) *> log.as(Ok)
       }
     }
 
@@ -309,18 +303,18 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
       import zio.blocking._
 
       val project = request.project
-      val deleteOptFile = (op: Option[Path]) =>
-        op.fold(IO.succeed(()): ZIO[Blocking, Throwable, Unit])(p => effectBlocking(Files.delete(p)))
+      project.iconAssetId.fold(UIO.succeed(Ok): URIO[Blocking, Result]) { assetId =>
+        val updateProject = service.update(project)(_.copy(iconAssetId = None))
 
-      val res = for {
-        icon <- projectFiles.getIconPath(project)
-        _    <- deleteOptFile(icon)
+        val deleteAsset = assets.deleteAssetIfUnused(project.id, assetId)
+
         //todo data
-        _ <- UserActionLogger.log(request.request, LoggedActionType.ProjectIconChanged, project.id, "", "")(
+        val log = UserActionLogger.log(request.request, LoggedActionType.ProjectIconChanged, project.id, "", "")(
           LoggedActionProject.apply
         )
-      } yield Ok
-      res.orDie
+
+        updateProject *> deleteAsset *> log.as(Ok)
+      }
   }
 
   /**

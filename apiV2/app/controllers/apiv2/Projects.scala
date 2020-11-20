@@ -319,56 +319,6 @@ class Projects(
         )
       }
 
-<<<<<<<
-  def showMembers(pluginId: String, limit: Option[Long], offset: Long): Action[AnyContent] =
-    CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(pluginId)).asyncF(implicit r =>
-      projectMembersAction(pluginId, limit, offset)
-    )
-
-  def updateMembers(pluginId: String): Action[List[Projects.ProjectMemberUpdate]] =
-    ApiAction(Permission.ManageProjectMembers, APIScope.ProjectScope(pluginId))
-      .asyncF(parseCirce.decodeJson[List[Projects.ProjectMemberUpdate]]) { implicit r =>
-        for {
-          project <- projects.withApiV1Identifier(pluginId).someOrFail(NotFound)
-          resolvedUsers <- ZIO.foreach(r.body) { m =>
-            users.withName(m.user)(OreMDC.NoMDC).tupleLeft(m.role).value.someOrFail(NotFound)
-          }
-          currentMembers <- project.memberships[Task, ProjectUserRole, ProjectRoleTable].members(project).orDie
-          resolvedUsersMap  = resolvedUsers.map(t => t._2.id.value -> t._1).toMap
-          currentMembersMap = currentMembers.map(t => t.userId -> t).toMap
-          newUsers          = resolvedUsersMap.view.filterKeys(!currentMembersMap.contains(_)).toMap
-          usersToUpdate = currentMembersMap.collect {
-            case (user, oldRole) if resolvedUsersMap.get(user).exists(newRole => oldRole.role != newRole) =>
-              (user, (oldRole, resolvedUsersMap(user)))
-          }
-          usersToDelete = currentMembersMap.view.filterKeys(!resolvedUsersMap.contains(_)).toMap
-          _ <- if (usersToUpdate.contains(project.ownerId)) ZIO.fail(BadRequest(ApiError("Can't update owner")))
-          else ZIO.unit
-          _ <- if (usersToDelete.contains(project.ownerId)) ZIO.fail(BadRequest(ApiError("Can't delete owner")))
-          else ZIO.unit
-          _ <- service.bulkInsert(newUsers.map(t => ProjectUserRole(t._1, project.id, t._2)).toSeq)
-          _ <- ZIO.foreach(usersToUpdate.values)(t => service.update(t._1)(_.copy(role = t._2)))
-          _ <- service.deleteWhere(ProjectUserRole)(_.id.inSetBind(usersToDelete.values.map(_.id.value)))
-          _ <- {
-            val notifications = newUsers.map {
-              case (userId, role) =>
-                Notification(
-                  userId = userId,
-                  originId = Some(project.ownerId),
-                  notificationType = NotificationType.ProjectInvite,
-                  messageArgs = NonEmptyList.of("notification.project.invite", role.title, project.name)
-                )
-            }
-
-            service.bulkInsert(notifications.toSeq)
-          }
-          res <- projectMembersAction(pluginId, None, 0)
-        } yield res
-      }
-
-  def showProjectStats(pluginId: String, fromDateString: String, toDateString: String): Action[AnyContent] =
-    CachingApiAction(Permission.IsProjectMember, APIScope.ProjectScope(pluginId)).asyncF {
-=======
   def showProjectStats(
       projectOwner: String,
       projectSlug: String,
@@ -376,7 +326,6 @@ class Projects(
       toDateString: String
   ): Action[AnyContent] =
     CachingApiAction(Permission.IsProjectMember, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
->>>>>>>
       import Ordering.Implicits._
 
       def parseDate(dateStr: String) =
@@ -399,50 +348,6 @@ class Projects(
       } yield Ok(res.asJson)
     }
 
-<<<<<<<
-  def setProjectVisibility(pluginId: String): Action[EditVisibility] =
-    ApiAction(Permission.None, APIScope.ProjectScope(pluginId)).asyncF(parseCirce.decodeJson[EditVisibility]) {
-      implicit request =>
-        val newVisibility = request.body.visibility
-        val changerId     = request.user.get.id
-
-        projects.withApiV1Identifier(pluginId).someOrFail(NotFound).flatMap { project =>
-          val forumVisbility =
-            if (Visibility.isPublic(newVisibility) != Visibility.isPublic(project.visibility))
-              service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob).unit
-            else IO.unit
-
-          if (request.scopePermission.has(Permission.Reviewer)) {
-            ZIO.succeed(true)
-          }
-
-          val nonReviewerChecks = newVisibility match {
-            case Visibility.NeedsApproval =>
-              val cond = project.visibility == Visibility.NeedsChanges &&
-                request.scopePermission.has(Permission.EditProjectSettings)
-              if (cond) ZIO.unit
-              else ZIO.fail(Forbidden)
-            case Visibility.SoftDelete =>
-              if (request.scopePermission.has(Permission.DeleteProject)) ZIO.unit else ZIO.fail(Forbidden)
-            case v => ZIO.fail(BadRequest(Json.obj("error" := s"Project can't be changed to $v")))
-          }
-
-          val permChecks = if (request.scopePermission.has(Permission.Reviewer)) ZIO.unit else nonReviewerChecks
-
-          val projectAction =
-            if (project.visibility == Visibility.New) doHardDeleteProject(project)
-            else project.setVisibility(newVisibility, request.body.comment, changerId)
-
-          val log = UserActionLogger.logApi(
-            request,
-            LoggedActionType.ProjectVisibilityChange,
-            project.id,
-            newVisibility.nameKey,
-            Visibility.NeedsChanges.nameKey
-          )(LoggedActionProject.apply)
-
-          permChecks *> (forumVisbility <&> projectAction) *> log.as(NoContent)
-=======
   def setProjectVisibility(projectOwner: String, projectSlug: String): Action[EditVisibility] =
     ApiAction(Permission.None, APIScope.ProjectScope(projectOwner, projectSlug))
       .asyncF(parseCirce.decodeJson[EditVisibility]) { implicit request =>
@@ -465,7 +370,6 @@ class Projects(
                 )(LoggedActionProject.apply)
                 .unit
           )
->>>>>>>
         }
       }
 
@@ -532,7 +436,7 @@ class Projects(
       ZIO.succeed(NotFound)
     } else {
       projects
-        .withPluginId(pluginId)
+        .withApiV1Identifier(pluginId)
         .get
         .map { project =>
           val urlOwner = URLEncoder.encode(project.ownerName, "UTF-8")

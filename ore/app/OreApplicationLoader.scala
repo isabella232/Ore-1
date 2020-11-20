@@ -32,7 +32,7 @@ import controllers._
 import controllers.project.{Projects, Versions}
 import controllers.sugar.Bakery
 import db.impl.{DbUpdateTask, OreEvolutionsReader}
-import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
+import db.impl.access.{AssetBase, OrganizationBase, ProjectBase, UserBase}
 import db.impl.service.OreModelService
 import db.impl.service.OreModelService.F
 import filters.LoggingFilter
@@ -167,9 +167,7 @@ class OreComponents(context: ApplicationLoader.Context)
     OreComponents.upcastFnK[ZIO[Blocking, Nothing, *], ZIO[Blocking, Throwable, *]]
   )
 
-  implicit lazy val projectFiles: ProjectFiles[ZIO[Blocking, Nothing, *]] =
-    (wire[ProjectFiles.LocalProjectFiles[ZIO[Blocking, Throwable, *]]]: ProjectFiles[ZIO[Blocking, Throwable, *]])
-      .mapK(OreComponents.orDieFnK[Blocking])
+  implicit lazy val projectFiles: ProjectFiles = wire[ProjectFiles.LocalProjectFiles]
 
   implicit val transactor: Transactor[Task] = {
     val cs: ContextShift[Task] = ContextShift[Task]
@@ -232,9 +230,6 @@ class OreComponents(context: ApplicationLoader.Context)
   implicit lazy val userBaseTask: UserBase[Task] = wire[UserBase.UserBaseF[Task]]
   implicit lazy val userBaseUIO: UserBase[UIO]   = wire[UserBase.UserBaseF[UIO]]
   implicit lazy val projectBase: ProjectBase[UIO] = {
-    implicit val providedProjectFiles: ProjectFiles[Task] =
-      projectFiles.mapK(OreComponents.provideFnK[Blocking, Nothing](runtime.environment))
-
     implicit lazy val fileIOTask: FileIO[Task] =
       fileIORaw.imapK(
         new FunctionK[ZIO[Blocking, Throwable, *], Task] {
@@ -243,15 +238,14 @@ class OreComponents(context: ApplicationLoader.Context)
         OreComponents.upcastFnK[Task, ZIO[Blocking, Throwable, *]]
       )
 
-    // Schrodinger's values, are both used and not used at the same time.
-    // Trying to observe if they are will collapse the compile state into an error.
-    use(providedProjectFiles)
     use(fileIOTask)
 
     (wire[ProjectBase.ProjectBaseF[Task]]: ProjectBase[Task]).mapK(taskToUIO)
   }
   implicit lazy val orgBase: OrganizationBase[UIO] =
     (wire[OrganizationBase.OrganizationBaseF[Task]]: OrganizationBase[Task]).mapK(taskToUIO)
+
+  implicit lazy val assetBase: AssetBase = wire[AssetBase.LocalAssetBase]
 
   lazy val bakery: Bakery     = wire[Bakery]
   lazy val forms: OreForms    = wire[OreForms]

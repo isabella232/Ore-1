@@ -28,7 +28,8 @@ object AppQueries extends DoobieOreProtocol {
     sql"""|SELECT sq.project_author,
           |       sq.project_slug,
           |       sq.project_name,
-          |       sq.version_string,
+          |       sq.version_name,
+          |       sq.version_slug,
           |       sq.version_created_at,
           |       sq.version_author,
           |       sq.reviewer_id,
@@ -38,7 +39,8 @@ object AppQueries extends DoobieOreProtocol {
           |  FROM (SELECT pu.name                                                                  AS project_author,
           |               p.name                                                                   AS project_name,
           |               p.slug                                                                   AS project_slug,
-          |               v.version_string,
+          |               v.name                                                                   AS version_name,
+          |               v.slug                                                                   AS version_slug,
           |               v.created_at                                                             AS version_created_at,
           |               vu.name                                                                  AS version_author,
           |               r.user_id                                                                AS reviewer_id,
@@ -57,7 +59,8 @@ object AppQueries extends DoobieOreProtocol {
           |            AND v.visibility != 5
           |            AND v.stability = 'stable') sq
           |  WHERE row = 1
-          |  ORDER BY sq.project_name DESC, sq.version_string DESC""".stripMargin.query[UnsortedQueueEntry]
+          |  ORDER BY sq.project_author DESC, sq.project_name DESC, sq.version_name DESC""".stripMargin
+      .query[UnsortedQueueEntry]
   }
 
   val flags: Query0[ShownFlag] = {

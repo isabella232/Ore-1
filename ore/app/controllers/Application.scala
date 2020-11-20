@@ -171,7 +171,7 @@ final class Application(forms: OreForms, val errorHandler: HttpErrorHandler)(
             noTopicProjects,
             staleProjects,
             notPublic,
-            Model.unwrapNested[Vector[(Version, Project)]](missingFileProjects),
+            missingFiles,
             erroredJobs
           )
         )

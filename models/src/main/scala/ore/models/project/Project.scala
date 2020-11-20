@@ -54,6 +54,7 @@ case class Project(
     postId: Option[Int] = None,
     visibility: Visibility = Visibility.Public,
     notes: Json = Json.obj(),
+    iconAssetId: Option[DbRef[Asset]] = None,
     settings: ProjectSettings = ProjectSettings()
 ) extends Named
     with Describable

@@ -11,7 +11,7 @@ import play.api.mvc._
 
 import controllers.OreControllerComponents
 import controllers.sugar.Requests._
-import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
+import db.impl.access.{AssetBase, OrganizationBase, ProjectBase, UserBase}
 import models.viewhelper._
 import ore.OreConfig
 import ore.auth.SSOApi
@@ -54,8 +54,9 @@ trait Actions extends Calls with ActionHelpers { self =>
   implicit def users: UserBase[UIO]                 = oreComponents.uioEffects.users
   implicit def projects: ProjectBase[UIO]           = oreComponents.uioEffects.projects
   implicit def organizations: OrganizationBase[UIO] = oreComponents.uioEffects.organizations
+  implicit def assets: AssetBase                    = oreComponents.assets
 
-  implicit def projectFiles: ProjectFiles[RIO[Blocking, *]] = oreComponents.projectFiles
+  implicit def projectFiles: ProjectFiles = oreComponents.projectFiles
 
   implicit def ec: ExecutionContext = oreComponents.executionContext
 

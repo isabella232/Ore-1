@@ -20,7 +20,7 @@ class SchemaSpec extends DbSpec {
   test("Project") {
     check(sql"""|SELECT plugin_id, owner_name, owner_id, name,
                 |category, description, topic_id, post_id, visibility,
-                |notes, keywords, homepage, issues, source, support, license_name, license_url, 
+                |notes, icon_asset_id, keywords, homepage, issues, source, support, license_name, license_url,
                 |forum_sync FROM projects""".stripMargin.query[Project])
   }
 
@@ -39,10 +39,27 @@ class SchemaSpec extends DbSpec {
 
   test("Version") {
     check(
-      sql"""|SELECT project_id, version_string, dependency_ids, dependency_versions, file_size, hash,
-            |author_id, description, review_state, reviewer_id, approved_at, visibility, file_name,
-            |create_forum_post, post_id, uses_mixin, stability, release_type,
-            |legacy_channel_name, legacy_channel_color FROM project_versions""".stripMargin.query[Version]
+      sql"""|SELECT project_id, name, slug, author_id, description, review_state, reviewer_id, approved_at, visibility,
+            |create_forum_post, post_id, plugin_asset_id, docs_asset_id, sources_asset_id, uses_mixin, stability,
+            |release_type, legacy_channel_name, legacy_channel_color FROM project_versions""".stripMargin.query[Version]
+    )
+  }
+
+  test("Asset") {
+    check(
+      sql"""SELECT project_id, filename, hash, filesize FROM project_assets""".query[Asset]
+    )
+  }
+
+  test("Plugin") {
+    check(
+      sql"""SELECT asset_id, identifier, version FROM project_asset_plugins""".query[Plugin]
+    )
+  }
+
+  test("Dependency") {
+    check(
+      sql"""SELECT plugin_id, identifier, version_range, version_syntax""".query[Dependency]
     )
   }
 

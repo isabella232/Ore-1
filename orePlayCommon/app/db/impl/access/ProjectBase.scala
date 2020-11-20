@@ -24,7 +24,7 @@ import cats.tagless.autoFunctorK
 @autoFunctorK
 trait ProjectBase[+F[_]] {
 
-  def missingFile: F[Seq[(String, String, String, String)]]
+  def missingFile: F[Seq[(String, String, Option[String], DbRef[Project], DbRef[Asset], String)]]
 
   /**
     * Returns the Project with the specified owner name and name.
@@ -99,28 +99,29 @@ object ProjectBase {
   class ProjectBaseF[F[_]](
       implicit service: ModelService[F],
       config: OreConfig,
-      fileManager: ProjectFiles[F],
+      fileManager: ProjectFiles,
       fileIO: FileIO[F],
       F: cats.effect.Effect[F],
       projectJoinable: Joinable[F, Project]
   ) extends ProjectBase[F] {
 
-    def missingFile: F[Seq[(String, String, String, String)]] = {
+    def missingFile: F[Seq[(String, String, Option[String], DbRef[Project], DbRef[Asset], String)]] = {
       def allVersions =
         for {
-          a <- TableQuery[AssetTable]
-          v <- TableQuery[VersionTable] if a.versionId === v.id
-          p <- TableQuery[ProjectTable] if v.projectId === p.id
-        } yield (p.ownerName, p.name, v.name, a.filename)
+          t <- TableQuery[AssetTable]
+            .joinLeft(TableQuery[VersionTable])
+            .on((a, v) => v.pluginAssetId === a.id || v.docsAssetId === a.id || v.sourcesAssetId === a.id)
+          (a, v) = t
+          p <- TableQuery[ProjectTable] if a.projectId === p.id
+        } yield (p.ownerName, p.name, v.map(_.name), p.id, a.id, a.filename)
 
       service.runDBIO(allVersions.result).flatMap { versions =>
         fileIO
           .traverseLimited(versions.toVector) {
-            case t @ (ownerNamer, projectName, versionName, fileName) =>
+            case t @ (_, _, _, projectId, assetId, _) =>
               val res = F
                 .attempt(
-                  F.delay(this.fileManager.getVersionDir(ownerNamer, projectName, versionName))
-                    .flatMap(versionDir => fileIO.notExists(versionDir.resolve(fileName)))
+                  F.delay(this.fileManager.getAssetPath(projectId, assetId)).flatMap(fileIO.notExists)
                 )
                 .map {
                   case Left(_)      => false //Invalid file name
@@ -166,18 +167,13 @@ object ProjectBase {
       val newSlug = slugify(newName)
 
       val doRename = {
-        val fileOp      = this.fileManager.renameProject(project.ownerName, project.name, newName)
         val renameModel = service.update(project)(_.copy(name = newName))
         val addForumJob = service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob)
 
-        // Project's name alter's the topic title, update it
-        val dbOp =
-          if (project.topicId.isDefined)
-            renameModel *> addForumJob.void
-          else
-            renameModel.void
-
-        dbOp <* fileOp
+        if (project.topicId.isDefined)
+          renameModel *> addForumJob.void
+        else
+          renameModel.void
       }
 
       if (!config.isValidProjectName(name)) F.pure(Left("Invalid project name"))
@@ -193,9 +189,7 @@ object ProjectBase {
       // Down-grade current owner to "Developer"
 
       val transferProject = project.transferOwner[F](newOwnerId)
-      val fileOp = (newProject: Model[Project]) =>
-        fileManager.transferProject(project.ownerName, newProject.ownerName, newProject.name)
-      val addForumJob = service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob)
+      val addForumJob     = service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob)
 
       val dbOp =
         if (project.topicId.isDefined)
@@ -203,15 +197,13 @@ object ProjectBase {
         else
           transferProject
 
-      val doRename = dbOp >>= fileOp
-
       for {
         newOwnerUser <- ModelView
           .now(User)
           .get(newOwnerId)
           .getOrElseF(F.raiseError(new Exception("Could not find user to transfer owner to")))
         isAvailable <- isNamespaceAvailable(newOwnerUser.name, project.slug)
-        _           <- if (isAvailable) doRename else F.unit
+        _           <- if (isAvailable) dbOp else F.unit
       } yield Either.cond(isAvailable, (), "Name not available")
     }
 
@@ -238,8 +230,16 @@ object ProjectBase {
       for {
         proj <- prepareDeleteVersion(version)
         _ <- {
-          val versionDir = this.fileManager.getVersionDir(proj.ownerName, proj.name, version.name)
-          fileIO.executeBlocking(FileUtils.deleteDirectory(versionDir)) *> service.delete(version)
+          //TODO: Handle other storages than local
+          val deleteFiles = fileIO.traverseLimited(
+            List(
+              Some(fileManager.getAssetPath(version.projectId, version.pluginAssetId)),
+              version.docsAssetId.map(fileManager.getAssetPath(version.projectId, _)),
+              version.sourcesAssetId.map(fileManager.getAssetPath(version.projectId, _))
+            ).flatten
+          )(fileIO.deleteIfExists)
+
+          deleteFiles *> service.delete(version)
         }
       } yield proj
     }
@@ -251,7 +251,7 @@ object ProjectBase {
       */
     def delete(project: Model[Project])(implicit mdc: OreMDC): F[Int] = {
       val fileEff = fileIO.executeBlocking(
-        FileUtils.deleteDirectory(this.fileManager.getProjectDir(project.ownerName, project.name))
+        FileUtils.deleteDirectory(this.fileManager.getProjectDir(project.id))
       )
       val addForumJob = (id: Int) => service.insert(Job.DeleteDiscourseTopic.newJob(id).toJob).void
 

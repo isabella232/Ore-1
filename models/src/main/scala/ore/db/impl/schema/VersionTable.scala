@@ -3,10 +3,9 @@ package ore.db.impl.schema
 import java.time.OffsetDateTime
 
 import ore.db.DbRef
-import ore.db.impl.OrePostgresDriver
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.table.common.{DescriptionColumn, VisibilityColumn}
-import ore.models.project.{Project, ReviewState, TagColor, Version}
+import ore.models.project.{Asset, Project, ReviewState, TagColor, Version}
 import ore.models.user.User
 
 //noinspection MutatorLikeMethodIsParameterless
@@ -14,15 +13,6 @@ class VersionTable(tag: Tag)
     extends ModelTable[Version](tag, "project_versions")
     with DescriptionColumn[Version]
     with VisibilityColumn[Version] {
-
-  implicit private val listOptionStrType: OrePostgresDriver.DriverJdbcType[List[Option[String]]] =
-    new OrePostgresDriver.SimpleArrayJdbcType[String]("text")
-      .to[List](
-        //DANGER
-        _.map(Option(_)).toList.asInstanceOf[List[String]],
-        _.asInstanceOf[List[Option[String]]].map(_.orNull)
-      )
-      .asInstanceOf[OrePostgresDriver.DriverJdbcType[List[Option[String]]]]
 
   def name            = column[String]("name")
   def slug            = column[String]("slug")
@@ -33,13 +23,18 @@ class VersionTable(tag: Tag)
   def approvedAt      = column[OffsetDateTime]("approved_at")
   def createForumPost = column[Boolean]("create_forum_post")
   def postId          = column[Option[Int]]("post_id")
-  def stability    = column[Version.Stability]("stability")
-  def releaseType  = column[Version.ReleaseType]("release_type")
-  def channelName  = column[String]("legacy_channel_name")
-  def channelColor = column[TagColor]("legacy_channel_color")
+  def pluginAssetId   = column[DbRef[Asset]]("plugin_asset_id")
+  def docsAssetId     = column[DbRef[Asset]]("docs_asset_id")
+  def sourcesAssetId  = column[DbRef[Asset]]("sources_asset_id")
+  def usesMixin       = column[Boolean]("uses_mixin")
+  def stability       = column[Version.Stability]("stability")
+  def releaseType     = column[Version.ReleaseType]("release_type")
+  def channelName     = column[String]("legacy_channel_name")
+  def channelColor    = column[TagColor]("legacy_channel_color")
 
   def tags =
     (
+      usesMixin,
       stability,
       releaseType.?,
       channelName.?,
@@ -62,6 +57,9 @@ class VersionTable(tag: Tag)
         visibility,
         createForumPost,
         postId,
+        pluginAssetId,
+        docsAssetId.?,
+        sourcesAssetId.?,
         tags
       )
     ).<>(mkApply((Version.apply _).tupled), mkUnapply(Version.unapply))

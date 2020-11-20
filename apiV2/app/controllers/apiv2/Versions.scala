@@ -30,6 +30,7 @@ import ore.models.project.factory.ProjectFactory
 import ore.models.project.io.{PluginFileWithData, PluginUpload}
 import ore.models.user.{LoggedActionType, LoggedActionVersion, User}
 import ore.permission.Permission
+import ore.util.StringUtils.equalsIgnoreCase
 import util.syntax._
 import util.{PatchDecoder, UserActionLogger}
 
@@ -58,16 +59,16 @@ class Versions(
   import Versions._
 
   def listVersions(
-                    projectOwner: String,
-                    projectSlug: String,
-                    platforms: Seq[String],
-                    stability: Seq[Version.Stability],
-                    releaseType: Seq[Version.ReleaseType],
-                    limit: Option[Long],
-                    offset: Long
-                  ): Action[AnyContent] =
+      projectOwner: String,
+      projectSlug: String,
+      platforms: Seq[String],
+      stability: Seq[Version.Stability],
+      releaseType: Seq[Version.ReleaseType],
+      limit: Option[Long],
+      offset: Long
+  ): Action[AnyContent] =
     CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF { request =>
-      val realLimit = limitOrDefault(limit, config.ore.projects.initVersionLoad.toLong)
+      val realLimit  = limitOrDefault(limit, config.ore.projects.initVersionLoad.toLong)
       val realOffset = offsetOrZero(offset)
       val parsedPlatforms = platforms.map { s =>
         val splitted = s.split(":", 2)
@@ -111,7 +112,7 @@ class Versions(
       }
     }
 
-  def showVersionAction(projectOwner: String, projectSlug: String, name: String): Action[AnyContent] =
+  def showVersionAction(projectOwner: String, projectSlug: String, versionSlug: String): Action[AnyContent] =
     CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
       implicit request =>
         service
@@ -120,7 +121,7 @@ class Versions(
               .singleVersionQuery(
                 projectOwner,
                 projectSlug,
-                name,
+                versionSlug,
                 request.globalPermissions.has(Permission.SeeHidden),
                 request.user.map(_.id)
               )
@@ -131,7 +132,7 @@ class Versions(
           .map(a => Ok(a.asJson))
     }
 
-  def editVersion(projectOwner: String, projectSlug: String, name: String): Action[Json] =
+  def editVersion(projectOwner: String, projectSlug: String, versionSlug: String): Action[Json] =
     ApiAction(Permission.EditVersion, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF(parseCirce.json) {
       implicit request =>
         val root = request.body.hcursor
@@ -169,34 +170,35 @@ class Versions(
         //We take the platform as flat in the API, but want it columnar.
         //We also want to verify the version and platform name, and get a coarse version
         val res: ValidatedNel[String, Writer[List[String], (DbEditableVersion, Option[List[VersionedPlatform]])]] =
-        EditableVersionF.patchDecoder
-          .traverseKC(
-            λ[PatchDecoder ~>: Compose2[Decoder.AccumulatingResult, Option, *]](_.decode(root))
-          )
-          .leftMap(_.map(_.show))
-          .andThen { a =>
-            a.platforms
-              .traverse(parsePlatforms)
-              .map(_.sequence)
-              .tupleLeft(a)
-          }
-          .map {
-            case (a, w) =>
-              w.map { optPlatforms =>
-                val version = DbEditableVersionF[Option](
-                  a.stability,
-                  a.releaseType
-                )
+          EditableVersionF.patchDecoder
+            .traverseKC(
+              λ[PatchDecoder ~>: Compose2[Decoder.AccumulatingResult, Option, *]](_.decode(root))
+            )
+            .leftMap(_.map(_.show))
+            .andThen { a =>
+              a.platforms
+                .traverse(parsePlatforms)
+                .map(_.sequence)
+                .tupleLeft(a)
+            }
+            .map {
+              case (a, w) =>
+                w.map { optPlatforms =>
+                  val version = DbEditableVersionF[Option](
+                    a.stability,
+                    a.releaseType
+                  )
 
-                version -> optPlatforms
-              }
-          }
+                  version -> optPlatforms
+                }
+            }
 
         res match {
           case Validated.Valid(WriterT((warnings, (version, platforms)))) =>
             val versionIdQuery = for {
-              p <- TableQuery[ProjectTable] if p.ownerName === projectOwner && p.slug === projectSlug
-              v <- TableQuery[VersionTable] if p.id === v.projectId && v.versionString === name
+              p <- TableQuery[ProjectTable] if p.ownerName === projectOwner && equalsIgnoreCase(p.slug, projectSlug)
+              v <- TableQuery[VersionTable]
+              if p.id === v.projectId && equalsIgnoreCase(v.slug, versionSlug)
             } yield v.id
 
             service.runDBIO(versionIdQuery.result.head).flatMap { versionId =>
@@ -213,7 +215,7 @@ class Versions(
                 version.foldLeftKC(false)(acc => Lambda[Option ~>: Const[Boolean]#λ](op => acc || op.isDefined))
               val doEdit =
                 if (!needEdit) Applicative[ConnectionIO].unit
-                else APIV2Queries.updateVersion(projectOwner, projectSlug, name, version).run.void
+                else APIV2Queries.updateVersion(projectOwner, projectSlug, versionSlug, version).run.void
 
               handlePlatforms *> service
                 .runDbCon(
@@ -222,7 +224,7 @@ class Versions(
                     .singleVersionQuery(
                       projectOwner,
                       projectSlug,
-                      name,
+                      versionSlug,
                       request.globalPermissions.has(Permission.SeeHidden),
                       request.user.map(_.id)
                     )
@@ -234,14 +236,18 @@ class Versions(
         }
     }
 
-  def showVersionChangelog(projectOwner: String, projectSlug: String, name: String): Action[AnyContent] =
+  def showVersionChangelog(projectOwner: String, projectSlug: String, versionSlug: String): Action[AnyContent] =
     CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
       service
         .runDBIO(
           TableQuery[ProjectTable]
             .join(TableQuery[VersionTable])
             .on(_.id === _.projectId)
-            .filter(t => t._1.ownerName === projectOwner && t._1.slug === projectSlug && t._2.versionString === name)
+            .filter { t =>
+              t._1.ownerName === projectOwner &&
+              equalsIgnoreCase(t._1.slug, projectSlug) &&
+              equalsIgnoreCase(t._2.slug, versionSlug)
+            }
             .map(_._2.description)
             .result
             .headOption
@@ -249,12 +255,16 @@ class Versions(
         .map(_.fold(NotFound: Result)(a => Ok(APIV2.VersionChangelog(a))))
     }
 
-  def updateChangelog(projectOwner: String, projectSlug: String, name: String): Action[APIV2.VersionChangelog] =
+  def updateChangelog(projectOwner: String, projectSlug: String, versionSlug: String): Action[APIV2.VersionChangelog] =
     ApiAction(Permission.EditVersion, APIScope.ProjectScope(projectOwner, projectSlug))
       .asyncF(parseCirce.decodeJson[APIV2.VersionChangelog]) { implicit request =>
         for {
           project <- projects.withSlug(projectOwner, projectSlug).someOrFail(NotFound)
-          version <- project.versions(ModelView.now(Version)).find(_.versionString === name).value.someOrFail(NotFound)
+          version <- project
+            .versions(ModelView.now(Version))
+            .find(equalsIgnoreCase(_.slug, versionSlug))
+            .value
+            .someOrFail(NotFound)
           oldDescription = version.description.getOrElse("")
           newDescription = request.body.changelog.trim
           _ <- if (newDescription.length < Page.maxLength) ZIO.unit
@@ -272,12 +282,12 @@ class Versions(
       }
 
   def showVersionStats(
-                        projectOwner: String,
-                        projectSlug: String,
-                        version: String,
-                        fromDateString: String,
-                        toDateString: String
-                      ): Action[AnyContent] =
+      projectOwner: String,
+      projectSlug: String,
+      version: String,
+      fromDateString: String,
+      toDateString: String
+  ): Action[AnyContent] =
     CachingApiAction(Permission.IsProjectMember, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
       import Ordering.Implicits._
 
@@ -308,16 +318,16 @@ class Versions(
   }
 
   private def processVersionUploadToErrors(projectOwner: String, projectSlug: String)(
-    implicit request: ApiRequest[MultipartFormData[Files.TemporaryFile]]
+      implicit request: ApiRequest[MultipartFormData[Files.TemporaryFile]]
   ): ZIO[Blocking, Result, (Model[User], Model[Project], PluginFileWithData)] = {
     val fileF = ZIO.fromEither(
       request.body.file("plugin-file").toRight(BadRequest(ApiError("No plugin file specified")))
     )
 
     for {
-      user <- ZIO.fromOption(request.user).orElseFail(BadRequest(ApiError("No user found for session")))
+      user    <- ZIO.fromOption(request.user).orElseFail(BadRequest(ApiError("No user found for session")))
       project <- projects.withSlug(projectOwner, projectSlug).get.orElseFail(NotFound)
-      file <- fileF
+      file    <- fileF
       pluginFile <- factory
         .collectErrorsForVersionUpload(PluginUpload(file.ref, file.filename), user, project)
         .leftMap { s =>
@@ -337,17 +347,12 @@ class Versions(
       } yield {
         val apiVersion = APIV2QueryVersion(
           OffsetDateTime.now(),
-          pluginFile.versionString,
-          pluginFile.dependencyIds.toList,
-          pluginFile.dependencyVersions.toList,
+          pluginFile.versionName,
+          pluginFile.versionSlug,
           Visibility.Public,
           0,
-          pluginFile.fileSize,
-          pluginFile.md5,
-          pluginFile.fileName,
           Some(user.name),
           ReviewState.Unreviewed,
-          pluginFile.data.containsMixins,
           Version.Stability.Stable,
           None,
           pluginFile.versionedPlatforms.map(_.id),
@@ -377,7 +382,7 @@ class Versions(
         .fromOption(request.body.dataParts.get("plugin-info").flatMap(_.headOption))
         .orElse(pluginInfoFromFileF)
         .catchAll {
-          case Left(_) => IO.fail("No plugin info specified")
+          case Left(_)  => IO.fail("No plugin info specified")
           case Right(e) => IO.die(e)
         }
 
@@ -408,17 +413,12 @@ class Versions(
 
         val apiVersion = APIV2QueryVersion(
           version.createdAt,
-          version.versionString,
-          version.dependencyIds,
-          version.dependencyVersions,
+          version.name,
+          version.slug,
           version.visibility,
           0,
-          version.fileSize,
-          version.hash,
-          version.fileName,
           Some(user.name),
           version.reviewState,
-          version.tags.usesMixin,
           version.tags.stability,
           version.tags.releaseType,
           platforms.map(_.platform).toList,
@@ -430,7 +430,7 @@ class Versions(
       }
     }
 
-  def hardDeleteVersion(projectOwner: String, projectSlug: String, version: String): Action[AnyContent] =
+  def hardDeleteVersion(projectOwner: String, projectSlug: String, versionSlug: String): Action[AnyContent] =
     ApiAction(Permission.HardDeleteVersion, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
       implicit request =>
         projects
@@ -439,7 +439,7 @@ class Versions(
           .mproduct { p =>
             ModelView
               .now(Version)
-              .find(v => v.projectId === p.id.value && v.versionString === version)
+              .find(v => v.projectId === p.id.value && equalsIgnoreCase(v.slug, versionSlug))
               .value
               .someOrFail(NotFound)
           }
@@ -459,7 +459,7 @@ class Versions(
           }
     }
 
-  def setVersionVisibility(projectOwner: String, projectSlug: String, version: String): Action[EditVisibility] =
+  def setVersionVisibility(projectOwner: String, projectSlug: String, versionSlug: String): Action[EditVisibility] =
     ApiAction(Permission.None, APIScope.ProjectScope(projectOwner, projectSlug))
       .asyncF(parseCirce.decodeJson[EditVisibility]) { implicit request =>
         projects
@@ -468,7 +468,7 @@ class Versions(
           .mproduct { p =>
             ModelView
               .now(Version)
-              .find(v => v.projectId === p.id.value && v.versionString === version)
+              .find(v => v.projectId === p.id.value && equalsIgnoreCase(v.slug, versionSlug))
               .value
               .someOrFail(NotFound)
           }
@@ -498,7 +498,7 @@ class Versions(
   def editDiscourseSettings(
       projectOwner: String,
       projectSlug: String,
-      version: String
+      versionSlug: String
   ): Action[Versions.DiscourseModifyPostSettings] =
     ApiAction(Permission.EditAdminSettings, APIScope.ProjectScope(projectOwner, projectSlug))
       .asyncF(parseCirce.decodeJson[Versions.DiscourseModifyPostSettings]) { implicit request =>
@@ -508,7 +508,7 @@ class Versions(
           .flatMap { p =>
             ModelView
               .now(Version)
-              .find(v => v.projectId === p.id.value && v.versionString === version)
+              .find(v => v.projectId === p.id.value && equalsIgnoreCase(v.slug, versionSlug))
               .value
               .someOrFail(NotFound)
           }

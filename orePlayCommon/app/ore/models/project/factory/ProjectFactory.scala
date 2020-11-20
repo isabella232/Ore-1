@@ -3,7 +3,7 @@ package ore.models.project.factory
 import play.api.cache.SyncCacheApi
 import play.api.i18n.Messages
 
-import db.impl.access.ProjectBase
+import db.impl.access.{AssetBase, ProjectBase}
 import ore.data.user.notification.NotificationType
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
@@ -34,13 +34,14 @@ trait ProjectFactory {
 
   implicit protected def service: ModelService[UIO]
   implicit protected def projects: ProjectBase[UIO]
+  implicit protected def assets: AssetBase
 
   type ParTask[+A] = zio.interop.ParIO[Any, Throwable, A]
   type ParUIO[+A]  = zio.interop.ParIO[Any, Nothing, A]
   type RIO[-R, +A] = ZIO[R, Nothing, A]
 
   protected def fileIO: FileIO[ZIO[Blocking, Nothing, *]]
-  protected def fileManager: ProjectFiles[ZIO[Blocking, Nothing, *]]
+  protected def fileManager: ProjectFiles
 
   implicit protected def config: OreConfig
   implicit protected def env: OreEnv
@@ -93,10 +94,10 @@ trait ProjectFactory {
     */
   private def versionExists(projectId: DbRef[Project], hash: String, versionString: String): UIO[Boolean] = {
     val hashExistsBaseQuery = for {
-      v <- TableQuery[AssetTable]
-      if v.projectId === projectId
-      if v.hash === hash
-    } yield v.id
+      a <- TableQuery[AssetTable]
+      if a.projectId === projectId
+      if a.hash === hash
+    } yield a.id
 
     val hashExistsQuery = hashExistsBaseQuery.exists
 
@@ -217,12 +218,14 @@ trait ProjectFactory {
   ): ZIO[Blocking, NonEmptyList[String], (Model[Project], Model[Version], Seq[Model[VersionPlatform]])] = {
 
     for {
+      asset <- uploadPluginFile(project.id, plugin)
       // Create version
-      version   <- service.insert(plugin.asVersion(project.id, description, createForumPost, stability, releaseType))
+      version <- service.insert(
+        plugin.asVersion(project.id, description, createForumPost, stability, releaseType, asset.id)
+      )
       platforms <- service.bulkInsert(plugin.asPlatforms(version.id))
       // Notify watchers
       _ <- notifyWatchers(version, project)
-      _ <- uploadPluginFile(project, plugin, version).orDieWith(s => new Exception(s))
       firstTimeUploadProject <- {
         if (project.visibility == Visibility.New) {
           val setVisibility = project
@@ -242,27 +245,13 @@ trait ProjectFactory {
   }
 
   private def uploadPluginFile(
-      project: Project,
-      plugin: PluginFileWithData,
-      version: Version
-  ): ZIO[Blocking, String, Unit] = {
-    val oldPath = plugin.path
-
-    val versionDir = this.fileManager.getVersionDir(project.ownerName, project.name, version.name)
-    val newPath    = versionDir.resolve(oldPath.getFileName)
-
-    val move: ZIO[Blocking, Nothing, Right[Nothing, Unit]] = {
-      val createDirs = ZIO.whenM(fileIO.notExists(newPath.getParent)) {
-        fileIO.createDirectories(newPath.getParent)
-      }
-      val movePath  = fileIO.move(oldPath, newPath)
-      val deleteOld = fileIO.deleteIfExists(oldPath)
-
-      createDirs *> movePath *> deleteOld.as(Right(()))
-    }
-
-    fileIO.exists(newPath).ifM(UIO.succeed(Left("error.plugin.fileName")), move).absolve
-  }
+      projectId: DbRef[Project],
+      plugin: PluginFileWithData
+  ): ZIO[Blocking, Nothing, Model[Asset]] =
+    for {
+      asset <- assets.insertOrGetAsset(projectId, plugin.path)
+      _     <- fileIO.deleteIfExists(plugin.path)
+    } yield asset
 
 }
 
@@ -272,6 +261,7 @@ class OreProjectFactory(
     val cacheApi: SyncCacheApi,
     val env: OreEnv,
     val projects: ProjectBase[UIO],
-    val fileManager: ProjectFiles[ZIO[Blocking, Nothing, *]],
+    val assets: AssetBase,
+    val fileManager: ProjectFiles,
     val fileIO: FileIO[ZIO[Blocking, Nothing, *]]
 ) extends ProjectFactory

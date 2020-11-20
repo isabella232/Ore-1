@@ -23,6 +23,7 @@ class ProjectTable(tag: Tag)
   def topicId         = column[Option[Int]]("topic_id")
   def postId          = column[Int]("post_id")
   def notes           = column[Json]("notes")
+  def iconAssetId     = column[DbRef[Asset]]("icon_asset_id")
   def keywords        = column[List[String]]("keywords")
   def homepage        = column[String]("homepage")
   def issues          = column[String]("issues")
@@ -59,6 +60,7 @@ class ProjectTable(tag: Tag)
         postId.?,
         visibility,
         notes,
+        iconAssetId.?,
         settings
       )
     ).<>(mkApply((Project.apply _).tupled), mkUnapply(Project.unapply))

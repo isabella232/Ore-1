@@ -147,7 +147,8 @@ object APIV2Queries extends DoobieOreProtocol {
              |       p.support,
              |       p.license_name,
              |       p.license_url,
-             |       p.forum_sync
+             |       p.forum_sync,
+             |       p.icon_asset_id IS NOT NULL
              |  FROM projects p JOIN project_stats ps ON p.id = ps.id""".stripMargin
 
     val visibilityFrag =
@@ -221,8 +222,7 @@ object APIV2Queries extends DoobieOreProtocol {
       limit: Long,
       offset: Long
   )(
-      implicit projectFiles: ProjectFiles[ZIO[Blocking, Nothing, ?]],
-      requestHeader: RequestHeader,
+      implicit requestHeader: RequestHeader,
       config: OreConfig
   ): Query0[ZIO[Blocking, Nothing, APIV2.Project]] = {
     val ordering = if (orderWithRelevance && query.nonEmpty) {
@@ -270,8 +270,7 @@ object APIV2Queries extends DoobieOreProtocol {
       canSeeHidden: Boolean,
       currentUserId: Option[DbRef[User]]
   )(
-      implicit projectFiles: ProjectFiles[ZIO[Blocking, Nothing, ?]],
-      requestHeader: RequestHeader,
+      implicit requestHeader: RequestHeader,
       config: OreConfig
   ): Query0[ZIO[Blocking, Nothing, APIV2.Project]] =
     APIV2Queries.projectQuery(
@@ -400,7 +399,7 @@ object APIV2Queries extends DoobieOreProtocol {
   def versionSelectFrag(
       projectOwner: String,
       projectSlug: String,
-      versionName: Option[String],
+      versionSlug: Option[String],
       platforms: List[(String, Option[String])],
       stability: List[Version.Stability],
       releaseType: List[Version.ReleaseType],
@@ -417,13 +416,15 @@ object APIV2Queries extends DoobieOreProtocol {
             |       pv.review_state,
             |       pv.stability,
             |       pv.release_type,
-            |       coalesce(array_agg(pvp.platform) FILTER ( WHERE pvp.platform IS NOT NULL ), ARRAY []::TEXT[]),
-            |       coalesce(array_agg(pvp.platform_version) FILTER ( WHERE pvp.platform IS NOT NULL ), ARRAY []::TEXT[]),
+            |       coalesce(array_agg(papp.platform) FILTER ( WHERE papp.platform IS NOT NULL ), ARRAY []::TEXT[]),
+            |       coalesce(array_agg(papp.platform_version) FILTER ( WHERE papp.platform IS NOT NULL ), ARRAY []::TEXT[]),
             |       pv.post_id
             |    FROM projects p
             |             JOIN project_versions pv ON p.id = pv.project_id
             |             LEFT JOIN users u ON pv.author_id = u.id
-            |             LEFT JOIN project_version_platforms pvp ON pv.id = pvp.version_id """.stripMargin
+            |             JOIN project_assets pa ON pv.plugin_asset_id = pa.id
+            |             LEFT JOIN project_asset_plugins pap ON pa.id = pap.asset_id
+            |             LEFT JOIN project_asset_plugin_platforms papp ON pap.id = papp.plugin_id """.stripMargin
 
     val coarsePlatforms = platforms.map {
       case (name, optVersion) =>
@@ -441,14 +442,15 @@ object APIV2Queries extends DoobieOreProtocol {
 
     val filters = Fragments.whereAndOpt(
       Some(fr"p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug)"),
-      versionName.map(v => fr"pv.version_string = $v"),
+      versionSlug.map(v => fr"lower(pv.slug) = lower($v)"),
       if (coarsePlatforms.isEmpty) None
       else
         Some(
           Fragments.or(
             coarsePlatforms.map {
-              case (platform, Some(version)) => fr"pvp.platform = $platform AND pvp.platform_coarse_version = $version"
-              case (platform, None)          => fr"pvp.platform = $platform"
+              case (platform, Some(version)) =>
+                fr"papp.platform = $platform AND papp.platform_coarse_version = $version"
+              case (platform, None) => fr"papp.platform = $platform"
             }: _*
           )
         ),
@@ -463,7 +465,7 @@ object APIV2Queries extends DoobieOreProtocol {
   def versionQuery(
       projectOwner: String,
       projectSlug: String,
-      versionName: Option[String],
+      versionSlug: Option[String],
       platforms: List[(String, Option[String])],
       stability: List[Version.Stability],
       releaseType: List[Version.ReleaseType],
@@ -475,7 +477,7 @@ object APIV2Queries extends DoobieOreProtocol {
     (versionSelectFrag(
       projectOwner,
       projectSlug,
-      versionName,
+      versionSlug,
       platforms,
       stability,
       releaseType,
@@ -488,11 +490,11 @@ object APIV2Queries extends DoobieOreProtocol {
   def singleVersionQuery(
       projectOwner: String,
       projectSlug: String,
-      versionName: String,
+      versionSlug: String,
       canSeeHidden: Boolean,
       currentUserId: Option[DbRef[User]]
   ): doobie.Query0[APIV2.Version] =
-    versionQuery(projectOwner, projectSlug, Some(versionName), Nil, Nil, Nil, canSeeHidden, currentUserId, 1, 0)
+    versionQuery(projectOwner, projectSlug, Some(versionSlug), Nil, Nil, Nil, canSeeHidden, currentUserId, 1, 0)
 
   def versionCountQuery(
       projectOwner: String,
@@ -510,15 +512,15 @@ object APIV2Queries extends DoobieOreProtocol {
   def updateVersion(
       projectOwner: String,
       projectSlug: String,
-      versionName: String,
+      versionSlug: String,
       edits: Versions.DbEditableVersion
   ): Update0 = {
     val versionColumns = Versions.DbEditableVersionF[Column](
-      Column.arg("stability"),
-      Column.opt("release_type")
+      Column.arg("pv.stability"),
+      Column.opt("pv.release_type")
     )
 
-    (updateTable("project_versions", versionColumns, edits) ++ fr" FROM projects p WHERE project_id = p.id AND p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug) AND version_string = $versionName").update
+    (updateTable("project_versions pv", versionColumns, edits) ++ fr" FROM projects p WHERE project_id = p.id AND p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug) AND lower(pv.slug) = lower($versionSlug)").update
   }
 
   def userSearchFrag(
@@ -763,17 +765,17 @@ object APIV2Queries extends DoobieOreProtocol {
   def versionStats(
       projectOwner: String,
       projectSlug: String,
-      versionString: String,
+      versionSlug: String,
       startDate: LocalDate,
       endDate: LocalDate
   ): Query0[APIV2VersionStatsQuery] =
-    sql"""|SELECT CAST(dates.day AS DATE), coalesce(pvd.downloads, 0) AS downloads
-          |    FROM projects p,
-          |         project_versions pv,
-          |         (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates
-          |             LEFT JOIN project_versions_downloads pvd ON dates.day = pvd.day
-          |    WHERE p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug)
-          |      AND pv.version_string = $versionString
+    sql"""|SELECT CAST(dates.day AS DATE), coalesce(pvd.downloads, 0) AS downloads           
+          |   FROM projects p,            
+          |       project_versions pv,             
+          |      (SELECT generate_series($startDate::DATE, $endDate::DATE, INTERVAL '1 DAY') AS day) dates              
+          |         LEFT JOIN project_versions_downloads pvd ON dates.day = pvd.day    
+          |         WHERE p.owner_name = $projectOwner AND lower(p.slug) = lower($projectSlug)                
+          |         AND lower(pv.slug) = lower($versionSlug)       
           |      AND (pvd IS NULL OR (pvd.project_id = p.id AND pvd.version_id = pv.id));""".stripMargin
       .query[APIV2VersionStatsQuery]
 

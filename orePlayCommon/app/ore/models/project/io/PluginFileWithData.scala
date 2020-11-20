@@ -4,7 +4,7 @@ import java.nio.file.{Files, Path}
 
 import ore.data.{Platform, VersionedPlatform}
 import ore.db.{DbRef, Model}
-import ore.models.project.{Project, Version, VersionPlatform}
+import ore.models.project.{Asset, Project, Version, VersionPlatform}
 import ore.models.user.User
 import ore.util.StringUtils
 
@@ -42,7 +42,8 @@ class PluginFileWithData(val path: Path, val user: Model[User], val data: Plugin
       description: Option[String],
       createForumPost: Boolean,
       stability: Version.Stability,
-      releaseType: Option[Version.ReleaseType]
+      releaseType: Option[Version.ReleaseType],
+      pluginAssetId: DbRef[Asset]
   ): Version = Version(
     name = versionName,
     slug = versionSlug,
@@ -50,11 +51,21 @@ class PluginFileWithData(val path: Path, val user: Model[User], val data: Plugin
     authorId = Some(user.id),
     description = description,
     createForumPost = createForumPost,
+    pluginAssetId = pluginAssetId,
     tags = Version.VersionTags(
+      usesMixin = data.containsMixins,
       stability = stability,
       releaseType = releaseType
     )
   )
+
+  def asAsset(projectId: DbRef[Project]): Asset =
+    Asset(
+      projectId,
+      fileName,
+      md5,
+      fileSize
+    )
 
   def asPlatforms(versionId: DbRef[Version]): List[VersionPlatform] =
     versionedPlatforms.map(p => VersionPlatform(versionId, p.id, p.version, p.coarseVersion))

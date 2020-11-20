@@ -63,11 +63,11 @@
                         @underReview.map { entry =>
                         <tr @if(entry.isUnfinished && request.headerData.isCurrentUser(entry.reviewerId)){ class="warning" }>
                         <td>
-                            <a href="@Calls.showVersion(entry.namespace.ownerName, entry.namespace.slug, entry.versionString)">
+                            <a href="@Calls.showVersion(entry.namespace.ownerName, entry.namespace.slug, entry.versionSlug)">
                                 @entry.namespace
                             </a>
                             <br>
-                            @entry.versionString
+                            @entry.versionName
                         </td>
                         <td>
                             @if(entry.versionAuthor.isDefined) {
@@ -103,7 +103,7 @@
                         }
                         </td>
                         <td style="vertical-align: middle; text-align: right; padding-right: 15px;">
-                            <a href="/@helper.urlEncode(entry.namespace.ownerName)/@helper.urlEncode(entry.namespace.slug)/versions/@helper.urlEncode(entry.versionString)/reviews"><i class="fas fa-2x fa-fw fa-info"></i></a>
+                            <a href="/@helper.urlEncode(entry.namespace.ownerName)/@helper.urlEncode(entry.namespace.slug)/versions/@helper.urlEncode(entry.versionSlug)/reviews"><i class="fas fa-2x fa-fw fa-info"></i></a>
                         </td>
                         </tr>
                         }
@@ -144,18 +144,18 @@
                             </tr>
                         }
                         @versions.sortWith((a, b) => a.versionCreatedAt.compareTo(b.versionCreatedAt) < 0).map { entry =>
-                        <tr data-version="@helper.urlEncode(entry.namespace.ownerName)/@helper.urlEncode(entry.namespace.slug)/versions/@helper.urlEncode(entry.versionString)">
+                        <tr data-version="@helper.urlEncode(entry.namespace.ownerName)/@helper.urlEncode(entry.namespace.slug)/versions/@helper.urlEncode(entry.versionSlug)">
                             <td>
                             @userAvatar(Some(entry.namespace.ownerName), User.avatarUrl(entry.namespace.ownerName), clazz = "user-avatar-xs")
                             </td>
                             <td>
-                                <a href="@Calls.showVersion(entry.namespace.ownerName, entry.namespace.slug, entry.versionString)">
+                                <a href="@Calls.showVersion(entry.namespace.ownerName, entry.namespace.slug, entry.versionSlug)">
                                     @entry.namespace
                                 </a>
                             </td>
                             <td>
                                 <span class="faint">@prettifyDate(entry.versionCreatedAt)</span>
-                                <span class="minor">@entry.versionString</span>
+                                <span class="minor">@entry.versionName</span>
                             </td>
                             <td>
                                 @if(entry.versionAuthor.isDefined) {
@@ -165,7 +165,7 @@
                                 }
                             <br>
                         <td style="vertical-align: middle; text-align: right">
-                            <a class="btn btn-success" href="/@helper.urlEncode(entry.namespace.ownerName)/@helper.urlEncode(entry.namespace.slug)/versions/@helper.urlEncode(entry.versionString)/reviews">Start review</a>
+                            <a class="btn btn-success" href="/@helper.urlEncode(entry.namespace.ownerName)/@helper.urlEncode(entry.namespace.slug)/versions/@helper.urlEncode(entry.versionSlug)/reviews">Start review</a>
                         </td>
                         </tr>
                         }

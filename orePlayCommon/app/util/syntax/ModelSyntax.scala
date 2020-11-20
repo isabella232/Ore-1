@@ -2,24 +2,19 @@ package util.syntax
 
 import scala.language.{higherKinds, implicitConversions}
 
-import java.nio.file.Path
-
 import play.api.i18n.Lang
 import play.api.mvc.RequestHeader
 
 import ore.OreConfig
 import ore.auth.AuthUser
 import ore.db.access.ModelView
-import ore.db.{Model, ModelService, ObjId}
+import ore.db.{DbRef, Model, ModelService, ObjId}
 import ore.models.organization.Organization
-import ore.models.project.io.ProjectFiles
-import ore.models.project.{Page, Project}
+import ore.models.project.{Asset, Page, Project}
 import ore.models.user.User
 import ore.permission.role.Role
 
-import cats.Functor
 import cats.data.OptionT
-import cats.syntax.all._
 
 trait ModelSyntax {
 
@@ -27,7 +22,8 @@ trait ModelSyntax {
   implicit def userModelRawSyntax(u: Model[User]): ModelSyntax.UserSyntax = new ModelSyntax.UserSyntax(u)
   implicit def userObjSyntax(u: User.type): ModelSyntax.UserObjSyntax     = new ModelSyntax.UserObjSyntax(u)
   implicit def pageObjSyntax(p: Page.type): ModelSyntax.PageObjSyntax     = new ModelSyntax.PageObjSyntax(p)
-  implicit def projectSyntax(p: Project): ModelSyntax.ProjectSyntax       = new ModelSyntax.ProjectSyntax(p)
+  implicit def projectModelSyntax(p: Model[Project]): ModelSyntax.ProjectModelSyntax =
+    new ModelSyntax.ProjectModelSyntax(p)
   implicit def orgSyntax(o: Organization): ModelSyntax.OrganizationSyntax = new ModelSyntax.OrganizationSyntax(o)
   implicit def orgModelRawSyntax(o: Model[Organization]): ModelSyntax.OrganizationSyntax =
     new ModelSyntax.OrganizationSyntax(o)
@@ -82,27 +78,18 @@ object ModelSyntax extends ModelSyntax {
   }
 
   //TODO: Remove these from views
-  class ProjectSyntax(private val p: Project) extends AnyVal {
+  class ProjectModelSyntax(private val p: Model[Project]) extends AnyVal {
 
-    def iconUrlOrPath[F[_]](
-        implicit projectFiles: ProjectFiles[F],
-        F: Functor[F],
+    def iconUrlOrAsset(
+        implicit config: OreConfig
+    ): Either[String, DbRef[Asset]] =
+      p.iconAssetId.toRight(User.avatarUrl(p.ownerName))
+
+    def iconUrl(
+        implicit header: RequestHeader,
         config: OreConfig
-    ): F[Either[String, Path]] =
-      projectFiles.getIconPath(p).map(_.toRight(User.avatarUrl(p.ownerName)))
-
-    def hasIcon[F[_]](implicit projectFiles: ProjectFiles[F], F: Functor[F]): F[Boolean] =
-      projectFiles.getIconPath(p).map(_.isDefined)
-
-    def iconUrl[F[_]](
-        implicit projectFiles: ProjectFiles[F],
-        F: Functor[F],
-        header: RequestHeader,
-        config: OreConfig
-    ): F[String] =
-      iconUrlOrPath.map(
-        _.swap.getOrElse(controllers.project.routes.Projects.showIcon(p.ownerName, p.slug).absoluteURL())
-      )
+    ): String =
+      iconUrlOrAsset.swap.getOrElse(controllers.project.routes.Projects.showIcon(p.ownerName, p.slug).absoluteURL())
   }
 
   class OrganizationSyntax(private val o: Organization) extends AnyVal {

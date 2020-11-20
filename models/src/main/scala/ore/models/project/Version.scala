@@ -40,6 +40,9 @@ case class Version(
     visibility: Visibility = Visibility.Public,
     createForumPost: Boolean = true,
     postId: Option[Int] = None,
+    pluginAssetId: DbRef[Asset],
+    docsAssetId: Option[DbRef[Asset]] = None,
+    sourcesAssetId: Option[DbRef[Asset]] = None,
     tags: Version.VersionTags
 ) extends Describable {
 
@@ -63,6 +66,7 @@ case class Version(
 object Version extends DefaultModelCompanion[Version, VersionTable](TableQuery[VersionTable]) {
 
   case class VersionTags(
+      usesMixin: Boolean,
       stability: Stability,
       releaseType: Option[ReleaseType],
       channelName: Option[String] = None,

@@ -17,7 +17,7 @@ import ore.data.{Color, DownloadType, Prompt}
 import ore.db.{DbRef, Model, ObjId, ObjOffsetDateTime}
 import ore.models.Job
 import ore.models.api.ApiKey
-import ore.models.project.{ReviewState, TagColor, Version, Visibility}
+import ore.models.project.{Dependency, ReviewState, TagColor, Version, Visibility}
 import ore.models.user.{LoggedActionContext, LoggedActionType, User}
 import ore.permission.Permission
 import ore.permission.role.{Role, RoleCategory}
@@ -183,8 +183,9 @@ trait DoobieOreProtocol {
       .asInstanceOf[Meta[LoggedActionType[Ctx]]] // scalafix:ok
   implicit def loggedActionContextMeta[Ctx]: Meta[LoggedActionContext[Ctx]] =
     enumeratumMeta(LoggedActionContext).asInstanceOf[Meta[LoggedActionContext[Ctx]]] // scalafix:ok
-  implicit val reviewStateMeta: Meta[ReviewState] = enumeratumMeta(ReviewState)
-  implicit val jobTypeMeta: Meta[Job.JobType]     = enumeratumMeta(Job.JobType)
+  implicit val reviewStateMeta: Meta[ReviewState]                = enumeratumMeta(ReviewState)
+  implicit val jobTypeMeta: Meta[Job.JobType]                    = enumeratumMeta(Job.JobType)
+  implicit val versionSyntaxMeta: Meta[Dependency.VersionSyntax] = enumeratumMeta(Dependency.VersionSyntax)
 
   implicit val langMeta: Meta[Locale] = Meta[String].timap(Locale.forLanguageTag)(_.toLanguageTag)
   implicit val inetStringMeta: Meta[InetString] =

@@ -108,7 +108,7 @@ class Versions(stats: StatTracker[UIO])(
   ): IO[Result, Result] = {
     checkConfirmation(version, token).flatMap { passed =>
       if (passed || confirm)
-        _sendVersion(project, version)
+        _sendVersion(version)
       else
         UIO.succeed(
           Redirect(
@@ -156,25 +156,25 @@ class Versions(stats: StatTracker[UIO])(
     }
   }
 
-  private def _sendVersion(project: Project, version: Model[Version])(
+  private def _sendVersion(version: Model[Version])(
       implicit req: ProjectRequest[_]
-  ): IO[Result, Result] =
+  ): IO[Result, Result] = {
     ModelView
       .now(Asset)
-      .find(a => a.isMain && a.versionId === version.id.value)
+      .get(version.pluginAssetId)
       .toZIO
       .orElseFail(NotFound)
       .flatMap { asset =>
         this.stats.versionDownloaded(version) {
-          UIO.succeed {
+          UIO(
             Ok.sendPath(
-              projectFiles
-                .getVersionDir(project.ownerName, project.name, version.name)
-                .resolve(asset.filename)
+              projectFiles.getAssetPath(version.projectId, version.pluginAssetId),
+              fileName = _ => Some(asset.filename)
             )
-          }
+          )
         }
       }
+  }
 
   private val MultipleChoices = new Status(MULTIPLE_CHOICES)
 
@@ -438,44 +438,50 @@ class Versions(stats: StatTracker[UIO])(
             )
           )
         } else {
-          val fileName = version.slug
-          val path     = projectFiles.getVersionDir(project.ownerName, project.name, version.name).resolve(fileName)
-          project.user[Task].orDie.flatMap { projectOwner =>
-            import cats.tagless._
-            val newStats: StatTracker[RIO[Blocking, *]] = InvariantK[StatTracker].imapK(stats) {
-              new FunctionK[UIO, RIO[Blocking, *]] {
-                override def apply[A](fa: UIO[A]): RIO[Blocking, A] = fa
-              }
-            } {
-              new FunctionK[RIO[Blocking, *], UIO] {
-                override def apply[A](fa: RIO[Blocking, A]): UIO[A] = fa.provide(zioRuntime.environment)
-              }
-            }
+          val path = projectFiles.getAssetPath(version.projectId, version.pluginAssetId)
 
-            newStats.versionDownloaded(version) {
-              if (fileName.endsWith(".jar"))
-                IO.succeed(Ok.sendPath(path))
-              else {
-                val pluginFile = new PluginFile(path, projectOwner)
-                val jarName    = fileName.substring(0, fileName.lastIndexOf('.')) + ".jar"
-                val jarPath    = env.tmp.resolve(project.ownerName).resolve(jarName)
+          val projectOwnerF = project.user[Task].orDie
+          val assetF        = ModelView.now(Asset).get(version.pluginAssetId).toZIO.orElseFail(NotFound)
 
-                import zio.blocking._
-                pluginFile
-                  .newJarStream[ZIO[Blocking, Throwable, *]]
-                  .use { jarIn =>
-                    jarIn
-                      .fold(
-                        e => Task.fail(new Exception(e)),
-                        is => effectBlocking(copy(is, jarPath, StandardCopyOption.REPLACE_EXISTING))
-                      )
-                      .unit
-                  }
-                  .tapError(e => IO(MDCLogger.error("an error occurred while trying to send a plugin", e)))
-                  .orDie
-                  .as(Ok.sendPath(jarPath, onClose = () => Files.delete(jarPath)))
+          projectOwnerF.zipPar(assetF).flatMap {
+            case (projectOwner, asset) =>
+              import cats.tagless._
+              val newStats: StatTracker[RIO[Blocking, *]] = InvariantK[StatTracker].imapK(stats) {
+                new FunctionK[UIO, RIO[Blocking, *]] {
+                  override def apply[A](fa: UIO[A]): RIO[Blocking, A] = fa
+                }
+              } {
+                new FunctionK[RIO[Blocking, *], UIO] {
+                  override def apply[A](fa: RIO[Blocking, A]): UIO[A] = fa.provide(zioRuntime.environment)
+                }
               }
-            }
+
+              val fileName = asset.filename
+
+              newStats.versionDownloaded(version) {
+                if (fileName.endsWith(".jar"))
+                  IO.succeed(Ok.sendPath(path, fileName = _ => Some(fileName)))
+                else {
+                  val pluginFile = new PluginFile(path, projectOwner)
+                  val jarName    = fileName.substring(0, fileName.lastIndexOf('.')) + ".jar"
+                  val jarPath    = env.tmp.resolve(project.ownerName).resolve(jarName)
+
+                  import zio.blocking._
+                  pluginFile
+                    .newJarStream[ZIO[Blocking, Throwable, *]]
+                    .use { jarIn =>
+                      jarIn
+                        .fold(
+                          e => Task.fail(new Exception(e)),
+                          is => effectBlocking(copy(is, jarPath, StandardCopyOption.REPLACE_EXISTING))
+                        )
+                        .unit
+                    }
+                    .tapError(e => IO(MDCLogger.error("an error occurred while trying to send a plugin", e)))
+                    .orDie
+                    .as(Ok.sendPath(jarPath, onClose = () => Files.delete(jarPath)))
+                }
+              }
           }
         }
       }

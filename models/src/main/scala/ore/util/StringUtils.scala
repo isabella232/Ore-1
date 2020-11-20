@@ -50,8 +50,18 @@ object StringUtils {
     * @param str2 String 2
     * @return     Result
     */
+  def equalsIgnoreCase[T <: Table[_]](str1: Rep[String], str2: String): Rep[Boolean] =
+    str1.toLowerCase === (str2: Rep[String]).toLowerCase
+
+  /**
+    * Compares a Rep[String] to a String after converting them to lower case.
+    *
+    * @param str1 String 1
+    * @param str2 String 2
+    * @return     Result
+    */
   def equalsIgnoreCase[T <: Table[_]](str1: T => Rep[String], str2: String): T => Rep[Boolean] =
-    str1(_).toLowerCase === str2.toLowerCase
+    str1(_).toLowerCase === (str2: Rep[String]).toLowerCase
 
   //https://stackoverflow.com/a/9855338
   private val hexArray = "0123456789abcdef".toCharArray

@@ -137,34 +137,35 @@ trait OreRestfulApiV1 extends OreWrites {
   ): UIO[JsObject] = {
     val query = for {
       a <- TableQuery[AssetTable]
-      if a.isMain && a.versionId === v.id.value
+      if a.id === v.pluginAssetId
       p <- TableQuery[PluginTable] if a.id === p.assetId
     } yield (a, p)
 
-    service.runDBIO(query.result.head).map {
-      case (asset, plugin) =>
-        val dependencies: List[JsObject] = plugin.dependencyIds.zip(plugin.dependencyVersions).map {
-          case (depId, depVersion) =>
-            obj("pluginId" -> depId, "version" -> depVersion)
-        }
-        val json = obj(
-          "id"            -> v.id.value,
-          "createdAt"     -> v.createdAt.toString,
-          "name"          -> v.slug,
-          "dependencies"  -> dependencies,
-          "pluginId"      -> p.apiV1Identifier,
-          "channel"       -> toJson(c),
-          "fileSize"      -> asset.filesize,
-          "md5"           -> asset.hash,
-          "staffApproved" -> v.reviewState.isChecked,
-          "reviewState"   -> v.reviewState.toString,
-          "href"          -> ("/" + v.url(p)),
-          "tags"          -> JsArray.empty,
-          "downloads"     -> 0,
-          "description"   -> v.description
-        )
+    for {
+      t <- service.runDBIO(query.result.head)
+      (asset, plugin) = t
+      deps <- service.runDBIO(ModelView.now(Dependency).filterView(_.pluginId === plugin.id.value).query.result)
+    } yield {
+      val json = obj(
+        "id"        -> v.id.value,
+        "createdAt" -> v.createdAt.toString,
+        "name"      -> v.slug,
+        "dependencies" -> deps.map { dependency =>
+          obj("pluginId" -> dependency.identifier, "version" -> dependency.versionRange)
+        },
+        "pluginId"      -> p.apiV1Identifier,
+        "channel"       -> toJson(c),
+        "fileSize"      -> asset.filesize,
+        "md5"           -> asset.hash,
+        "staffApproved" -> v.reviewState.isChecked,
+        "reviewState"   -> v.reviewState.toString,
+        "href"          -> ("/" + v.url(p)),
+        "tags"          -> JsArray.empty,
+        "downloads"     -> 0,
+        "description"   -> v.description
+      )
 
-        author.fold(json)(a => json + (("author", JsString(a))))
+      author.fold(json)(a => json + (("author", JsString(a))))
     }
   }
 

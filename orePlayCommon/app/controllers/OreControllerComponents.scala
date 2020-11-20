@@ -9,7 +9,7 @@ import play.api.i18n.{Langs, MessagesApi}
 import play.api.mvc.{ControllerComponents, DefaultActionBuilder, PlayBodyParsers}
 
 import controllers.sugar.Bakery
-import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
+import db.impl.access.{AssetBase, OrganizationBase, ProjectBase, UserBase}
 import ore.OreConfig
 import ore.auth.SSOApi
 import ore.db.ModelService
@@ -23,9 +23,10 @@ trait OreControllerComponents extends ControllerComponents {
   def uioEffects: OreControllerEffects[UIO]
   def bakery: Bakery
   def config: OreConfig
-  def projectFiles: ProjectFiles[ZIO[Blocking, Nothing, *]]
+  def projectFiles: ProjectFiles
   def zioRuntime: zio.Runtime[Blocking with Clock]
   def assetsFinder: AssetsFinder
+  def assets: AssetBase
 }
 
 trait OreControllerEffects[F[_]] {
@@ -46,9 +47,10 @@ case class DefaultOreControllerComponents(
     langs: Langs,
     fileMimeTypes: FileMimeTypes,
     executionContext: ExecutionContext,
-    projectFiles: ProjectFiles[ZIO[Blocking, Nothing, ?]],
+    projectFiles: ProjectFiles,
     zioRuntime: zio.Runtime[Blocking with Clock],
-    assetsFinder: AssetsFinder
+    assetsFinder: AssetsFinder,
+    assets: AssetBase
 ) extends OreControllerComponents
 
 case class DefaultOreControllerEffects[F[_]](
