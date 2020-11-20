@@ -19,6 +19,8 @@ import util.syntax._
 import cats.data.NonEmptyList
 import cats.syntax.all._
 import com.typesafe.scalalogging
+import zio.blocking.Blocking
+import zio.clock.Clock
 import zio.interop.catz._
 import zio.{IO, Schedule, UIO, ZIO}
 
@@ -36,7 +38,7 @@ trait OrganizationBase {
       name: String,
       ownerId: DbRef[User],
       members: Set[OrganizationUserRole]
-  )(implicit mdc: OreMDC): IO[List[String], Model[Organization]]
+  )(implicit mdc: OreMDC): ZIO[Clock with Blocking, List[String], Model[Organization]]
 
   /**
     * Returns an [[Organization]] with the specified name if it exists.
@@ -65,7 +67,7 @@ object OrganizationBase {
         name: String,
         ownerId: DbRef[User],
         members: Set[OrganizationUserRole]
-    )(implicit mdc: OreMDC): IO[List[String], Model[Organization]] = {
+    )(implicit mdc: OreMDC): ZIO[Clock with Blocking, List[String], Model[Organization]] = {
       val logging = ZIO.effectTotal {
         MDCLogger.debug("Creating Organization...")
         MDCLogger.debug("Name     : " + name)
