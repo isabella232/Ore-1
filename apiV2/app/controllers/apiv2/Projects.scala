@@ -3,6 +3,7 @@ package controllers.apiv2
 import java.net.URLEncoder
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
+import java.util.UUID
 
 import play.api.http.HttpErrorHandler
 import play.api.i18n.Lang
@@ -21,10 +22,13 @@ import ore.OreConfig
 import ore.data.project.Category
 import ore.data.user.notification.NotificationType
 import ore.db.Model
+import ore.db.access.ModelView
 import ore.db.impl.schema.ProjectRoleTable
+import ore.db.impl.OrePostgresDriver.api._
 import ore.models.Job
+import ore.models.project.Webhook.WebhookEventType
 import ore.models.project.factory.{ProjectFactory, ProjectTemplate}
-import ore.models.project.{Project, ProjectSortingStrategy, Version}
+import ore.models.project.{Project, ProjectSortingStrategy, Version, Webhook => ModelWebhook}
 import ore.models.user.role.ProjectUserRole
 import ore.models.user.{LoggedActionProject, LoggedActionType}
 import ore.permission.Permission
@@ -38,10 +42,11 @@ import io.circe._
 import io.circe.derivation.annotations.SnakeCaseJsonCodec
 import io.circe.syntax._
 import squeal.category._
+import squeal.category.syntax.all._
 import squeal.category.macros.Derive
 import zio.blocking.Blocking
 import zio.interop.catz._
-import zio.{Task, UIO, ZIO}
+import zio.{IO, Task, UIO, ZIO}
 
 class Projects(
     factory: ProjectFactory,
@@ -444,6 +449,107 @@ class Projects(
         .orElseFail(NotFound)
     }
   }
+
+  def createWebhook(projectOwner: String, projectSlug: String): Action[Projects.CreateWebhookRequest] =
+    ApiAction(Permission.EditWebhooks, APIScope.ProjectScope(projectOwner, projectSlug))
+      .asyncF(parseCirce.decodeJson[Projects.CreateWebhookRequest]) { request =>
+        val data = request.body
+
+        val publicId = UUID.randomUUID()
+        //TODO: Sanitize callback url
+
+        service
+          .insert(
+            ModelWebhook(
+              request.scope.id,
+              publicId,
+              data.name,
+              data.callbackUrl,
+              data.discordFormatted.getOrElse(false),
+              data.events.toList
+            )
+          )
+          .as(
+            Created(
+              APIV2.Webhook(
+                publicId,
+                data.name,
+                data.callbackUrl,
+                data.discordFormatted.getOrElse(false),
+                data.events
+              )
+            )
+          )
+      }
+
+  def getWebhook(projectOwner: String, projectSlug: String, webhookId: String): Action[AnyContent] =
+    ApiAction(Permission.EditWebhooks, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
+      for {
+        uuidWebhookId <- IO(UUID.fromString(webhookId)).orElseFail(BadRequest)
+        webhook       <- ModelView.now(ModelWebhook).find(_.publicId === uuidWebhookId).toZIO.orElseFail(NotFound)
+      } yield Ok(
+        APIV2.Webhook(
+          uuidWebhookId,
+          webhook.name,
+          webhook.callbackUrl,
+          webhook.discordFormatted,
+          webhook.events
+        )
+      )
+    }
+
+  def editWebhook(projectOwner: String, projectSlug: String, webhookId: String): Action[Json] =
+    ApiAction(Permission.EditWebhooks, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF(parseCirce.json) {
+      request =>
+        IO(UUID.fromString(webhookId)).orElseFail(BadRequest).flatMap { uuidWebhookId =>
+          val webhookEditsValidated: ValidatedNel[Error, EditableWebhook] =
+            EditableWebhookF.patchDecoder.traverseKC(PartialUtils.decodeAll(request.body.hcursor))
+
+          webhookEditsValidated match {
+            case Validated.Valid(webhookEdits) =>
+              if (webhookEdits.callbackUrl.exists(callbackUrl =>
+                    webhookEdits.discordFormatted.exists(discordFormatted => callbackUrl.isEmpty && !discordFormatted)
+                  ))
+                ZIO.fail(BadRequest(ApiError("Can't both set callback url to null, and discord formatted to false")))
+              else {
+
+                val withDiscordCallbackFixed = webhookEdits.copy(
+                  callbackUrl =
+                    if (webhookEdits.discordFormatted.contains(true)) Some(None) else webhookEdits.callbackUrl,
+                  discordFormatted = webhookEdits.callbackUrl.flatten.map(_ => true)
+                )
+
+                val update = service.runDbCon(APIV2Queries.updateWebhook(uuidWebhookId, withDiscordCallbackFixed).run)
+
+                //We need two queries two queries as we use the generic update function
+                val get =
+                  ModelView.now(ModelWebhook).find(_.publicId === uuidWebhookId).toZIO.orElseFail(NotFound).map {
+                    webhook =>
+                      Ok(
+                        APIV2.Webhook(
+                          uuidWebhookId,
+                          webhook.name,
+                          webhook.callbackUrl,
+                          webhook.discordFormatted,
+                          webhook.events
+                        )
+                      )
+                  }
+
+                update *> get
+              }
+            case Validated.Invalid(e) => ZIO.fail(BadRequest(ApiErrors(e.map(_.show))))
+          }
+        }
+    }
+
+  def deleteWebhook(projectOwner: String, projectSlug: String, webhookId: String): Action[AnyContent] =
+    ApiAction(Permission.EditWebhooks, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
+      for {
+        uuidWebhookId <- IO(UUID.fromString(webhookId)).orElseFail(BadRequest)
+        _             <- service.deleteWhere(ModelWebhook)(_.publicId === uuidWebhookId)
+      } yield NoContent
+    }
 }
 object Projects {
   import APIV2.{categoryCodec, visibilityCodec, permissionRoleCodec}
@@ -547,4 +653,31 @@ object Projects {
       postId: Option[Int],
       updateTopic: Boolean
   )
+
+  import APIV2.webhookEventTypeCodec
+
+  @SnakeCaseJsonCodec case class CreateWebhookRequest(
+      name: String,
+      callbackUrl: Option[String],
+      discordFormatted: Option[Boolean],
+      events: Seq[WebhookEventType]
+  )
+
+  type EditableWebhook = EditableWebhookF[Option]
+  case class EditableWebhookF[F[_]](
+      name: F[String],
+      callbackUrl: F[Option[String]],
+      discordFormatted: F[Boolean],
+      events: F[List[WebhookEventType]]
+  )
+  object EditableWebhookF {
+    implicit val F
+        : ApplicativeKC[EditableWebhookF] with TraverseKC[EditableWebhookF] with DistributiveKC[EditableWebhookF] =
+      Derive.allKC[EditableWebhookF]
+
+    val patchDecoder: EditableWebhookF[PatchDecoder] =
+      PatchDecoder.fromName(Derive.namesWithProductImplicitsC[EditableWebhookF, Decoder])(
+        io.circe.derivation.renaming.snakeCase
+      )
+  }
 }

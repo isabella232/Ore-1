@@ -17,7 +17,7 @@ import ore.data.{Color, DownloadType, Prompt}
 import ore.db.{DbRef, Model, ObjId, ObjOffsetDateTime}
 import ore.models.Job
 import ore.models.api.ApiKey
-import ore.models.project.{ReviewState, TagColor, Version, Visibility}
+import ore.models.project.{ReviewState, TagColor, Version, Visibility, Webhook}
 import ore.models.user.{LoggedActionContext, LoggedActionType, User}
 import ore.permission.Permission
 import ore.permission.role.{Role, RoleCategory}
@@ -225,6 +225,8 @@ trait DoobieOreProtocol {
     metaFromGetPut[List[Int]].timap(_.map(Prompt.withValue))(_.map(_.value))
   implicit val roleTypeArrayMeta: Meta[List[Role]] =
     metaFromGetPut[List[String]].timap(_.map(Role.withValue))(_.map(_.value))
+  implicit val webhookEventTypeMeta: Meta[List[Webhook.WebhookEventType]] =
+    metaFromGetPut[List[String]].timap(_.map(Webhook.WebhookEventType.withValue))(_.map(_.value))
 
   implicit val tagColorArrayMeta: Meta[List[TagColor]] =
     Meta[Array[Int]].timap(_.toList.map(TagColor.withValue))(_.map(_.value).toArray)

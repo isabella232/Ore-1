@@ -1,6 +1,7 @@
 package models.protocols
 
 import java.time.OffsetDateTime
+import java.util.UUID
 
 import ore.data.project.Category
 import ore.models.project.Version.{ReleaseType, Stability}
@@ -209,4 +210,34 @@ object APIV2 {
       slug: Seq[String],
       navigational: Boolean
   )
+
+  @SnakeCaseJsonCodec case class PageListEntryWithContent(
+      name: Seq[String],
+      slug: Seq[String],
+      navigational: Boolean,
+      content: Option[String]
+  )
+
+  @SnakeCaseJsonCodec case class StandaloneVisibility(
+      Visibility: Visibility
+  )
+
+  @SnakeCaseJsonCodec case class StandaloneUser(
+      user: String
+  )
+
+  @SnakeCaseJsonCodec case class StandaloneStandaloneVersionName(
+      name: String
+  )
+
+  @SnakeCaseJsonCodec case class Webhook(
+      id: UUID,
+      name: String,
+      callbackUrl: Option[String],
+      discordFormatted: Boolean,
+      events: Seq[ore.models.project.Webhook.WebhookEventType]
+  )
+
+  implicit val webhookEventTypeCodec: Codec[ore.models.project.Webhook.WebhookEventType] =
+    valueEnumCodec(ore.models.project.Webhook.WebhookEventType)(_.value)
 }

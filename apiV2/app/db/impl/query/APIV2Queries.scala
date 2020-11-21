@@ -1,6 +1,7 @@
 package db.impl.query
 
 import java.time.LocalDate
+import java.util.UUID
 
 import play.api.mvc.RequestHeader
 
@@ -840,6 +841,20 @@ object APIV2Queries extends DoobieOreProtocol {
       parentId.map(p => fr"parent_id = $p")
     )
     (sql"UPDATE project_pages " ++ sets ++ fr"WHERE id = $id").update
+  }
+
+  def updateWebhook(publicWebhookId: UUID, edits: Projects.EditableWebhook): Update0 = {
+    val webhookColumns = Projects.EditableWebhookF[Column](
+      Column.arg("name"),
+      Column.opt("callback_url"),
+      Column.arg("discord_formatted"),
+      Column.arg("webhook_events")
+    )
+
+    import cats.instances.option._
+    import cats.instances.tuple._
+
+    (updateTable("project_webhooks", webhookColumns, edits) ++ fr" WHERE public_id = $publicWebhookId").update
   }
 
 }
