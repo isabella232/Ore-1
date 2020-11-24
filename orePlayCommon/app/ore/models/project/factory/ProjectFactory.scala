@@ -117,9 +117,10 @@ trait ProjectFactory {
       implicit messages: Messages
   ): ZIO[Blocking, String, PluginFileWithData] =
     for {
-      plugin <- processPluginUpload(uploadData, uploader)
-        .ensure("error.version.illegalVersion")(!_.data.version.contains("recommended"))
-      _             <- ZIO.unit.filterOrFail(_ => plugin.data.version.isDefined)("error.plugin.noVersion")
+      plugin <- processPluginUpload(uploadData, uploader).filterOrFail(_.versionSlug != "recommended")(
+        "error.version.illegalVersion"
+      )
+      _             <- ZIO.unit.filterOrFail(_ => plugin.entries.nonEmpty)("error.plugin.noVersion")
       versionExists <- versionExists(project.id, plugin.md5, plugin.versionSlug)
       _ <- {
         if (versionExists && this.config.ore.projects.fileValidate) ZIO.fail("error.version.duplicate")

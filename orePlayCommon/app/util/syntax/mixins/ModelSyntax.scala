@@ -1,4 +1,4 @@
-package util.syntax
+package util.syntax.mixins
 
 import scala.language.{higherKinds, implicitConversions}
 
@@ -16,24 +16,11 @@ import ore.permission.role.Role
 
 import cats.data.OptionT
 
-trait ModelSyntax {
-
-  implicit def userSyntax(u: User): ModelSyntax.UserSyntax                = new ModelSyntax.UserSyntax(u)
-  implicit def userModelRawSyntax(u: Model[User]): ModelSyntax.UserSyntax = new ModelSyntax.UserSyntax(u)
-  implicit def userObjSyntax(u: User.type): ModelSyntax.UserObjSyntax     = new ModelSyntax.UserObjSyntax(u)
-  implicit def pageObjSyntax(p: Page.type): ModelSyntax.PageObjSyntax     = new ModelSyntax.PageObjSyntax(p)
-  implicit def projectModelSyntax(p: Model[Project]): ModelSyntax.ProjectModelSyntax =
-    new ModelSyntax.ProjectModelSyntax(p)
-  implicit def orgSyntax(o: Organization): ModelSyntax.OrganizationSyntax = new ModelSyntax.OrganizationSyntax(o)
-  implicit def orgModelRawSyntax(o: Model[Organization]): ModelSyntax.OrganizationSyntax =
-    new ModelSyntax.OrganizationSyntax(o)
-  implicit def authUserSyntax(u: AuthUser): ModelSyntax.AuthUserSyntax = new ModelSyntax.AuthUserSyntax(u)
-}
-object ModelSyntax extends ModelSyntax {
+object ModelSyntax {
 
   class UserSyntax(private val u: User) extends AnyVal {
 
-    def avatarUrl(implicit config: OreConfig): String = User.avatarUrl(u.name)
+    def avatarUrl(implicit config: OreConfig): String = new UserObjSyntax(User).avatarUrl(u.name)
 
     /**
       * Returns this user's current language, or the default language if none
@@ -78,12 +65,13 @@ object ModelSyntax extends ModelSyntax {
   }
 
   //TODO: Remove these from views
-  class ProjectModelSyntax(private val p: Model[Project]) extends AnyVal {
+  class ProjectSyntax(private val p: Project) extends AnyVal {
 
-    def iconUrlOrAsset(
-        implicit config: OreConfig
-    ): Either[String, DbRef[Asset]] =
-      p.iconAssetId.toRight(User.avatarUrl(p.ownerName))
+    def iconUrlOrAsset(implicit config: OreConfig): Either[String, DbRef[Asset]] =
+      p.iconAssetId.toRight(new UserObjSyntax(User).avatarUrl(p.ownerName))
+
+    def hasIcon: Boolean =
+      p.iconAssetId.isDefined
 
     def iconUrl(
         implicit header: RequestHeader,

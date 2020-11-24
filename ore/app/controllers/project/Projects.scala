@@ -75,7 +75,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms)(
       .withSlug(author, slug)
       .get
       .orElseFail(NotFound)
-      .flatMap(p => p.iconUrlOrAsset.fold(url => UIO.succeed(Redirect(url)), showAssetImage(p.id, _)))
+      .flatMap(p => p.obj.iconUrlOrAsset.fold(url => UIO.succeed(Redirect(url)), showAssetImage(p.id, _)))
   }
 
   private def showAssetImage(projectId: DbRef[Project], assetId: DbRef[Asset]) = {

@@ -97,7 +97,7 @@ object ProjectData {
           noteCount,
           lastVisibilityChangeInfo.map(_._1),
           lastVisibilityChangeInfo.flatMap(_._2).getOrElse("Unknown"),
-          project.iconUrl,
+          project.obj.iconUrl,
           starCount
         )
     }
