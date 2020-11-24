@@ -27,6 +27,7 @@ import ore.db.impl.table.common.RoleTable
 import ore.member.MembershipDossier
 import ore.models.organization.Organization
 import ore.permission.role.Role
+import ore.permission.scope.Scope
 
 import io.circe._
 import io.circe.derivation.annotations.SnakeCaseJsonCodec
@@ -49,7 +50,7 @@ object Members {
       limit: Option[Long],
       offset: Long
   )(
-      implicit r: ApiRequest[_],
+      implicit r: ApiRequest[_ <: Scope, _],
       service: ModelService[UIO],
       writeJson: Writeable[Json]
   ): ZIO[Any, Nothing, Result] = {
@@ -76,7 +77,7 @@ object Members {
       notificationType: NotificationType,
       notificationLocalization: String
   )(
-      implicit r: ApiRequest[List[MemberUpdate]],
+      implicit r: ApiRequest[_ <: Scope, List[MemberUpdate]],
       service: ModelService[UIO],
       users: UserBase[UIO],
       memberships: MembershipDossier.Aux[UIO, A, R, RT],
