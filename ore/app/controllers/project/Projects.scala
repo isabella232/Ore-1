@@ -24,6 +24,7 @@ import ore.db.{DbRef, Model}
 import ore.markdown.MarkdownRenderer
 import ore.member.MembershipDossier
 import ore.models.project._
+import ore.models.project.io.ProjectFiles
 import ore.models.user._
 import ore.models.user.role.ProjectUserRole
 import ore.permission._
@@ -41,7 +42,8 @@ import zio.{IO, Task, UIO, URIO, ZIO}
   */
 class Projects(stats: StatTracker[UIO], forms: OreForms)(
     implicit oreComponents: OreControllerComponents,
-    renderer: MarkdownRenderer
+    renderer: MarkdownRenderer,
+    projectFiles: ProjectFiles
 ) extends OreBaseController {
 
   private val self = controllers.project.routes.Projects

@@ -343,6 +343,7 @@ object OreConfig {
           override def values: IndexedSeq[VersionSyntax] = findValues
 
           case object Maven extends VersionSyntax
+          case object Exact extends VersionSyntax
 
           implicit val versionSyntaxConfigLoader: ConfigReader[VersionSyntax] =
             ConfigReader.fromStringOpt(withNameOption)

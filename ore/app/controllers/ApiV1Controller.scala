@@ -236,14 +236,22 @@ final class ApiV1Controller(
             .flatMap { fileWithData =>
               EitherT(
                 factory
-                  .createVersion(project, fileWithData, formData.changelog, formData.createForumPost, stability, None)
+                  .createVersion(
+                    project,
+                    fileWithData.entries.head.version,
+                    fileWithData,
+                    formData.changelog,
+                    formData.createForumPost,
+                    stability,
+                    None
+                  )
                   .either
               ).leftMap { es =>
                 BadRequest(JsArray(es.toList.view.zipWithIndex.map(t => error(t._2.toString, t._1)).toSeq))
               }
             }
             .semiflatMap {
-              case (newProject, newVersion, _) =>
+              case (newProject, newVersion) =>
                 api.writeVersion(
                   newVersion,
                   newProject,

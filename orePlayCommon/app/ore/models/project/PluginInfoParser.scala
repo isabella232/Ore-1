@@ -25,7 +25,8 @@ object PluginInfoParser {
   case class Dependency(
       identifier: String,
       rawVersion: Option[String],
-      required: Boolean
+      required: Boolean,
+      versionSyntax: String
   )
   case class PartialEntry(
       name: Option[String],
@@ -209,45 +210,47 @@ object PluginInfoParser {
               Dependency(
                 id,
                 version,
-                required.orElse(optional.map(!_)).getOrElse(depBlock.defaultIsRequired)
+                required.orElse(optional.map(!_)).getOrElse(depBlock.defaultIsRequired),
+                depBlock.versionSyntax.entryName
               )
             }.toList
 
           case DependencyBlock.DependencySyntax.AtSeparated =>
             cursor.as[String].map(_.split("@", 2)).map(a => (a(0), a.lift(1))).toOption.toList.map {
               case (id, version) =>
-                Dependency(id, version, depBlock.defaultIsRequired)
+                Dependency(id, version, depBlock.defaultIsRequired, depBlock.versionSyntax.entryName)
             }
         }
       } yield dependency
 
-      val groupedDependencies = dependencies.groupMapReduce(_.identifier)(identity) { (d1, d2) =>
-        val versionToUse = (d1.rawVersion, d2.rawVersion) match {
-          case (None, None)                     => None
-          case (None, opt @ Some(_))            => opt
-          case (opt @ Some(_), None)            => opt
-          case (Some(v1), Some(v2)) if v1 == v2 => Some(v1)
-          case (Some(v1), Some(v2)) =>
-            val v1Parts = v1.split('.').toVector
-            val v2Parts = v2.split('.').toVector
+      val groupedDependencies = dependencies.groupMapReduce(d => (d.identifier, d.versionSyntax))(identity) {
+        (d1, d2) =>
+          val versionToUse = (d1.rawVersion, d2.rawVersion) match {
+            case (None, None)                     => None
+            case (None, opt @ Some(_))            => opt
+            case (opt @ Some(_), None)            => opt
+            case (Some(v1), Some(v2)) if v1 == v2 => Some(v1)
+            case (Some(v1), Some(v2)) =>
+              val v1Parts = v1.split('.').toVector
+              val v2Parts = v2.split('.').toVector
 
-            v1Parts.align(v2Parts).foldLeft(None: Option[String]) {
-              case (victor @ Some(_), _) => victor
-              case (None, Ior.Both(a, b)) =>
-                cats.Order[Option[Int]]
-                a.toIntOption.compare(b.toIntOption) match {
-                  case 0          => None
-                  case i if i > 0 => Some(v1)
-                  case i if i < 0 => Some(v2)
-                }
+              v1Parts.align(v2Parts).foldLeft(None: Option[String]) {
+                case (victor @ Some(_), _) => victor
+                case (None, Ior.Both(a, b)) =>
+                  cats.Order[Option[Int]]
+                  a.toIntOption.compare(b.toIntOption) match {
+                    case 0          => None
+                    case i if i > 0 => Some(v1)
+                    case i if i < 0 => Some(v2)
+                  }
 
-              case (None, Ior.Left(_))  => Some(v1)
-              case (None, Ior.Right(_)) => Some(v2)
-            }
+                case (None, Ior.Left(_))  => Some(v1)
+                case (None, Ior.Right(_)) => Some(v2)
+              }
 
-        }
+          }
 
-        Dependency(d1.identifier, versionToUse, d1.required || d2.required)
+          Dependency(d1.identifier, versionToUse, d1.required || d2.required, d1.versionSyntax)
       }
 
       identifier.map(id => PartialEntry(name, id, version, groupedDependencies.values.toSet))

@@ -202,9 +202,9 @@ class Versions(
 
             service.runDBIO(versionIdQuery.result.head).flatMap { versionId =>
               val handlePlatforms = platforms.fold(ZIO.unit) { platforms =>
-                val deleteAll = service.deleteWhere(VersionPlatform)(_.versionId === versionId)
+                val deleteAll = service.deleteWhere(PluginPlatform)(_.pluginId === versionId)
                 val insertNew = service
-                  .bulkInsert(platforms.map(p => VersionPlatform(versionId, p.id, p.version, p.coarseVersion)))
+                  .bulkInsert(platforms.map(p => PluginPlatform(versionId, p.id, p.version, p.coarseVersion)))
                   .unit
 
                 deleteAll *> insertNew
@@ -346,16 +346,16 @@ class Versions(
       } yield {
         val apiVersion = APIV2QueryVersion(
           OffsetDateTime.now(),
-          pluginFile.versionName,
-          pluginFile.versionSlug,
+          "<placeholder>",
+          "<placeholder>",
           Visibility.Public,
           0,
           Some(user.name),
           ReviewState.Unreviewed,
           Version.Stability.Stable,
           None,
-          pluginFile.versionedPlatforms.map(_.id),
-          pluginFile.versionedPlatforms.map(_.version),
+          Nil,
+          Nil,
           None
         )
 
@@ -397,6 +397,7 @@ class Versions(
         t <- factory
           .createVersion(
             project,
+            data.versionName,
             pluginFile,
             data.description,
             data.createForumPost.getOrElse(project.settings.forumSync),
@@ -408,7 +409,7 @@ class Versions(
             BadRequest(UserErrors(es.map(messagesApi(_))))
           }
       } yield {
-        val (_, version, platforms) = t
+        val (_, version) = t
 
         val apiVersion = APIV2QueryVersion(
           version.createdAt,
@@ -420,8 +421,8 @@ class Versions(
           version.reviewState,
           version.tags.stability,
           version.tags.releaseType,
-          platforms.map(_.platform).toList,
-          platforms.map(_.platformVersion).toList,
+          Nil,
+          Nil,
           version.postId
         )
 
@@ -523,6 +524,7 @@ object Versions {
 
   //TODO: Allow setting multiple platforms
   @SnakeCaseJsonCodec case class DeployVersionInfo(
+      versionName: String,
       createForumPost: Option[Boolean],
       description: Option[String],
       stability: Option[Version.Stability],

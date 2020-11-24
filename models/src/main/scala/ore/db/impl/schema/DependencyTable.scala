@@ -10,6 +10,7 @@ class DependencyTable(tag: Tag) extends ModelTable[Dependency](tag, "project_ass
   def identifier    = column[String]("identifier")
   def versionRange  = column[String]("version_range")
   def versionSyntax = column[Dependency.VersionSyntax]("version_syntax")
+  val required      = column[Boolean]("required")
 
   override def * =
     (
@@ -19,7 +20,8 @@ class DependencyTable(tag: Tag) extends ModelTable[Dependency](tag, "project_ass
         pluginId,
         identifier,
         versionRange.?,
-        versionSyntax.?
+        versionSyntax,
+        required
       )
     ).<>(mkApply((Dependency.apply _).tupled), mkUnapply(Dependency.unapply))
 }

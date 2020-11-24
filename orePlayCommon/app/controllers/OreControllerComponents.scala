@@ -23,7 +23,6 @@ trait OreControllerComponents extends ControllerComponents {
   def uioEffects: OreControllerEffects[UIO]
   def bakery: Bakery
   def config: OreConfig
-  def projectFiles: ProjectFiles
   def zioRuntime: zio.Runtime[Blocking with Clock]
   def assetsFinder: AssetsFinder
   def assets: AssetBase
@@ -47,7 +46,6 @@ case class DefaultOreControllerComponents(
     langs: Langs,
     fileMimeTypes: FileMimeTypes,
     executionContext: ExecutionContext,
-    projectFiles: ProjectFiles,
     zioRuntime: zio.Runtime[Blocking with Clock],
     assetsFinder: AssetsFinder,
     assets: AssetBase

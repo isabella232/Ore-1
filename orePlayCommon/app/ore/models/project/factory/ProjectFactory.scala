@@ -41,7 +41,6 @@ trait ProjectFactory {
   type RIO[-R, +A] = ZIO[R, Nothing, A]
 
   protected def fileIO: FileIO[ZIO[Blocking, Nothing, *]]
-  protected def fileManager: ProjectFiles
 
   implicit protected def config: OreConfig
   implicit protected def env: OreEnv
@@ -117,11 +116,9 @@ trait ProjectFactory {
       implicit messages: Messages
   ): ZIO[Blocking, String, PluginFileWithData] =
     for {
-      plugin <- processPluginUpload(uploadData, uploader).filterOrFail(_.versionSlug != "recommended")(
-        "error.version.illegalVersion"
-      )
+      plugin        <- processPluginUpload(uploadData, uploader)
       _             <- ZIO.unit.filterOrFail(_ => plugin.entries.nonEmpty)("error.plugin.noVersion")
-      versionExists <- versionExists(project.id, plugin.md5, plugin.versionSlug)
+      versionExists <- UIO.succeed(false) //TODO
       _ <- {
         if (versionExists && this.config.ore.projects.fileValidate) ZIO.fail("error.version.duplicate")
         else ZIO.unit
@@ -211,20 +208,28 @@ trait ProjectFactory {
     */
   def createVersion(
       project: Model[Project],
+      versionName: String,
       plugin: PluginFileWithData,
       description: Option[String],
       createForumPost: Boolean,
       stability: Version.Stability,
       releaseType: Option[Version.ReleaseType]
-  ): ZIO[Blocking, NonEmptyList[String], (Model[Project], Model[Version], Seq[Model[VersionPlatform]])] = {
+  ): ZIO[Blocking, NonEmptyList[String], (Model[Project], Model[Version])] = {
 
     for {
       asset <- uploadPluginFile(project.id, plugin)
       // Create version
       version <- service.insert(
-        plugin.asVersion(project.id, description, createForumPost, stability, releaseType, asset.id)
+        plugin.asVersion(versionName, project.id, description, createForumPost, stability, releaseType, asset.id)
       )
-      platforms <- service.bulkInsert(plugin.asPlatforms(version.id))
+      _ <- ZIO.foreach_(plugin.asPlugins(asset.id)) {
+        case (pluginObj, createDeps, createPlatforms) =>
+          for {
+            plugin <- service.insert(pluginObj)
+            _      <- service.bulkInsert(createDeps(plugin.id).toSeq)
+            _      <- service.bulkInsert(createPlatforms(plugin.id))
+          } yield ()
+      }
       // Notify watchers
       _ <- notifyWatchers(version, project)
       firstTimeUploadProject <- {
@@ -242,7 +247,7 @@ trait ProjectFactory {
       _ <- if (createForumPost) {
         service.insert(Job.UpdateDiscourseVersionPost.newJob(version.id).toJob).unit
       } else UIO.unit
-    } yield (firstTimeUploadProject, version, platforms)
+    } yield (firstTimeUploadProject, version)
   }
 
   private def uploadPluginFile(
@@ -263,6 +268,5 @@ class OreProjectFactory(
     val env: OreEnv,
     val projects: ProjectBase[UIO],
     val assets: AssetBase,
-    val fileManager: ProjectFiles,
     val fileIO: FileIO[ZIO[Blocking, Nothing, *]]
 ) extends ProjectFactory

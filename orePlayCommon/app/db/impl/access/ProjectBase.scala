@@ -5,26 +5,23 @@ import scala.language.higherKinds
 import ore.OreConfig
 import ore.db.access.ModelView
 import ore.db.impl.OrePostgresDriver.api._
-import ore.db.impl.schema.{AssetTable, ProjectTable, VersionTable}
 import ore.db.{DbRef, Model, ModelService}
 import ore.member.Joinable
 import ore.models.Job
 import ore.models.project._
-import ore.models.project.io.ProjectFiles
 import ore.models.user.User
 import ore.util.StringUtils._
-import ore.util.{FileUtils, OreMDC}
-import util.FileIO
+import ore.util.OreMDC
 import util.syntax._
 
 import cats.effect.syntax.all._
 import cats.syntax.all._
 import cats.tagless.autoFunctorK
+import zio.RIO
+import zio.blocking.Blocking
 
 @autoFunctorK
 trait ProjectBase[+F[_]] {
-
-  def missingFile: F[Seq[(String, String, Option[String], DbRef[Project], DbRef[Asset], String)]]
 
   /**
     * Returns the Project with the specified owner name and name.
@@ -98,45 +95,12 @@ object ProjectBase {
     */
   class ProjectBaseF[F[_]](
       implicit service: ModelService[F],
+      assets: AssetBase,
       config: OreConfig,
-      fileManager: ProjectFiles,
-      fileIO: FileIO[F],
       F: cats.effect.Effect[F],
+      zioEffect: cats.effect.Effect[RIO[Blocking, *]],
       projectJoinable: Joinable[F, Project]
   ) extends ProjectBase[F] {
-
-    def missingFile: F[Seq[(String, String, Option[String], DbRef[Project], DbRef[Asset], String)]] = {
-      def allVersions =
-        for {
-          t <- TableQuery[AssetTable]
-            .joinLeft(TableQuery[VersionTable])
-            .on((a, v) => v.pluginAssetId === a.id || v.docsAssetId === a.id || v.sourcesAssetId === a.id)
-          (a, v) = t
-          p <- TableQuery[ProjectTable] if a.projectId === p.id
-        } yield (p.ownerName, p.name, v.map(_.name), p.id, a.id, a.filename)
-
-      service.runDBIO(allVersions.result).flatMap { versions =>
-        fileIO
-          .traverseLimited(versions.toVector) {
-            case t @ (_, _, _, projectId, assetId, _) =>
-              val res = F
-                .attempt(
-                  F.delay(this.fileManager.getAssetPath(projectId, assetId)).flatMap(fileIO.notExists)
-                )
-                .map {
-                  case Left(_)      => false //Invalid file name
-                  case Right(value) => value
-                }
-
-              res.tupleLeft(t)
-          }
-          .map {
-            _.collect {
-              case (t, true) => t
-            }
-          }
-      }
-    }
 
     def withName(owner: String, name: String): F[Option[Model[Project]]] =
       ModelView
@@ -229,18 +193,14 @@ object ProjectBase {
     def deleteVersion(version: Model[Version])(implicit mdc: OreMDC): F[Model[Project]] = {
       for {
         proj <- prepareDeleteVersion(version)
-        _ <- {
-          //TODO: Handle other storages than local
-          val deleteFiles = fileIO.traverseLimited(
-            List(
-              Some(fileManager.getAssetPath(version.projectId, version.pluginAssetId)),
-              version.docsAssetId.map(fileManager.getAssetPath(version.projectId, _)),
-              version.sourcesAssetId.map(fileManager.getAssetPath(version.projectId, _))
-            ).flatten
-          )(fileIO.deleteIfExists)
-
-          deleteFiles *> service.delete(version)
-        }
+        _    <- F.liftIO(zioEffect.toIO(assets.deleteAssetIfUnused(version.projectId, version.pluginAssetId)))
+        _ <- version.docsAssetId.fold(F.unit)(id =>
+          F.liftIO(zioEffect.toIO(assets.deleteAssetIfUnused(version.projectId, id)))
+        )
+        _ <- version.sourcesAssetId.fold(F.unit)(id =>
+          F.liftIO(zioEffect.toIO(assets.deleteAssetIfUnused(version.projectId, id)))
+        )
+        _ <- service.delete(version)
       } yield proj
     }
 
@@ -250,9 +210,7 @@ object ProjectBase {
       * @param project Project to delete
       */
     def delete(project: Model[Project])(implicit mdc: OreMDC): F[Int] = {
-      val fileEff = fileIO.executeBlocking(
-        FileUtils.deleteDirectory(this.fileManager.getProjectDir(project.id))
-      )
+      val fileEff     = F.liftIO(zioEffect.toIO(assets.deleteProjectAssets(project.id)))
       val addForumJob = (id: Int) => service.insert(Job.DeleteDiscourseTopic.newJob(id).toJob).void
 
       val eff = project.topicId.fold(F.unit)(addForumJob)

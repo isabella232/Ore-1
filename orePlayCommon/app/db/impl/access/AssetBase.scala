@@ -45,6 +45,17 @@ trait AssetBase {
       assetId: DbRef[Asset],
       newPath: Path
   ): URIO[Blocking, Model[Asset]]
+
+  /**
+    * Delete all the backing assets for a specific project. The actual DB
+    * entries may remain because of foreign keys.
+    */
+  def deleteProjectAssets(projectId: DbRef[Project]): URIO[Blocking, Unit]
+
+  /**
+    * Finds all the assets with missing files.
+    */
+  def missingFileAssets: URIO[Blocking, Seq[(Model[Project], Model[Asset])]]
 }
 object AssetBase {
 
@@ -115,5 +126,10 @@ object AssetBase {
 
       ret.orDie
     }
+
+    override def deleteProjectAssets(projectId: DbRef[Project]): URIO[Blocking, Unit] =
+      effectBlocking(Files.deleteIfExists(files.getProjectDir(projectId))).orDie.unit
+
+    override def missingFileAssets: URIO[Blocking, Seq[(Model[Project], Model[Asset])]] = UIO.succeed(Nil) //TODO
   }
 }

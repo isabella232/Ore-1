@@ -11,7 +11,8 @@ case class Dependency(
     pluginId: DbRef[Plugin],
     identifier: String,
     versionRange: Option[String],
-    versionSyntax: Option[Dependency.VersionSyntax]
+    versionSyntax: Dependency.VersionSyntax,
+    required: Boolean
 )
 object Dependency extends DefaultModelCompanion[Dependency, DependencyTable](TableQuery[DependencyTable]) {
   implicit val query: ModelQuery[Dependency] = ModelQuery.from(this)

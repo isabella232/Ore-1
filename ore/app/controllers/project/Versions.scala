@@ -23,7 +23,7 @@ import ore.db.{DbRef, Model}
 import ore.markdown.MarkdownRenderer
 import ore.models.admin.VersionVisibilityChange
 import ore.models.project._
-import ore.models.project.io.PluginFile
+import ore.models.project.io.{PluginFile, ProjectFiles}
 import ore.models.user.User
 import ore.permission.Permission
 import ore.rest.ApiV1ProjectsTable
@@ -49,7 +49,8 @@ class Versions(stats: StatTracker[UIO])(
     implicit oreComponents: OreControllerComponents,
     messagesApi: MessagesApi,
     env: OreEnv,
-    renderer: MarkdownRenderer
+    renderer: MarkdownRenderer,
+    projectFiles: ProjectFiles
 ) extends OreBaseController {
 
   private val self = controllers.project.routes.Versions

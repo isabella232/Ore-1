@@ -68,11 +68,13 @@ CREATE TABLE project_asset_plugin_dependencies
     plugin_id      BIGSERIAL   NOT NULL REFERENCES project_asset_plugins ON DELETE CASCADE,
     identifier     TEXT        NOT NULL,
     version_range  TEXT,
-    version_syntax TEXT
+    version_syntax TEXT        NOT NULL,
+    required       BOOLEAN     NOT NULL
 );
 
-INSERT INTO project_asset_plugin_dependencies (created_at, plugin_id, identifier, version_range, version_syntax)
-SELECT pv.created_at, pvp.id, depid.identifier, depver.version, 'maven'
+INSERT INTO project_asset_plugin_dependencies (created_at, plugin_id, identifier, version_range, version_syntax,
+                                               required)
+SELECT pv.created_at, pvp.id, depid.identifier, depver.version, 'maven', TRUE
 FROM project_asset_plugins pvp
          JOIN project_assets pva ON pva.id = pvp.asset_id
          JOIN project_versions pv ON pv.plugin_asset_id = pva.id,

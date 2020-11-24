@@ -160,7 +160,7 @@ final class Application(forms: OreForms, val errorHandler: HttpErrorHandler)(
       (
         service.runDbCon(AppQueries.getUnhealtyProjects(config.ore.projects.staleAge).to[Vector]),
         service.runDbCon(AppQueries.erroredJobs.to[Vector]),
-        projects.missingFile
+        assets.missingFileAssets
       ).parMapN { (unhealtyProjects, erroredJobs, missingFiles) =>
         val noTopicProjects = unhealtyProjects.filter(p => p.topicId.isEmpty || p.postId.isEmpty)
         val staleProjects = unhealtyProjects
