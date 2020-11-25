@@ -10,7 +10,7 @@ import play.api.mvc._
 
 import controllers.apiv2.helpers.{APIScope, ApiError, ApiErrors}
 import controllers.sugar.CircePlayController
-import controllers.sugar.Requests.{ApiAuthInfo, ApiRequest}
+import controllers.sugar.Requests.ApiRequest
 import controllers.{OreBaseController, OreControllerComponents}
 import db.impl.query.APIV2Queries
 import ore.db.impl.OrePostgresDriver.api._
@@ -159,19 +159,6 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
       }
     }
   }
-
-  def permissionsInApiScope(
-      projectOwner: Option[String],
-      projectSlug: Option[String],
-      organizationName: Option[String]
-  )(
-      implicit request: ApiRequest[_ <: Scope, _]
-  ): IO[Result, (APIScope[_ <: Scope], Permission)] =
-    for {
-      apiScope <- ZIO.fromEither(createApiScope(projectOwner, projectSlug, organizationName))
-      scope    <- apiScopeToRealScope(apiScope).orElseFail(NotFound)
-      perms    <- request.permissionIn(scope)
-    } yield (apiScope, perms)
 
   def permApiAction[S <: Scope](perms: Permission): ActionFilter[ApiRequest[S, *]] =
     new ActionFilter[ApiRequest[S, *]] {
