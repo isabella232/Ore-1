@@ -7,7 +7,7 @@ CREATE TABLE project_callbacks
     project_id        BIGINT      NOT NULL REFERENCES projects ON DELETE CASCADE,
     public_id         UUID        NOT NULL,
     name              TEXT        NOT NULL,
-    callback_url      TEXT,
+    callback_url      TEXT        NOT NULL,
     discord_formatted BOOLEAN     NOT NULL,
     events            TEXT[]      NOT NULL
 );

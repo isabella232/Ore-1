@@ -1089,7 +1089,9 @@ GET      /projects/:projectOwner/:projectSlug/_projectData                     @
 #      '{$request.body#/callback_url}':
 #        post:
 #          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.Version'
+#            allOf:
+#              - $ref: '#/components/schemas/models.protocols.APIV2.WebhookPostData'
+#              - $ref: '#/components/schemas/models.protocols.APIV2.Version'
 #          responses:
 #            200:
 #              description: Ok
@@ -1097,7 +1099,9 @@ GET      /projects/:projectOwner/:projectSlug/_projectData                     @
 #      '{$request.body#/callback_url}':
 #        post:
 #          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.VersionChangelog'
+#            allOf:
+#              - $ref: '#/components/schemas/models.protocols.APIV2.WebhookPostData'
+#              - $ref: '#/components/schemas/models.protocols.APIV2.VersionChangelog'
 #          responses:
 #            200:
 #              description: Ok
@@ -1105,7 +1109,9 @@ GET      /projects/:projectOwner/:projectSlug/_projectData                     @
 #      '{$request.body#/callback_url}':
 #        post:
 #          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.Version'
+#            allOf:
+#              - $ref: '#/components/schemas/models.protocols.APIV2.WebhookPostData'
+#              - $ref: '#/components/schemas/models.protocols.APIV2.Version'
 #          responses:
 #            200:
 #              description: Ok
@@ -1113,7 +1119,9 @@ GET      /projects/:projectOwner/:projectSlug/_projectData                     @
 #      '{$request.body#/callback_url}':
 #        post:
 #          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.StandaloneVisibility'
+#            allOf:
+#              - $ref: '#/components/schemas/models.protocols.APIV2.WebhookPostData'
+#              - $ref: '#/components/schemas/models.protocols.APIV2.VersionVisibilityChange'
 #          responses:
 #            200:
 #              description: Ok
@@ -1121,7 +1129,9 @@ GET      /projects/:projectOwner/:projectSlug/_projectData                     @
 #      '{$request.body#/callback_url}':
 #        post:
 #          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.StandaloneVersionName'
+#            allOf:
+#              - $ref: '#/components/schemas/models.protocols.APIV2.WebhookPostData'
+#              - $ref: '#/components/schemas/models.protocols.APIV2.StandaloneVersionName'
 #          responses:
 #            200:
 #              description: Ok
@@ -1129,7 +1139,9 @@ GET      /projects/:projectOwner/:projectSlug/_projectData                     @
 #      '{$request.body#/callback_url}':
 #        post:
 #          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.PageListEntryWithContent'
+#            allOf:
+#              - $ref: '#/components/schemas/models.protocols.APIV2.WebhookPostData'
+#              - $ref: '#/components/schemas/models.protocols.APIV2.PageWithSlug'
 #          responses:
 #            200:
 #              description: Ok
@@ -1137,15 +1149,9 @@ GET      /projects/:projectOwner/:projectSlug/_projectData                     @
 #      '{$request.body#/callback_url}':
 #        post:
 #          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.PageListEntry'
-#          responses:
-#            200:
-#              description: Ok
-#    page_content_updated:
-#      '{$request.body#/callback_url}':
-#        post:
-#          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.PageListEntryWithContent'
+#            allOf:
+#              - $ref: '#/components/schemas/models.protocols.APIV2.WebhookPostData'
+#              - $ref: '#/components/schemas/models.protocols.APIV2.PageUpdateWithSlug'
 #          responses:
 #            200:
 #              description: Ok
@@ -1153,15 +1159,9 @@ GET      /projects/:projectOwner/:projectSlug/_projectData                     @
 #      '{$request.body#/callback_url}':
 #        post:
 #          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.PageListEntry'
-#          responses:
-#            200:
-#              description: Ok
-#    member_added:
-#      '{$request.body#/callback_url}':
-#        post:
-#          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.Member'
+#            allOf:
+#              - $ref: '#/components/schemas/models.protocols.APIV2.WebhookPostData'
+#              - $ref: '#/components/schemas/models.protocols.APIV2.PageListEntry'
 #          responses:
 #            200:
 #              description: Ok
@@ -1169,15 +1169,9 @@ GET      /projects/:projectOwner/:projectSlug/_projectData                     @
 #      '{$request.body#/callback_url}':
 #        post:
 #          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.Member'
-#          responses:
-#            200:
-#              description: Ok
-#    member_removed:
-#      '{$request.body#/callback_url}':
-#        post:
-#          requestBody:
-#            $ref: '#/components/schemas/models.protocols.APIV2.StandaloneUser'
+#            allOf:
+#              - $ref: '#/components/schemas/models.protocols.APIV2.WebhookPostData'
+#              - $ref: '#/components/schemas/models.protocols.APIV2.MembersUpdate'
 #          responses:
 #            200:
 #              description: Ok

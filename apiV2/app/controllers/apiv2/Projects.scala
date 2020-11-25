@@ -36,6 +36,7 @@ import ore.util.{OreMDC, StringUtils}
 import util.syntax._
 import util.{PartialUtils, PatchDecoder, UserActionLogger}
 
+import akka.http.scaladsl.model.Uri
 import cats.data.{NonEmptyList, Validated, ValidatedNel}
 import cats.syntax.all._
 import io.circe._
@@ -305,21 +306,35 @@ class Projects(
 
   def showMembers(projectOwner: String, projectSlug: String, limit: Option[Long], offset: Long): Action[AnyContent] =
     CachingApiAction(Permission.ViewPublicInfo, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF { implicit r =>
-      Members.membersAction(APIV2Queries.projectMembers(r.scope.id, _, _), limit, offset)
+      Members.membersAction(APIV2Queries.projectMembers(r.scope.id, _, _), limit, offset).map(Ok(_))
     }
 
   def updateMembers(projectOwner: String, projectSlug: String): Action[List[Members.MemberUpdate]] =
     ApiAction(Permission.ManageProjectMembers, APIScope.ProjectScope(projectOwner, projectSlug))
       .asyncF(parseCirce.decodeJson[List[Members.MemberUpdate]]) { implicit r =>
-        Members.updateMembers[Project, ProjectUserRole, ProjectRoleTable](
-          getSubject = r.project,
-          allowOrgMembers = true,
-          getMembersQuery = APIV2Queries.projectMembers(r.scope.id, _, _),
-          createRole = ProjectUserRole(_, _, _),
-          roleCompanion = ProjectUserRole,
-          notificationType = NotificationType.ProjectInvite,
-          notificationLocalization = "notification.project.invite"
-        )
+        for {
+          oldMembersRaw <- service.runDbCon(
+            APIV2Queries.projectMembers(r.scope.id, 25, 0).to[List]
+          )
+          oldMembers = {
+            if (r.scopePermission.has(Permission.ManageSubjectMembers)) oldMembersRaw
+            else oldMembersRaw.filter(_.role.isAccepted)
+          }
+          newMembers <- Members.updateMembers[Project, ProjectUserRole, ProjectRoleTable](
+            getSubject = r.project,
+            allowOrgMembers = true,
+            getMembersQuery = APIV2Queries.projectMembers(r.scope.id, _, _),
+            createRole = ProjectUserRole(_, _, _),
+            roleCompanion = ProjectUserRole,
+            notificationType = NotificationType.ProjectInvite,
+            notificationLocalization = "notification.project.invite"
+          )
+          _ <- addWebhookJob(
+            WebhookEventType.MemberChanged,
+            APIV2.MembersUpdate(oldMembers, newMembers.toList),
+            ???
+          )
+        } yield Ok(newMembers)
       }
 
   def showProjectStats(
@@ -362,6 +377,8 @@ class Projects(
             Permission.DeleteProject,
             service.insert(Job.UpdateDiscourseProjectTopic.newJob(project.id).toJob).unit,
             doHardDeleteProject,
+            (_, _) => UIO.unit,
+            UIO.unit,
             (newV, oldV) =>
               UserActionLogger
                 .logApi(
@@ -456,30 +473,36 @@ class Projects(
         val data = request.body
 
         val publicId = UUID.randomUUID()
-        //TODO: Sanitize callback url
 
-        service
-          .insert(
-            ModelWebhook(
-              request.scope.id,
-              publicId,
-              data.name,
-              data.callbackUrl,
-              data.discordFormatted.getOrElse(false),
-              data.events.toList
-            )
-          )
-          .as(
-            Created(
-              APIV2.Webhook(
+        val parsedUri = ZIO(Uri.parseAbsolute(data.callbackUrl))
+          .orElseFail(BadRequest(ApiError("Invalid callback URL")))
+          .filterOrFail(_.scheme == "https")(BadRequest(ApiError("Only HTTPS urls allowed")))
+          .map(_.toString)
+
+        parsedUri.flatMap { uri =>
+          service
+            .insert(
+              ModelWebhook(
+                request.scope.id,
                 publicId,
                 data.name,
-                data.callbackUrl,
+                uri,
                 data.discordFormatted.getOrElse(false),
-                data.events
+                data.events.toList
               )
             )
-          )
+            .as(
+              Created(
+                APIV2.Webhook(
+                  publicId,
+                  data.name,
+                  uri,
+                  data.discordFormatted.getOrElse(false),
+                  data.events
+                )
+              )
+            )
+        }
       }
 
   def getWebhook(projectOwner: String, projectSlug: String, webhookId: String): Action[AnyContent] =
@@ -512,14 +535,7 @@ class Projects(
                   ))
                 ZIO.fail(BadRequest(ApiError("Can't both set callback url to null, and discord formatted to false")))
               else {
-
-                val withDiscordCallbackFixed = webhookEdits.copy(
-                  callbackUrl =
-                    if (webhookEdits.discordFormatted.contains(true)) Some(None) else webhookEdits.callbackUrl,
-                  discordFormatted = webhookEdits.callbackUrl.flatten.map(_ => true)
-                )
-
-                val update = service.runDbCon(APIV2Queries.updateWebhook(uuidWebhookId, withDiscordCallbackFixed).run)
+                val update = service.runDbCon(APIV2Queries.updateWebhook(uuidWebhookId, webhookEdits).run)
 
                 //We need two queries two queries as we use the generic update function
                 val get =
@@ -658,7 +674,7 @@ object Projects {
 
   @SnakeCaseJsonCodec case class CreateWebhookRequest(
       name: String,
-      callbackUrl: Option[String],
+      callbackUrl: String,
       discordFormatted: Option[Boolean],
       events: Seq[WebhookEventType]
   )
@@ -666,7 +682,7 @@ object Projects {
   type EditableWebhook = EditableWebhookF[Option]
   case class EditableWebhookF[F[_]](
       name: F[String],
-      callbackUrl: F[Option[String]],
+      callbackUrl: F[String],
       discordFormatted: F[Boolean],
       events: F[List[WebhookEventType]]
   )

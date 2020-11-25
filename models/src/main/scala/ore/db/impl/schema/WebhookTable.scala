@@ -16,7 +16,7 @@ class WebhookTable(tag: Tag) extends ModelTable[Webhook](tag, "project_webhooks"
   def eventTypes       = column[List[Webhook.WebhookEventType]]("event_types")
 
   override def * =
-    (id.?, createdAt.?, (projectId, publicId, name, callbackUrl.?, discordFormatted, eventTypes)).<>(
+    (id.?, createdAt.?, (projectId, publicId, name, callbackUrl, discordFormatted, eventTypes)).<>(
       mkApply((Webhook.apply _).tupled),
       mkUnapply(Webhook.unapply)
     )

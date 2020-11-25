@@ -183,8 +183,9 @@ trait DoobieOreProtocol {
       .asInstanceOf[Meta[LoggedActionType[Ctx]]] // scalafix:ok
   implicit def loggedActionContextMeta[Ctx]: Meta[LoggedActionContext[Ctx]] =
     enumeratumMeta(LoggedActionContext).asInstanceOf[Meta[LoggedActionContext[Ctx]]] // scalafix:ok
-  implicit val reviewStateMeta: Meta[ReviewState] = enumeratumMeta(ReviewState)
-  implicit val jobTypeMeta: Meta[Job.JobType]     = enumeratumMeta(Job.JobType)
+  implicit val reviewStateMeta: Meta[ReviewState]                   = enumeratumMeta(ReviewState)
+  implicit val jobTypeMeta: Meta[Job.JobType]                       = enumeratumMeta(Job.JobType)
+  implicit val webhookEventTypeMeta: Meta[Webhook.WebhookEventType] = enumeratumMeta(Webhook.WebhookEventType)
 
   implicit val langMeta: Meta[Locale] = Meta[String].timap(Locale.forLanguageTag)(_.toLanguageTag)
   implicit val inetStringMeta: Meta[InetString] =
@@ -225,7 +226,7 @@ trait DoobieOreProtocol {
     metaFromGetPut[List[Int]].timap(_.map(Prompt.withValue))(_.map(_.value))
   implicit val roleTypeArrayMeta: Meta[List[Role]] =
     metaFromGetPut[List[String]].timap(_.map(Role.withValue))(_.map(_.value))
-  implicit val webhookEventTypeMeta: Meta[List[Webhook.WebhookEventType]] =
+  implicit val webhookEventTypeListMeta: Meta[List[Webhook.WebhookEventType]] =
     metaFromGetPut[List[String]].timap(_.map(Webhook.WebhookEventType.withValue))(_.map(_.value))
 
   implicit val tagColorArrayMeta: Meta[List[TagColor]] =

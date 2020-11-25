@@ -97,6 +97,7 @@ object Deps {
   ).map(flexmarkDep)
 
   lazy val squealCategoryMacro = "net.katsstuff" %% "squeal-category-macro" % Version.squeal
+  val ackcordRequests          = "net.katsstuff" %% "ackcord-requests"      % "0.17.1"
 
   val pluginMeta = "org.spongepowered" % "plugin-meta" % "0.4.1"
 

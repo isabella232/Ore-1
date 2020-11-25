@@ -13,7 +13,7 @@ import models.protocols.APIV2
 import ore.db.DbRef
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.PageTable
-import ore.models.project.{Page, Project}
+import ore.models.project.{Page, Project, Webhook}
 import ore.permission.Permission
 import ore.util.StringUtils
 import util.PatchDecoder
@@ -72,23 +72,32 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
         val newName = StringUtils.compact(r.body.name)
         val content = r.body.content
 
-        val pageArr    = page.split("/")
+        val pageArr    = page.split("/").toIndexedSeq
         val pageParent = pageArr.init.mkString("/")
         val slug       = StringUtils.slugify(pageArr.last) //TODO: Check ASCII
 
         val updateExisting = getPageOpt(page).flatMap {
           case (id, _, _) =>
-            service
+            addWebhookJob(
+              Webhook.WebhookEventType.PageUpdated,
+              APIV2.PageUpdateWithSlug(newName, pageArr, pageArr, content.isDefined, content),
+              ???
+            ) *> service
               .runDBIO(
                 TableQuery[PageTable].filter(_.id === id).map(p => (p.name, p.contents)).update((newName, content))
               )
               .as(Ok(APIV2.Page(newName, content)))
         }
 
-        def insertNewPage(parentId: Option[DbRef[Page]]) =
-          service
+        def insertNewPage(parentId: Option[DbRef[Page]]) = {
+          addWebhookJob(
+            Webhook.WebhookEventType.PageCreated,
+            APIV2.PageWithSlug(newName, pageArr, content.isDefined, content),
+            ???
+          ) *> service
             .insert(Page(r.scope.id, parentId, newName, slug, isDeletable = true, content))
             .as(Created(APIV2.Page(newName, content)))
+        }
 
         val createNew =
           if (page.contains("/")) {
@@ -117,27 +126,42 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
 
         res match {
           case Validated.Valid(a) =>
-            val newName = a.copy[Option](
+            val edits = a.copy[Option](
               name = a.name.map(StringUtils.compact)
             )
 
-            val slug = newName.name.map(StringUtils.slugify)
+            val slug = edits.name.map(StringUtils.slugify)
 
             val oldPage = getPage(page)
             val newParent =
-              newName.parent
+              edits.parent
                 .map(_.map(p => getPageOpt(p).map(_._1)).sequence)
                 .sequence
                 .orElseFail(BadRequest(ApiError("Unknown parent")))
 
             val runRename = (oldPage <&> newParent).flatMap {
               case ((id, name, contents), parentId) =>
-                service
-                  .runDbCon(APIV2Queries.patchPage(newName, slug, id, parentId).run)
-                  .as(Ok(APIV2.Page(newName.name.getOrElse(name), newName.content.getOrElse(contents))))
+                val oldSlug   = page.split("/").toIndexedSeq
+                val oldParent = oldSlug.dropRight(1)
+                val newParent = edits.parent.map(_.fold(IndexedSeq.empty[String])(_.split("/").toIndexedSeq))
+
+                addWebhookJob(
+                  Webhook.WebhookEventType.PageUpdated,
+                  APIV2.PageUpdateWithSlug(
+                    edits.name.getOrElse(name),
+                    oldSlug,
+                    newParent.getOrElse(oldParent.toList) :+ slug.getOrElse(oldSlug.last),
+                    edits.content.getOrElse(contents).isDefined,
+                    edits.content.getOrElse(contents)
+                  ),
+                  ???
+                ) *>
+                  service
+                    .runDbCon(APIV2Queries.patchPage(edits, slug, id, parentId).run)
+                    .as(Ok(APIV2.Page(edits.name.getOrElse(name), edits.content.getOrElse(contents))))
             }
 
-            if (newName.content.flatten.fold(0)(_.length) > Page.maxLengthPage)
+            if (edits.content.flatten.fold(0)(_.length) > Page.maxLengthPage)
               ZIO.fail(BadRequest(ApiError("Too long content")))
             else runRename
           case Validated.Invalid(e) => ZIO.fail(BadRequest(ApiErrors(e.map(_.show))))
@@ -154,9 +178,11 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
               p.id === id && p.isDeletable && TableQuery[PageTable].filter(_.parentId === id).size === 0
             )
         }
-        .map {
-          case 0 => BadRequest(ApiError("Page not deletable"))
-          case _ => NoContent
+        .flatMap {
+          case 0 => ZIO.succeed(BadRequest(ApiError("Page not deletable")))
+          case _ =>
+            addWebhookJob(Webhook.WebhookEventType.PageUpdated, APIV2.PageSlug(page.split("/").toIndexedSeq), ???)
+              .as(NoContent)
         }
     }
 }

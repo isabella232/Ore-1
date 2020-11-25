@@ -222,6 +222,13 @@ class Versions(
                     )
                     .unique
                 )
+                .tap { version =>
+                  addWebhookJob(
+                    Webhook.WebhookEventType.VersionEdited,
+                    version,
+                    ???
+                  )
+                }
                 .map(r => Ok(WithAlerts(r, warnings = warnings)))
             }
           case Validated.Invalid(e) => ZIO.fail(BadRequest(ApiErrors(e)))
@@ -252,6 +259,11 @@ class Versions(
           else ZIO.fail(BadRequest(ApiError("Description too long")))
           _ <- service.update(version)(_.copy(description = Some(newDescription)))
           _ <- service.insert(Job.UpdateDiscourseVersionPost.newJob(version.id).toJob)
+          _ <- addWebhookJob(
+            Webhook.WebhookEventType.VersionChangelogEdited,
+            APIV2.VersionChangelog(newDescription),
+            ???
+          )
           _ <- UserActionLogger.logApi(
             request,
             LoggedActionType.VersionDescriptionEdited,
@@ -394,10 +406,8 @@ class Versions(
             implicit val lang: Lang = user.langOrDefault
             BadRequest(UserErrors(es.map(messagesApi(_))))
           }
-      } yield {
-        val (_, version, platforms) = t
-
-        val apiVersion = APIV2QueryVersion(
+        (_, version, platforms) = t
+        apiVersion = APIV2QueryVersion(
           version.createdAt,
           version.versionString,
           version.dependencyIds,
@@ -416,13 +426,12 @@ class Versions(
           platforms.map(_.platformVersion).toList,
           version.postId
         )
-
-        Created(apiVersion.asProtocol).withHeaders(
-          "Location" -> routes.Versions
-            .showVersionAction(project.ownerName, project.slug, version.versionString)
-            .absoluteURL()
-        )
-      }
+        _ <- addWebhookJob(Webhook.WebhookEventType.VersionCreated, apiVersion.asProtocol, ???)
+      } yield Created(apiVersion.asProtocol).withHeaders(
+        "Location" -> routes.Versions
+          .showVersionAction(project.ownerName, project.slug, version.versionString)
+          .absoluteURL()
+      )
     }
 
   def hardDeleteVersion(projectOwner: String, projectSlug: String, version: String): Action[AnyContent] =
@@ -439,7 +448,13 @@ class Versions(
             )(LoggedActionVersion(_, Some(version.projectId)))
             .unit
 
-          log *> projects.deleteVersion(version).as(NoContent)
+          val addWebhookJobs = addWebhookJob(
+            Webhook.WebhookEventType.VersionDeleted,
+            APIV2.StandaloneVersionName(version.versionString),
+            ???
+          )
+
+          addWebhookJobs *> log *> projects.deleteVersion(version).as(NoContent)
         }
     }
 
@@ -447,6 +462,7 @@ class Versions(
     ApiAction(Permission.None, APIScope.ProjectScope(projectOwner, projectSlug))
       .asyncF(parseCirce.decodeJson[EditVisibility]) { implicit request =>
         request.version(version).flatMap { version =>
+          //TODO: Add webhook action in here
           request.body.process(
             version,
             request.user.get.id,
@@ -454,6 +470,17 @@ class Versions(
             Permission.DeleteVersion,
             service.insert(Job.UpdateDiscourseVersionPost.newJob(version.id).toJob).unit,
             projects.deleteVersion(_: Model[Version]).unit,
+            (newV, oldV) =>
+              addWebhookJob(
+                Webhook.WebhookEventType.VersionDeleted,
+                APIV2.VersionVisibilityChange(version.versionString, APIV2.VisibilityChange(oldV, newV)),
+                ???
+              ),
+            addWebhookJob(
+              Webhook.WebhookEventType.VersionDeleted,
+              APIV2.StandaloneVersionName(version.versionString),
+              ???
+            ),
             (newV, oldV) =>
               UserActionLogger
                 .logApi(

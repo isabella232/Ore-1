@@ -846,7 +846,7 @@ object APIV2Queries extends DoobieOreProtocol {
   def updateWebhook(publicWebhookId: UUID, edits: Projects.EditableWebhook): Update0 = {
     val webhookColumns = Projects.EditableWebhookF[Column](
       Column.arg("name"),
-      Column.opt("callback_url"),
+      Column.arg("callback_url"),
       Column.arg("discord_formatted"),
       Column.arg("webhook_events")
     )

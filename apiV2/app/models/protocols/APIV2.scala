@@ -211,31 +211,60 @@ object APIV2 {
       navigational: Boolean
   )
 
-  @SnakeCaseJsonCodec case class PageListEntryWithContent(
-      name: Seq[String],
+  @SnakeCaseJsonCodec case class PageWithSlug(
+      name: String,
       slug: Seq[String],
       navigational: Boolean,
       content: Option[String]
   )
 
-  @SnakeCaseJsonCodec case class StandaloneVisibility(
-      Visibility: Visibility
+  @SnakeCaseJsonCodec case class PageUpdateWithSlug(
+      name: String,
+      oldSlug: Seq[String],
+      newSlug: Seq[String],
+      navigational: Boolean,
+      content: Option[String]
+  )
+
+  @SnakeCaseJsonCodec case class PageSlug(
+      slug: Seq[String]
+  )
+
+  @SnakeCaseJsonCodec case class VersionVisibilityChange(
+      version: String,
+      change: VisibilityChange
+  )
+
+  @SnakeCaseJsonCodec case class VisibilityChange(
+      oldVisibility: Visibility,
+      newVisibility: Visibility
   )
 
   @SnakeCaseJsonCodec case class StandaloneUser(
       user: String
   )
 
-  @SnakeCaseJsonCodec case class StandaloneStandaloneVersionName(
+  @SnakeCaseJsonCodec case class StandaloneVersionName(
       name: String
   )
 
   @SnakeCaseJsonCodec case class Webhook(
       id: UUID,
       name: String,
-      callbackUrl: Option[String],
+      callbackUrl: String,
       discordFormatted: Boolean,
       events: Seq[ore.models.project.Webhook.WebhookEventType]
+  )
+
+  @SnakeCaseJsonCodec case class WebhookPostData(
+      projectOwner: String,
+      projectSlug: String,
+      eventType: ore.models.project.Webhook.WebhookEventType
+  )
+
+  @SnakeCaseJsonCodec case class MembersUpdate(
+      oldMembers: List[Member],
+      newMembers: List[Member]
   )
 
   implicit val webhookEventTypeCodec: Codec[ore.models.project.Webhook.WebhookEventType] =

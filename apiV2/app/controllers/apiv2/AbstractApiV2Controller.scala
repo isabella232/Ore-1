@@ -16,12 +16,17 @@ import db.impl.query.APIV2Queries
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.{OrganizationTable, ProjectTable, UserTable}
 import ore.models.api.ApiSession
+import ore.models.project.Webhook
 import ore.permission.Permission
+import ore.WebhookJobAdder
 
+import ackcord.requests.CreateMessageData
 import akka.http.scaladsl.model.ErrorInfo
 import akka.http.scaladsl.model.headers.{Authorization, HttpCredentials}
 import cats.data.NonEmptyList
 import cats.syntax.all._
+import io.circe.Encoder
+import io.circe.syntax._
 import zio.interop.catz._
 import zio.{IO, Task, UIO, ZIO}
 
@@ -203,4 +208,22 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
       scope: APIScope[S]
   ): ActionBuilder[ApiRequest[S, *], AnyContent] =
     ApiAction(perms, scope).andThen(cachingAction)
+
+  def addWebhookJob[A: Encoder](
+      webhookEvent: Webhook.WebhookEventType,
+      data: A,
+      discordData: CreateMessageData //TODO: Replace with ExecuteWebhookData
+  )(
+      implicit request: ApiRequest[ResolvedAPIScope.ProjectScope, _]
+  ): UIO[Unit] = {
+    ackcord.requests.CreateMessage
+    WebhookJobAdder.add(
+      request.scope.id,
+      request.scope.projectOwner,
+      request.scope.projectSlug,
+      webhookEvent,
+      data.asJson.noSpaces,
+      discordData
+    )
+  }
 }

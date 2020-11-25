@@ -84,7 +84,8 @@ lazy val jobs = project
       Deps.scalaLogging,
       Deps.logback,
       Deps.sentry,
-      Deps.pureConfig
+      Deps.pureConfig,
+      Deps.ackcordRequests
     )
   )
 
@@ -102,7 +103,8 @@ lazy val orePlayCommon: Project = project
       Deps.slickPlay,
       Deps.zio,
       Deps.zioCats,
-      Deps.pureConfig
+      Deps.pureConfig,
+      Deps.ackcordRequests
     ),
     aggregateReverseRoutes := Seq(ore)
   )

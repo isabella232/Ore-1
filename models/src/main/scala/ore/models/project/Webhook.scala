@@ -13,7 +13,7 @@ case class Webhook(
     projectId: DbRef[Project],
     publicId: UUID,
     name: String,
-    callbackUrl: Option[String],
+    callbackUrl: String,
     discordFormatted: Boolean,
     events: List[Webhook.WebhookEventType]
 )
@@ -32,7 +32,6 @@ object Webhook extends DefaultModelCompanion[Webhook, WebhookTable](TableQuery[W
     case object VersionDeleted          extends WebhookEventType("version_deleted")
     case object PageCreated             extends WebhookEventType("page_created")
     case object PageUpdated             extends WebhookEventType("page_updated")
-    case object PageContentUpdated      extends WebhookEventType("page_content_updated")
     case object PageDeleted             extends WebhookEventType("page_deleted")
     case object MemberAdded             extends WebhookEventType("member_added")
     case object MemberChanged           extends WebhookEventType("member_changed")

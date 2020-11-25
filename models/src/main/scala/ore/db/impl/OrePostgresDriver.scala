@@ -93,6 +93,9 @@ trait OrePostgresDriver
     implicit val langTypeMapper: BaseColumnType[Locale] =
       MappedJdbcType.base[Locale, String](_.toLanguageTag, Locale.forLanguageTag)
 
+    implicit val webhookEventTypeMapper: BaseColumnType[Webhook.WebhookEventType] =
+      MappedJdbcType.base[Webhook.WebhookEventType, String](_.value, Webhook.WebhookEventType.withValue)
+
     implicit val permissionTypeMapper: BaseColumnType[Permission] = new DriverJdbcType[Permission] {
       override def sqlType: Int = java.sql.Types.BIT
 
@@ -137,7 +140,7 @@ trait OrePostgresDriver
       value => utils.SimpleArrayUtils.mkString[Prompt](_.value.toString)(value)
     ).to(_.toList)
 
-    implicit val webhookEventTypeMapper: DriverJdbcType[List[Webhook.WebhookEventType]] =
+    implicit val webhookEventTypeListMapper: DriverJdbcType[List[Webhook.WebhookEventType]] =
       new AdvancedArrayJdbcType[Webhook.WebhookEventType](
         "varchar",
         str =>

@@ -51,17 +51,13 @@ object Members {
       offset: Long
   )(
       implicit r: ApiRequest[_ <: ResolvedAPIScope, _],
-      service: ModelService[UIO],
-      writeJson: Writeable[Json]
-  ): ZIO[Any, Nothing, Result] = {
+      service: ModelService[UIO]
+  ): ZIO[Any, Nothing, Vector[APIV2.Member]] = {
     service
       .runDbCon(getMembersQuery(limitOrDefault(limit, 25), offsetOrZero(offset)).to[Vector])
       .map { xs =>
-        val users =
-          if (r.scopePermission.has(Permission.ManageSubjectMembers)) xs
-          else xs.filter(_.role.isAccepted)
-
-        Ok(users.asJson)
+        if (r.scopePermission.has(Permission.ManageSubjectMembers)) xs
+        else xs.filter(_.role.isAccepted)
       }
   }
 
@@ -82,9 +78,8 @@ object Members {
       users: UserBase[UIO],
       memberships: MembershipDossier.Aux[UIO, A, R, RT],
       modelQuery: ModelQuery[R],
-      writeJson: Writeable[Json],
       writeError: Writeable[ApiError]
-  ): ZIO[Any, Result, Result] =
+  ): ZIO[Any, Result, Vector[APIV2.Member]] =
     for {
       subject <- getSubject
       resolvedUsers <- ZIO.foreach(r.body) { m =>

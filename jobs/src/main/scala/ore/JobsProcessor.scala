@@ -16,6 +16,10 @@ import ore.models.{Job, JobInfo}
 import akka.pattern.CircuitBreakerOpenException
 import com.typesafe.scalalogging
 import cats.syntax.all._
+import enumeratum.values.{ValueEnum, ValueEnumEntry}
+import io.circe._
+import io.circe.syntax._
+import shapeless.Typeable
 import slick.lifted.TableQuery
 import zio._
 import zio.clock.Clock
@@ -127,6 +131,34 @@ object JobsProcessor {
 
         case Job.PostDiscourseReply(_, topicId, poster, content) =>
           postReply(job, topicId, poster, content)
+
+        case Job.PostWebhookResponse(_, projectOwner, projectSlug, callbackUrl, webhookType, data) =>
+          def optionToResult[A](s: String, opt: String => Option[A], history: List[CursorOp])(
+              implicit tpe: Typeable[A]
+          ): Either[DecodingFailure, A] =
+            opt(s).toRight(DecodingFailure(s"$s is not a valid ${tpe.describe}", history))
+
+          def valueEnumCodec[V, A <: ValueEnumEntry[V]: Typeable](
+              enumObj: ValueEnum[V, A]
+          )(name: A => String): Codec[A] =
+            Codec.from(
+              (c: HCursor) =>
+                c.as[String].flatMap(optionToResult(_, s => enumObj.values.find(a => name(a) == s), c.history)),
+              (a: A) => name(a).asJson
+            )
+
+          implicit val webhookEventTypeCodec: Codec[ore.models.project.Webhook.WebhookEventType] =
+            valueEnumCodec(ore.models.project.Webhook.WebhookEventType)(_.value)
+
+          val webhookExtraInfo = Json.obj(
+            "project_owner" := projectOwner,
+            "project_slug" := projectSlug,
+            "event_type" := webhookType
+          )
+
+          val data = webhookExtraInfo.deepMerge(data)
+
+          executeWebhook(job, callbackUrl, data)
       }
     }
 
@@ -210,5 +242,7 @@ object JobsProcessor {
 
   private def postReply(job: Model[Job.TypedJob], topicId: Int, poster: String, content: String) =
     handleDiscourseErrors(job)(_.get.postDiscussionReply(topicId, poster, content).map(_.void))
+
+  def executeWebhook(job: Model[Job.TypedJob], url: String, data: Json) = ???
 
 }
