@@ -7,6 +7,7 @@ import play.api.mvc.{Action, AnyContent}
 import controllers.OreControllerComponents
 import controllers.apiv2.helpers.{APIScope, ApiError, ApiErrors}
 import controllers.sugar.Requests.ApiRequest
+import controllers.sugar.ResolvedAPIScope
 import db.impl.query.APIV2Queries
 import models.protocols.APIV2
 import ore.db.DbRef
@@ -14,7 +15,6 @@ import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.PageTable
 import ore.models.project.{Page, Project}
 import ore.permission.Permission
-import ore.permission.scope.ProjectScope
 import ore.util.StringUtils
 import util.PatchDecoder
 import util.syntax._
@@ -44,14 +44,18 @@ class Pages(val errorHandler: HttpErrorHandler, lifecycle: ApplicationLifecycle)
 
   private def getPageOpt(
       page: String
-  )(implicit request: ApiRequest[ProjectScope, _]): ZIO[Any, Option[Nothing], (DbRef[Page], String, Option[String])] =
+  )(
+      implicit request: ApiRequest[ResolvedAPIScope.ProjectScope, _]
+  ): ZIO[Any, Option[Nothing], (DbRef[Page], String, Option[String])] =
     service
       .runDbCon(APIV2Queries.getPage(request.scope.id, page).option)
       .get
 
   private def getPage(
       page: String
-  )(implicit request: ApiRequest[ProjectScope, _]): ZIO[Any, Status, (DbRef[Page], String, Option[String])] =
+  )(
+      implicit request: ApiRequest[ResolvedAPIScope.ProjectScope, _]
+  ): ZIO[Any, Status, (DbRef[Page], String, Option[String])] =
     getPage(page).orElseFail(NotFound)
 
   def showPageAction(projectOwner: String, projectSlug: String, page: String): Action[AnyContent] =

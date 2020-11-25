@@ -43,8 +43,12 @@ object Requests {
           .getOrElse(F.pure(globalPerms))
   }
 
-  case class ApiRequest[S <: Scope, A](apiInfo: ApiAuthInfo, scopePermission: Permission, scope: S, request: Request[A])
-      extends WrappedRequest[A](request)
+  case class ApiRequest[S <: ResolvedAPIScope, A](
+      apiInfo: ApiAuthInfo,
+      scopePermission: Permission,
+      scope: S,
+      request: Request[A]
+  ) extends WrappedRequest[A](request)
       with OreMDC {
     def user: Option[Model[User]] = apiInfo.user
 
@@ -60,12 +64,18 @@ object Requests {
 
     override def afterLog(): Unit = mdcClear()
 
-    def project(implicit service: ModelService[UIO], ev: S =:= ProjectScope): ZIO[Any, Results.Status, Model[Project]] =
+    def project(
+        implicit service: ModelService[UIO],
+        ev: S =:= ResolvedAPIScope.ProjectScope
+    ): ZIO[Any, Results.Status, Model[Project]] =
       ModelView.now(Project).get(ev(scope).id).toZIO.orElseFail(Results.NotFound)
 
     def version(
         versionString: String
-    )(implicit service: ModelService[UIO], ev: S =:= ProjectScope): ZIO[Any, Results.Status, Model[Version]] =
+    )(
+        implicit service: ModelService[UIO],
+        ev: S =:= ResolvedAPIScope.ProjectScope
+    ): ZIO[Any, Results.Status, Model[Version]] =
       ModelView
         .now(Version)
         .find(v => v.projectId === ev(scope).id && v.versionString === versionString)
@@ -74,7 +84,7 @@ object Requests {
 
     def organization(
         implicit service: ModelService[UIO],
-        ev: S =:= OrganizationScope
+        ev: S =:= ResolvedAPIScope.OrganizationScope
     ): ZIO[Any, Results.Status, Model[Organization]] =
       ModelView.now(Organization).get(ev(scope).id).toZIO.orElseFail(Results.NotFound)
   }

@@ -12,6 +12,7 @@ import play.api.mvc.{Action, AnyContent, RequestHeader, Result}
 import controllers.OreControllerComponents
 import controllers.apiv2.helpers._
 import controllers.sugar.Requests.ApiRequest
+import controllers.sugar.ResolvedAPIScope
 import db.impl.query.APIV2Queries
 import models.protocols.APIV2
 import models.querymodels.APIV2ProjectStatsQuery
@@ -27,7 +28,6 @@ import ore.models.project.{Project, ProjectSortingStrategy, Version}
 import ore.models.user.role.ProjectUserRole
 import ore.models.user.{LoggedActionProject, LoggedActionType}
 import ore.permission.Permission
-import ore.permission.scope.Scope
 import ore.util.{OreMDC, StringUtils}
 import util.syntax._
 import util.{PartialUtils, PatchDecoder, UserActionLogger}
@@ -188,7 +188,7 @@ class Projects(
   //We need to let this one pass through to the redirect if it fails. Need a bit extra code to do that
   def showProject(projectOwner: String, projectSlug: String): Action[AnyContent] =
     CachingApiAction(Permission.None, APIScope.GlobalScope).asyncF { implicit request =>
-      apiScopeToRealScope(APIScope.ProjectScope(projectOwner, projectSlug))
+      apiScopeToResolvedScope(APIScope.ProjectScope(projectOwner, projectSlug))
         .mapError[Either[Unit, Unit]](_ => Right(()))
         .flatMap(request.permissionIn(_))
         .filterOrFail(_.has(Permission.ViewPublicInfo))(Left(()))
@@ -390,7 +390,9 @@ class Projects(
       )
     }
 
-  private def doHardDeleteProject(project: Model[Project])(implicit request: ApiRequest[_ <: Scope, _]): UIO[Unit] = {
+  private def doHardDeleteProject(
+      project: Model[Project]
+  )(implicit request: ApiRequest[_ <: ResolvedAPIScope, _]): UIO[Unit] = {
     projects.delete(project).unit <* UserActionLogger.logApiOption(
       request,
       LoggedActionType.ProjectVisibilityChange,

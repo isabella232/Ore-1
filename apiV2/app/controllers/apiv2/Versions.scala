@@ -15,6 +15,7 @@ import play.api.mvc.{Action, AnyContent, MultipartFormData, Result}
 import controllers.OreControllerComponents
 import controllers.apiv2.helpers._
 import controllers.sugar.Requests.ApiRequest
+import controllers.sugar.ResolvedAPIScope
 import db.impl.query.APIV2Queries
 import models.protocols.APIV2
 import models.querymodels.{APIV2QueryVersion, APIV2VersionStatsQuery}
@@ -30,7 +31,6 @@ import ore.models.project.factory.ProjectFactory
 import ore.models.project.io.{PluginFileWithData, PluginUpload, VersionedPlatform}
 import ore.models.user.{LoggedActionType, LoggedActionVersion, User}
 import ore.permission.Permission
-import ore.permission.scope.{ProjectScope, Scope}
 import util.syntax._
 import util.{PatchDecoder, UserActionLogger}
 
@@ -299,7 +299,7 @@ class Versions(
   }
 
   private def processVersionUploadToErrors(
-      implicit request: ApiRequest[ProjectScope, MultipartFormData[Files.TemporaryFile]]
+      implicit request: ApiRequest[ResolvedAPIScope.ProjectScope, MultipartFormData[Files.TemporaryFile]]
   ): ZIO[Blocking, Result, (Model[User], Model[Project], PluginFileWithData)] = {
     val fileF = ZIO.fromEither(
       request.body.file("plugin-file").toRight(BadRequest(ApiError("No plugin file specified")))
