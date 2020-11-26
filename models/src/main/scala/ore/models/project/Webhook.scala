@@ -15,7 +15,9 @@ case class Webhook(
     name: String,
     callbackUrl: String,
     discordFormatted: Boolean,
-    events: List[Webhook.WebhookEventType]
+    events: List[Webhook.WebhookEventType],
+    secret: String,
+    lastError: Option[String]
 )
 object Webhook extends DefaultModelCompanion[Webhook, WebhookTable](TableQuery[WebhookTable]) {
 
@@ -25,6 +27,7 @@ object Webhook extends DefaultModelCompanion[Webhook, WebhookTable](TableQuery[W
   object WebhookEventType extends StringEnum[WebhookEventType] {
     override def values: IndexedSeq[WebhookEventType] = findValues
 
+    case object Ping                    extends WebhookEventType("ping")
     case object VersionCreated          extends WebhookEventType("version_created")
     case object VersionChangelogEdited  extends WebhookEventType("version_changelog_edited")
     case object VersionEdited           extends WebhookEventType("version_edited")

@@ -6,7 +6,7 @@ import java.util.UUID
 import play.api.mvc.RequestHeader
 
 import controllers.apiv2.Users.UserSortingStrategy
-import controllers.apiv2.{Pages, Projects, Users, Versions}
+import controllers.apiv2.{Pages, Projects, Users, Versions, Webhooks}
 import controllers.sugar.Requests.ApiAuthInfo
 import models.protocols.APIV2
 import models.protocols.APIV2.Organization
@@ -843,8 +843,8 @@ object APIV2Queries extends DoobieOreProtocol {
     (sql"UPDATE project_pages " ++ sets ++ fr"WHERE id = $id").update
   }
 
-  def updateWebhook(publicWebhookId: UUID, edits: Projects.EditableWebhook): Update0 = {
-    val webhookColumns = Projects.EditableWebhookF[Column](
+  def updateWebhook(publicWebhookId: UUID, edits: Webhooks.EditableWebhook): Update0 = {
+    val webhookColumns = Webhooks.EditableWebhookF[Column](
       Column.arg("name"),
       Column.arg("callback_url"),
       Column.arg("discord_formatted"),

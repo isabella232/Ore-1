@@ -253,7 +253,9 @@ object APIV2 {
       name: String,
       callbackUrl: String,
       discordFormatted: Boolean,
-      events: Seq[ore.models.project.Webhook.WebhookEventType]
+      events: Seq[ore.models.project.Webhook.WebhookEventType],
+      lastError: Option[String],
+      secret: String
   )
 
   @SnakeCaseJsonCodec case class WebhookPostData(

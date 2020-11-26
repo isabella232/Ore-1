@@ -33,10 +33,13 @@ object SharedQueries extends DoobieOreProtocol {
           |       hstore(ARRAY [
           |           ['project_owner', $projectOwner],
           |           ['project_slug', $projectSlug],
+          |           ['webhook_id', w.id::TEXT],
+          |           ['webhook_secret', w.secret],
           |           ['webhook_type', $webhookEvent],
           |           ['webhook_callback', w.callback_url],
           |           ['webhook_data', CASE w.discord_formatted WHEN TRUE THEN $discordData ELSE $data END]])
           |    FROM project_callbacks w
           |    WHERE w.project_id = $projectId
-          |      AND $webhookEvent = ANY (w.event_types);""".stripMargin.update
+          |      AND $webhookEvent = ANY (w.event_types)
+          |      AND w.last_error IS NULL;""".stripMargin.update
 }

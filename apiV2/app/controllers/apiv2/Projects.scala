@@ -23,7 +23,7 @@ import ore.data.project.Category
 import ore.data.user.notification.NotificationType
 import ore.db.Model
 import ore.db.access.ModelView
-import ore.db.impl.schema.ProjectRoleTable
+import ore.db.impl.schema.{ProjectRoleTable, WebhookTable}
 import ore.db.impl.OrePostgresDriver.api._
 import ore.models.Job
 import ore.models.project.Webhook.WebhookEventType
@@ -466,106 +466,6 @@ class Projects(
         .orElseFail(NotFound)
     }
   }
-
-  def createWebhook(projectOwner: String, projectSlug: String): Action[Projects.CreateWebhookRequest] =
-    ApiAction(Permission.EditWebhooks, APIScope.ProjectScope(projectOwner, projectSlug))
-      .asyncF(parseCirce.decodeJson[Projects.CreateWebhookRequest]) { request =>
-        val data = request.body
-
-        val publicId = UUID.randomUUID()
-
-        val parsedUri = ZIO(Uri.parseAbsolute(data.callbackUrl))
-          .orElseFail(BadRequest(ApiError("Invalid callback URL")))
-          .filterOrFail(_.scheme == "https")(BadRequest(ApiError("Only HTTPS urls allowed")))
-          .map(_.toString)
-
-        parsedUri.flatMap { uri =>
-          service
-            .insert(
-              ModelWebhook(
-                request.scope.id,
-                publicId,
-                data.name,
-                uri,
-                data.discordFormatted.getOrElse(false),
-                data.events.toList
-              )
-            )
-            .as(
-              Created(
-                APIV2.Webhook(
-                  publicId,
-                  data.name,
-                  uri,
-                  data.discordFormatted.getOrElse(false),
-                  data.events
-                )
-              )
-            )
-        }
-      }
-
-  def getWebhook(projectOwner: String, projectSlug: String, webhookId: String): Action[AnyContent] =
-    ApiAction(Permission.EditWebhooks, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
-      for {
-        uuidWebhookId <- IO(UUID.fromString(webhookId)).orElseFail(BadRequest)
-        webhook       <- ModelView.now(ModelWebhook).find(_.publicId === uuidWebhookId).toZIO.orElseFail(NotFound)
-      } yield Ok(
-        APIV2.Webhook(
-          uuidWebhookId,
-          webhook.name,
-          webhook.callbackUrl,
-          webhook.discordFormatted,
-          webhook.events
-        )
-      )
-    }
-
-  def editWebhook(projectOwner: String, projectSlug: String, webhookId: String): Action[Json] =
-    ApiAction(Permission.EditWebhooks, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF(parseCirce.json) {
-      request =>
-        IO(UUID.fromString(webhookId)).orElseFail(BadRequest).flatMap { uuidWebhookId =>
-          val webhookEditsValidated: ValidatedNel[Error, EditableWebhook] =
-            EditableWebhookF.patchDecoder.traverseKC(PartialUtils.decodeAll(request.body.hcursor))
-
-          webhookEditsValidated match {
-            case Validated.Valid(webhookEdits) =>
-              if (webhookEdits.callbackUrl.exists(callbackUrl =>
-                    webhookEdits.discordFormatted.exists(discordFormatted => callbackUrl.isEmpty && !discordFormatted)
-                  ))
-                ZIO.fail(BadRequest(ApiError("Can't both set callback url to null, and discord formatted to false")))
-              else {
-                val update = service.runDbCon(APIV2Queries.updateWebhook(uuidWebhookId, webhookEdits).run)
-
-                //We need two queries two queries as we use the generic update function
-                val get =
-                  ModelView.now(ModelWebhook).find(_.publicId === uuidWebhookId).toZIO.orElseFail(NotFound).map {
-                    webhook =>
-                      Ok(
-                        APIV2.Webhook(
-                          uuidWebhookId,
-                          webhook.name,
-                          webhook.callbackUrl,
-                          webhook.discordFormatted,
-                          webhook.events
-                        )
-                      )
-                  }
-
-                update *> get
-              }
-            case Validated.Invalid(e) => ZIO.fail(BadRequest(ApiErrors(e.map(_.show))))
-          }
-        }
-    }
-
-  def deleteWebhook(projectOwner: String, projectSlug: String, webhookId: String): Action[AnyContent] =
-    ApiAction(Permission.EditWebhooks, APIScope.ProjectScope(projectOwner, projectSlug)).asyncF {
-      for {
-        uuidWebhookId <- IO(UUID.fromString(webhookId)).orElseFail(BadRequest)
-        _             <- service.deleteWhere(ModelWebhook)(_.publicId === uuidWebhookId)
-      } yield NoContent
-    }
 }
 object Projects {
   import APIV2.{categoryCodec, visibilityCodec, permissionRoleCodec}
@@ -669,31 +569,4 @@ object Projects {
       postId: Option[Int],
       updateTopic: Boolean
   )
-
-  import APIV2.webhookEventTypeCodec
-
-  @SnakeCaseJsonCodec case class CreateWebhookRequest(
-      name: String,
-      callbackUrl: String,
-      discordFormatted: Option[Boolean],
-      events: Seq[WebhookEventType]
-  )
-
-  type EditableWebhook = EditableWebhookF[Option]
-  case class EditableWebhookF[F[_]](
-      name: F[String],
-      callbackUrl: F[String],
-      discordFormatted: F[Boolean],
-      events: F[List[WebhookEventType]]
-  )
-  object EditableWebhookF {
-    implicit val F
-        : ApplicativeKC[EditableWebhookF] with TraverseKC[EditableWebhookF] with DistributiveKC[EditableWebhookF] =
-      Derive.allKC[EditableWebhookF]
-
-    val patchDecoder: EditableWebhookF[PatchDecoder] =
-      PatchDecoder.fromName(Derive.namesWithProductImplicitsC[EditableWebhookF, Decoder])(
-        io.circe.derivation.renaming.snakeCase
-      )
-  }
 }

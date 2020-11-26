@@ -4,7 +4,8 @@ import _root_.db.impl.query.SharedQueries
 import ore.db.{DbRef, ModelService}
 import ore.models.project.{Project, Webhook}
 
-import ackcord.requests.CreateMessageData
+import ackcord.data.OutgoingEmbed
+import ackcord.requests.ExecuteWebhookData
 import io.circe.Encoder
 import io.circe.syntax._
 import zio.UIO
@@ -17,7 +18,7 @@ object WebhookJobAdder {
       projectSlug: String,
       webhookEvent: Webhook.WebhookEventType,
       data: A,
-      discordData: CreateMessageData //TODO: Replace with ExecuteWebhookData
+      discordData: OutgoingEmbed
   )(
       implicit service: ModelService[UIO]
   ): UIO[Unit] =
@@ -30,7 +31,7 @@ object WebhookJobAdder {
             projectSlug,
             webhookEvent,
             data.asJson.noSpaces,
-            discordData.asJson.noSpaces
+            ExecuteWebhookData(embeds = Seq(discordData)).asJson.noSpaces
           )
           .run
       )

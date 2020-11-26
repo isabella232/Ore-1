@@ -43,7 +43,7 @@ lazy val discourse = project
   )
 
 lazy val auth = project
-  .dependsOn(externalCommon)
+  .dependsOn(externalCommon, models) //Only reason models is here is because CryptoUtils
   .settings(
     Settings.commonSettings,
     name := "ore-auth"
@@ -91,7 +91,7 @@ lazy val jobs = project
 
 lazy val orePlayCommon: Project = project
   .enablePlugins(PlayScala)
-  .dependsOn(auth, models)
+  .dependsOn(auth)
   .settings(
     Settings.commonSettings,
     Settings.playCommonSettings,
@@ -184,7 +184,8 @@ lazy val ore = project
       "controllers.apiv2.Permissions",
       "controllers.apiv2.Projects",
       "controllers.apiv2.Users",
-      "controllers.apiv2.Versions"
+      "controllers.apiv2.Versions",
+      "controllers.apiv2.Webhooks"
     ),
     swaggerNamingStrategy := "snake_case",
     swaggerAPIVersion := "2.0",

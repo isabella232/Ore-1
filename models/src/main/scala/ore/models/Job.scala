@@ -183,6 +183,8 @@ object Job extends DefaultModelCompanion[Job, JobTable](TableQuery[JobTable]) {
       info: JobInfo,
       projectOwner: String,
       projectSlug: String,
+      webhookId: DbRef[Webhook],
+      webhookSecret: String,
       callbackUrl: String,
       webhookType: Webhook.WebhookEventType,
       data: Json
@@ -193,6 +195,8 @@ object Job extends DefaultModelCompanion[Job, JobTable](TableQuery[JobTable]) {
         Map(
           "project_owner"    -> projectOwner,
           "project_slug"     -> projectSlug,
+          "webhook_id"       -> webhookId.toString,
+          "webhook_secret"   -> webhookSecret,
           "webhook_callback" -> callbackUrl,
           "webhook_type"     -> webhookType.value,
           "webhook_data"     -> data.noSpaces
@@ -205,9 +209,22 @@ object Job extends DefaultModelCompanion[Job, JobTable](TableQuery[JobTable]) {
     def newJob(
         projectOwner: String,
         projectSlug: String,
+        webhookId: DbRef[Webhook],
+        webhookSecret: String,
+        callbackUrl: String,
         webhookType: Webhook.WebhookEventType,
         data: Json
-    ): PostWebhookResponse = PostWebhookResponse(JobInfo.newJob(this), projectOwner, projectSlug, webhookType, data)
+    ): PostWebhookResponse =
+      PostWebhookResponse(
+        JobInfo.newJob(this),
+        projectOwner,
+        projectSlug,
+        webhookId,
+        webhookSecret,
+        callbackUrl,
+        webhookType,
+        data
+      )
 
     override type CaseClass = PostWebhookResponse
 
@@ -215,7 +232,12 @@ object Job extends DefaultModelCompanion[Job, JobTable](TableQuery[JobTable]) {
       for {
         projectOwner <- properties.get("project_owner").toRight("No project owner found")
         projectSlug  <- properties.get("project_slug").toRight("No project slug found")
-        callbackUrl  <- properties.get("webhook_callback").toRight("No callback url found")
+        webhookId <- properties
+          .get("webhook_id")
+          .toRight("No webhook id found")
+          .flatMap(_.toLongOption.toRight("Invalid webhook id"))
+        webhookSecret <- properties.get("webhook_secret").toRight("No webhook secret found")
+        callbackUrl   <- properties.get("webhook_callback").toRight("No callback url found")
         webhookType <- properties
           .get("webhook_type")
           .toRight("No webhook type found")
@@ -224,7 +246,16 @@ object Job extends DefaultModelCompanion[Job, JobTable](TableQuery[JobTable]) {
           .get("webhook_data")
           .toRight("No webhook data found")
           .flatMap(s => io.circe.parser.parse(s).leftMap(_.show))
-      } yield PostWebhookResponse(info, projectOwner, projectSlug, callbackUrl, webhookType, data)
+      } yield PostWebhookResponse(
+        info,
+        projectOwner,
+        projectSlug,
+        webhookId,
+        webhookSecret,
+        callbackUrl,
+        webhookType,
+        data
+      )
 
   }
 }

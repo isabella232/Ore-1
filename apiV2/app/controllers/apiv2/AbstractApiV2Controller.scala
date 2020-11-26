@@ -20,7 +20,7 @@ import ore.models.project.Webhook
 import ore.permission.Permission
 import ore.WebhookJobAdder
 
-import ackcord.requests.CreateMessageData
+import ackcord.data.OutgoingEmbed
 import akka.http.scaladsl.model.ErrorInfo
 import akka.http.scaladsl.model.headers.{Authorization, HttpCredentials}
 import cats.data.NonEmptyList
@@ -212,7 +212,7 @@ abstract class AbstractApiV2Controller(lifecycle: ApplicationLifecycle)(
   def addWebhookJob[A: Encoder](
       webhookEvent: Webhook.WebhookEventType,
       data: A,
-      discordData: CreateMessageData //TODO: Replace with ExecuteWebhookData
+      discordData: OutgoingEmbed
   )(
       implicit request: ApiRequest[ResolvedAPIScope.ProjectScope, _]
   ): UIO[Unit] = {

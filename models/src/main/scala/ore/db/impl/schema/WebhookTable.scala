@@ -14,9 +14,11 @@ class WebhookTable(tag: Tag) extends ModelTable[Webhook](tag, "project_webhooks"
   def callbackUrl      = column[String]("callback_url")
   def discordFormatted = column[Boolean]("discord_formatted")
   def eventTypes       = column[List[Webhook.WebhookEventType]]("event_types")
+  def secret           = column[String]("secret")
+  def lastError        = column[String]("last_error")
 
   override def * =
-    (id.?, createdAt.?, (projectId, publicId, name, callbackUrl, discordFormatted, eventTypes)).<>(
+    (id.?, createdAt.?, (projectId, publicId, name, callbackUrl, discordFormatted, eventTypes, secret, lastError.?)).<>(
       mkApply((Webhook.apply _).tupled),
       mkUnapply(Webhook.unapply)
     )
