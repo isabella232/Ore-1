@@ -79,7 +79,7 @@ object ProjectQueries extends APIV2Queries {
             |       p.license_name,
             |       p.license_url,
             |       p.forum_sync
-            |  FROM projects p JOIN project_stats ps ON p.id = ps.id""".stripMargin
+            |  FROM projects p JOIN project_stats ps ON p.id = ps.id """.stripMargin
 
     val (platformsWithVersion, platformsWithoutVersion) = platforms.partitionEither {
       case (name, Some(version)) =>
