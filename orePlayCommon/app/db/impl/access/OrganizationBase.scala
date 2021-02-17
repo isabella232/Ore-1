@@ -13,7 +13,6 @@ import ore.models.organization.Organization
 import ore.models.user.role.OrganizationUserRole
 import ore.models.user.{Notification, User}
 import ore.permission.role.Role
-import ore.util.OreMDC
 import util.syntax._
 
 import cats.Parallel
@@ -39,7 +38,7 @@ trait OrganizationBase[+F[_]] {
       name: String,
       ownerId: DbRef[User],
       members: Set[OrganizationUserRole]
-  )(implicit mdc: OreMDC): F[Either[List[String], Model[Organization]]]
+  ): F[Either[List[String], Model[Organization]]]
 
   /**
     * Returns an [[Organization]] with the specified name if it exists.
@@ -63,25 +62,24 @@ object OrganizationBase {
       par: Parallel[F]
   ) extends OrganizationBase[F] {
 
-    private val Logger    = scalalogging.Logger("Organizations")
-    private val MDCLogger = scalalogging.Logger.takingImplicit[OreMDC](Logger.underlying)
+    private val Logger = scalalogging.Logger("Organizations")
 
     def create(
         name: String,
         ownerId: DbRef[User],
         members: Set[OrganizationUserRole]
-    )(implicit mdc: OreMDC): F[Either[List[String], Model[Organization]]] = {
+    ): F[Either[List[String], Model[Organization]]] = {
       val logging = F.delay {
-        MDCLogger.debug("Creating Organization...")
-        MDCLogger.debug("Name     : " + name)
-        MDCLogger.debug("Owner ID : " + ownerId)
-        MDCLogger.debug("Members  : " + members.size)
+        Logger.debug("Creating Organization...")
+        Logger.debug("Name     : " + name)
+        Logger.debug("Owner ID : " + ownerId)
+        Logger.debug("Members  : " + members.size)
 
         // Create the organization as a User on SpongeAuth. This will reserve the
         // name so that no new users or organizations can create an account with
         // that name. We will give the organization a dummy email for continuity.
         // By default we use "<org>@ore.spongepowered.org".
-        MDCLogger.debug("Creating on SpongeAuth...")
+        Logger.debug("Creating on SpongeAuth...")
       }
 
       // Replace all invalid characters to not throw invalid email error when trying to create org with invalid username
@@ -91,15 +89,15 @@ object OrganizationBase {
       // Check for error
       spongeResult
         .leftMap { err =>
-          MDCLogger.debug("<FAILURE> " + err)
+          Logger.debug("<FAILURE> " + err)
           err
         }
         .semiflatMap { spongeUser =>
-          MDCLogger.debug("<SUCCESS> " + spongeUser)
+          Logger.debug("<SUCCESS> " + spongeUser)
           // Next we will create the Organization on Ore itself. This contains a
           // reference to the Sponge user ID, the organization's username and a
           // reference to the User owner of the organization.
-          MDCLogger.info("Creating on Ore...")
+          Logger.info("Creating on Ore...")
           service.insert(
             Organization(
               id = ObjId(spongeUser.id),
@@ -129,7 +127,7 @@ object OrganizationBase {
             )
             _ <- {
               // Invite the User members that the owner selected during creation.
-              MDCLogger.debug("Inviting members...")
+              Logger.debug("Inviting members...")
 
               members.toVector.parTraverse { role =>
                 // TODO remove role.user db access we really only need the userid we already have for notifications
@@ -146,7 +144,7 @@ object OrganizationBase {
               }
             }
           } yield {
-            MDCLogger.debug("<SUCCESS> " + org)
+            Logger.debug("<SUCCESS> " + org)
             org
           }
         }

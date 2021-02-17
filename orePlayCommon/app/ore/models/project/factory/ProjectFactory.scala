@@ -19,7 +19,7 @@ import ore.models.user.role.ProjectUserRole
 import ore.models.user.{Notification, User}
 import ore.permission.role.Role
 import ore.util.StringUtils._
-import ore.util.{OreMDC, StringUtils}
+import ore.util.StringUtils
 import ore.{OreConfig, OreEnv}
 import util.FileIO
 import util.syntax._
@@ -27,7 +27,6 @@ import util.syntax._
 import cats.data.NonEmptyList
 import cats.syntax.all._
 import com.google.common.base.Preconditions._
-import com.typesafe.scalalogging
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.{IO, Task, UIO, ZIO}
@@ -51,9 +50,6 @@ trait ProjectFactory {
 
   implicit protected def config: OreConfig
   implicit protected def env: OreEnv
-
-  private val Logger    = scalalogging.Logger("Projects")
-  private val MDCLogger = scalalogging.Logger.takingImplicit[OreMDC](Logger.underlying)
 
   /**
     * Processes incoming [[PluginUpload]] data, verifies it, and loads a new
@@ -318,9 +314,9 @@ trait ProjectFactory {
             if (project.topicId.isEmpty) addForumJob *> setVisibility
             else setVisibility
 
-          initProject <* projects.refreshHomePage(MDCLogger)(OreMDC.NoMDC)
+          initProject <* projects.refreshHomePage
         } else {
-          projects.refreshHomePage(MDCLogger)(OreMDC.NoMDC).as(project)
+          projects.refreshHomePage.as(project)
         }
       }
       _ <- if (pending.createForumPost) {

@@ -24,13 +24,13 @@ import ore.models.project.{Project, Visibility}
 import ore.models.user.{SignOn, User}
 import ore.permission.Permission
 import ore.permission.scope.{GlobalScope, HasScope}
-import ore.util.OreMDC
+import util.{FiberSentry, FiberTranslator}
 import util.syntax._
 
 import cats.syntax.all._
 import com.typesafe.scalalogging
+import org.slf4j.MDC
 import zio.blocking.Blocking
-import zio.clock.Clock
 import zio.interop.catz._
 import zio._
 
@@ -57,22 +57,40 @@ trait Actions extends Calls with ActionHelpers { self =>
 
   implicit def projectFiles: ProjectFiles[RIO[Blocking, *]] = oreComponents.projectFiles
 
-  implicit def ec: ExecutionContext = oreComponents.executionContext
+  implicit def ec: ExecutionContext                            = oreComponents.executionContext
+  implicit def zioRuntime: Runtime[ZEnv with Has[FiberSentry]] = oreComponents.zioRuntime
+  implicit def fiberTranslator: FiberTranslator                = oreComponents.fiberTranslator
 
-  private val PermsLogger    = scalalogging.Logger("Permissions")
-  private val MDCPermsLogger = scalalogging.Logger.takingImplicit[OreMDC](PermsLogger.underlying)
+  private val PermsLogger = scalalogging.Logger("Permissions")
 
   val AuthTokenName = "_oretoken"
 
-  implicit def zioRuntime: zio.Runtime[Blocking with Clock] = oreComponents.zioRuntime
+  def userToSentryUser(user: Model[User]): FiberSentry.User = FiberSentry.User(
+    id = Some(user.id.value.toString),
+    username = Some(user.name)
+  )
 
-  protected def zioToFuture[A](zio: RIO[Blocking, A]): Future[A] =
-    ActionHelpers.zioToFuture(zio)
+  def mdcPutUser(user: Model[User]): UIO[Unit] = ZIO.effectTotal {
+    MDC.put("currentUserId", user.id.toString)
+    MDC.put("currentUserName", user.name)
+  }
+
+  def mdcPutProject(project: Model[Project]): UIO[Unit] = ZIO.effectTotal {
+    MDC.put("currentProjectId", project.id.toString)
+    MDC.put("currentProjectSlug", project.slug)
+  }
+
+  private def mdcPutOrg(orga: Model[Organization]): UIO[Unit] = ZIO.effectTotal {
+    MDC.put("currentOrgaId", orga.id.toString)
+    MDC.put("currentOrgaName", orga.name)
+  }
+
+  protected def zioToFuture[A](zio: RIO[ZEnv with Has[FiberSentry], A]): Future[A] =
+    fiberTranslator.fiberToFuture(zio)
 
   /** Called when a [[User]] tries to make a request they do not have permission for */
   def onUnauthorized(implicit request: Request[_]): IO[Result, Nothing] = {
-    val noRedirect           = request.flash.get("noRedirect")
-    implicit val mdc: OreMDC = OreMDC.NoMDC
+    val noRedirect = request.flash.get("noRedirect")
     users.current.isEmpty
       .map { currentUserEmpty =>
         if (noRedirect.isEmpty && currentUserEmpty)
@@ -99,9 +117,7 @@ trait Actions extends Calls with ActionHelpers { self =>
 
       private def log(success: Boolean, request: R[_]): Unit = {
         val lang = if (success) "GRANTED" else "DENIED"
-        MDCPermsLogger.debug(s"<PERMISSION $lang> ${request.user.name}@${request.path.substring(1)}")(
-          request: OreRequest[_]
-        )
+        PermsLogger.debug(s"<PERMISSION $lang> ${request.user.name}@${request.path.substring(1)}")
       }
 
       def refine[A](request: R[A]): Future[Either[Result, R[A]]] = {
@@ -237,7 +253,7 @@ trait Actions extends Calls with ActionHelpers { self =>
       def filter[A](request: AuthRequest[A]): Future[Option[Result]] = {
         zioToFuture(
           users
-            .requestPermission(request.user, username, Permission.EditOwnUserSettings)(request)
+            .requestPermission(request.user, username, Permission.EditOwnUserSettings)
             .transform {
               case None    => Some(Unauthorized) // No Permission
               case Some(_) => None               // Permission granted => No Filter
@@ -256,6 +272,7 @@ trait Actions extends Calls with ActionHelpers { self =>
       zioToFuture(
         HeaderData
           .of(request)
+          .tap(data => ZIO.foreach(data.currentUser)(mdcPutUser))
           .map { data =>
             val requestWithLang =
               data.currentUser
@@ -273,7 +290,7 @@ trait Actions extends Calls with ActionHelpers { self =>
     def executionContext: ExecutionContext = ec
 
     def refine[A](request: Request[A]): Future[Either[Result, AuthRequest[A]]] =
-      maybeAuthRequest(request, users.current(request, OreMDC.NoMDC).toZIO)
+      maybeAuthRequest(request, users.current(request).toZIO)
 
   }
 
@@ -284,6 +301,8 @@ trait Actions extends Calls with ActionHelpers { self =>
     val authRequest = for {
       user       <- userF
       headerData <- HeaderData.of(request)
+      _          <- FiberSentry.configureScope(_.copy(user = Some(userToSentryUser(user))))
+      _          <- mdcPutUser(user)
     } yield new AuthRequest(user, headerData, request)
 
     val withError = authRequest.flatMapError(_ => onUnauthorized(request).flip)
@@ -317,6 +336,7 @@ trait Actions extends Calls with ActionHelpers { self =>
 
     val projectRequest = for {
       project    <- projectF
+      _          <- mdcPutProject(project)
       newProject <- processProject(project, request.headerData.currentUser)
       res <- toProjectRequest(newProject) {
         case (data, scoped) => new ProjectRequest[A](data, scoped, r.headerData, r)
@@ -379,6 +399,7 @@ trait Actions extends Calls with ActionHelpers { self =>
 
       val projectRequest = for {
         project    <- projectF
+        _          <- mdcPutProject(project)
         newProject <- processProject(project, Some(request.user))
         projectRequest <- toProjectRequest(newProject) {
           case (data, scoped) => new AuthedProjectRequest[A](data, scoped, r.headerData, request)
@@ -408,6 +429,7 @@ trait Actions extends Calls with ActionHelpers { self =>
 
       val orgaRequest = for {
         org <- getOrga(organization)
+        _   <- mdcPutOrg(org)
         orgaRequest <- toOrgaRequest(org) {
           case (data, scoped) => new OrganizationRequest[A](data, scoped, r.headerData, request)
         }
@@ -447,6 +469,6 @@ trait Actions extends Calls with ActionHelpers { self =>
     organizations.withName(organization).get.orElseFail(())
 
   def getUserData(request: OreRequest[_], userName: String): IO[Unit, UserData] =
-    users.withName(userName)(request).semiflatMap(UserData.of(request, _)).toZIO
+    users.withName(userName).semiflatMap(UserData.of(request, _)).toZIO
 
 }

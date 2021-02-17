@@ -188,7 +188,8 @@ lazy val ore = project
       Deps.circeDerivation,
       Deps.circeParser,
       Deps.macwire,
-      Deps.periscopeAkka
+      Deps.periscopeAkka,
+      Deps.uapScala
     ),
     libraryDependencies ++= Deps.flexmarkDeps,
     libraryDependencies ++= Seq(

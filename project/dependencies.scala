@@ -97,6 +97,8 @@ object Deps {
   val logback   = "ch.qos.logback" % "logback-classic" % "1.2.3"
   val sentry    = "io.sentry"      % "sentry-logback"  % "3.0.0"
 
+  val uapScala = "org.uaparser" %% "uap-scala" % "0.11.0"
+
   val playTestDeps = Seq(
     jdbc % Test,
     //specs2 % Test,

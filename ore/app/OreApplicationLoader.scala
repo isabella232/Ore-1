@@ -5,6 +5,7 @@ import java.time.Duration
 import javax.inject.Provider
 
 import scala.annotation.unused
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 import play.api.cache.caffeine.CaffeineCacheComponents
@@ -36,7 +37,7 @@ import db.impl.{DbUpdateTask, OreEvolutionsReader}
 import db.impl.access.{OrganizationBase, ProjectBase, UserBase}
 import db.impl.service.OreModelService
 import db.impl.service.OreModelService.F
-import filters.LoggingFilter
+import filters.{LoggingFilter, SentryInfoFilter}
 import form.OreForms
 import mail.{EmailFactory, Mailer, SpongeMailer}
 import ore.auth.{AkkaSSOApi, AkkaSpongeAuthApi, SSOApi, SpongeAuthApi}
@@ -49,7 +50,8 @@ import ore.models.project.io.ProjectFiles
 import ore.models.user.{FakeUser, UserTask}
 import ore.rest.{OreRestfulApiV1, OreRestfulServerV1}
 import ore.{OreConfig, OreEnv, StatTracker}
-import util.{FileIO, StatusZ, ZIOFileIO}
+import util.logging.{FiberMDCAdapter, FiberSentryImpl, FiberTranslatorImpl, MDCSentryPropagatingExecutionContext}
+import util.{FiberSentry, FiberTranslator, FileIO, StatusZ, ZIOFileIO}
 
 import ErrorHandler.OreHttpErrorHandler
 import akka.actor.ActorSystem
@@ -61,6 +63,7 @@ import com.softwaremill.macwire._
 import com.typesafe.scalalogging.Logger
 import doobie.util.transactor.Strategy
 import doobie.{ExecutionContexts, KleisliInterpreter, Transactor}
+import org.slf4j.MDC
 import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 import slick.basic.{BasicProfile, DatabaseConfig}
@@ -68,7 +71,7 @@ import slick.jdbc.{JdbcDataSource, JdbcProfile}
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.interop.catz.implicits._
-import zio.{ExecutionStrategy, Exit, Runtime, Schedule, Task, UIO, ZEnv, ZIO, ZManaged}
+import zio.{ExecutionStrategy, Exit, Has, Runtime, Schedule, Task, UIO, ZEnv, ZIO, ZManaged}
 
 class OreApplicationLoader extends ApplicationLoader {
 
@@ -76,6 +79,9 @@ class OreApplicationLoader extends ApplicationLoader {
     LoggerConfigurator(context.environment.classLoader).foreach {
       _.configure(context.environment, context.initialConfiguration, Map.empty)
     }
+    val mdcAdapterField = classOf[MDC].getDeclaredField("mdcAdapter")
+    mdcAdapterField.setAccessible(true)
+    mdcAdapterField.set(null, new FiberMDCAdapter)
 
     new OreComponents(context).application
   }
@@ -115,7 +121,8 @@ class OreComponents(context: ApplicationLoader.Context)
 
   lazy val enabledFilters: Seq[EssentialFilter] = {
     val baseFilters = Seq(
-      new CSPFilter(new DefaultCSPResultProcessor(new DefaultCSPProcessor(CSPConfig.fromConfiguration(configuration))))
+      new CSPFilter(new DefaultCSPResultProcessor(new DefaultCSPProcessor(CSPConfig.fromConfiguration(configuration)))),
+      new SentryInfoFilter
     )
 
     val devFilters = Seq(new GzipFilter(GzipFilterConfig.fromConfiguration(configuration)))
@@ -145,7 +152,14 @@ class OreComponents(context: ApplicationLoader.Context)
   implicit lazy val impMessagesApi: MessagesApi = messagesApi
   implicit lazy val impActorSystem: ActorSystem = actorSystem
 
-  implicit lazy val runtime: Runtime[ZEnv] = Runtime.default
+  implicit lazy val runtime: Runtime[ZEnv with Has[FiberSentry]] =
+    Runtime.unsafeFromLayer(ZEnv.live ++ FiberSentryImpl.layer)
+
+  val fiberTranslator: FiberTranslator = wire[FiberTranslatorImpl]
+
+  implicit override lazy val executionContext: ExecutionContext = MDCSentryPropagatingExecutionContext(
+    actorSystem.dispatcher
+  )
 
   override lazy val evolutionsReader = new OreEvolutionsReader(environment)
 

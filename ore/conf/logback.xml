@@ -16,7 +16,7 @@
     </appender>
 
     <!-- Sentry -->
-    <appender name="Sentry" class="io.sentry.logback.SentryAppender">
+    <appender name="Sentry" class="util.logging.ZIOSentryAppender">
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
             <level>WARN</level>
         </filter>

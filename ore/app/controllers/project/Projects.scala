@@ -31,14 +31,12 @@ import ore.models.project.factory.ProjectFactory
 import ore.models.user._
 import ore.models.user.role.ProjectUserRole
 import ore.permission._
-import ore.util.OreMDC
 import ore.util.StringUtils._
 import _root_.util.syntax._
 import util.{FileIO, UserActionLogger}
 import views.html.{projects => views}
 
 import cats.syntax.all._
-import com.typesafe.scalalogging
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.{IO, Task, UIO, ZIO}
@@ -54,9 +52,6 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
 ) extends OreBaseController {
 
   private val self = controllers.project.routes.Projects
-
-  private val Logger    = scalalogging.Logger("Projects")
-  private val MDCLogger = scalalogging.Logger.takingImplicit[OreMDC](Logger.underlying)
 
   private def SettingsEditAction(author: String, slug: String) =
     AuthedProjectAction(author, slug, requireUnlock = true)
@@ -101,7 +96,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
           ModelView.now(User).get(_).toZIOWithError(Redirect(self.showCreator()).withError("Owner not found"))
         )
       project <- factory.createProject(owner, settings.asTemplate).mapError(Redirect(self.showCreator()).withError(_))
-      _       <- projects.refreshHomePage(MDCLogger)
+      _       <- projects.refreshHomePage
     } yield Redirect(self.show(project.ownerName, project.slug))
   }
 
@@ -542,12 +537,12 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
           .ProjectSave(organisationUserCanUploadTo.toSeq)
           .bindZIO(FormErrorLocalized(self.showSettings(author, slug)))
         _ <- formData
-          .save[ZIO[Blocking, Throwable, *]](data.project, MDCLogger)
+          .save[ZIO[Blocking, Throwable, *]](data.project)
           .value
           .orDie
           .absolve
           .mapError(Redirect(self.showSettings(author, slug)).withError(_))
-        _ <- projects.refreshHomePage(MDCLogger)
+        _ <- projects.refreshHomePage
         _ <- UserActionLogger.log(
           request.request,
           LoggedActionType.ProjectSettingsChanged,
@@ -584,7 +579,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
           s"$author/$newName",
           s"$author/$oldName"
         )(LoggedActionProject.apply)
-        _ <- projects.refreshHomePage(MDCLogger)
+        _ <- projects.refreshHomePage
       } yield Redirect(self.show(author, project.slug))
     }
 
@@ -625,7 +620,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
         )(LoggedActionProject.apply)
 
         (forumVisbility, projectVisibility).parTupled
-          .productR((log, projects.refreshHomePage(MDCLogger)).parTupled)
+          .productR((log, projects.refreshHomePage).parTupled)
           .as(Ok)
       }
   }
@@ -678,7 +673,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
         "deleted",
         project.visibility.nameKey
       )(LoggedActionProject.apply) *>
-      projects.refreshHomePage(MDCLogger)
+      projects.refreshHomePage
   }
 
   /**
@@ -710,7 +705,7 @@ class Projects(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
           )(LoggedActionProject.apply)
 
           (oreVisibility, forumVisibility).parTupled
-            .zipRight((log, projects.refreshHomePage(MDCLogger)).parTupled)
+            .zipRight((log, projects.refreshHomePage).parTupled)
             .unit
         }
 

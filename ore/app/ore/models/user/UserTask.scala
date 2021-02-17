@@ -11,7 +11,6 @@ import ore.OreConfig
 import ore.db.ModelService
 import ore.db.impl.OrePostgresDriver.api._
 import ore.models.api.ApiSession
-import ore.util.OreMDC
 
 import com.typesafe.scalalogging
 import zio.clock.Clock
@@ -21,8 +20,7 @@ class UserTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: zio.
     implicit service: ModelService[UIO]
 ) {
 
-  private val Logger               = scalalogging.Logger.takingImplicit[OreMDC]("UserTask")
-  implicit private val mdc: OreMDC = OreMDC.NoMDC
+  private val Logger = scalalogging.Logger("UserTask")
 
   val interval: Duration = config.ore.api.session.checkInterval.toJava
 

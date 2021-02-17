@@ -12,7 +12,7 @@ import ore.models.Job
 import ore.models.project._
 import ore.models.project.io.ProjectFiles
 import ore.util.StringUtils._
-import ore.util.{FileUtils, OreMDC}
+import ore.util.FileUtils
 import util.syntax._
 import util.{FileIO, TaskUtils}
 
@@ -21,14 +21,15 @@ import cats.effect.syntax.all._
 import cats.syntax.all._
 import cats.tagless.autoFunctorK
 import com.google.common.base.Preconditions._
-import com.typesafe.scalalogging.LoggerTakingImplicit
+import com.typesafe.scalalogging
+import com.typesafe.scalalogging.{Logger, LoggerTakingImplicit}
 
 @autoFunctorK
 trait ProjectBase[+F[_]] {
 
   def missingFile: F[Seq[Model[Version]]]
 
-  def refreshHomePage(logger: LoggerTakingImplicit[OreMDC])(implicit mdc: OreMDC): F[Unit]
+  def refreshHomePage: F[Unit]
 
   /**
     * Returns the Project with the specified owner name and name.
@@ -88,14 +89,14 @@ trait ProjectBase[+F[_]] {
   /**
     * Irreversibly deletes this version.
     */
-  def deleteVersion(version: Model[Version])(implicit mdc: OreMDC): F[Model[Project]]
+  def deleteVersion(version: Model[Version]): F[Model[Project]]
 
   /**
     * Irreversibly deletes this project.
     *
     * @param project Project to delete
     */
-  def delete(project: Model[Project])(implicit mdc: OreMDC): F[Int]
+  def delete(project: Model[Project]): F[Int]
 
   def queryProjectPages(project: Model[Project]): F[Seq[(Model[Page], Seq[Model[Page]])]]
 }
@@ -113,6 +114,8 @@ object ProjectBase {
       F: cats.effect.Effect[F],
       par: Parallel[F]
   ) extends ProjectBase[F] {
+
+    val Logger: Logger = scalalogging.Logger("ProjectBaseF")
 
     def missingFile: F[Seq[Model[Version]]] = {
       def allVersions =
@@ -145,10 +148,10 @@ object ProjectBase {
       }
     }
 
-    def refreshHomePage(logger: LoggerTakingImplicit[OreMDC])(implicit mdc: OreMDC): F[Unit] =
+    def refreshHomePage: F[Unit] =
       service
         .runDbCon(SharedQueries.refreshHomeView.run)
-        .runAsync(TaskUtils.logCallback("Failed to refresh home page", logger))
+        .runAsync(TaskUtils.logCallback("Failed to refresh home page", Logger))
         .to[F]
 
     def withName(owner: String, name: String): F[Option[Model[Project]]] =
@@ -256,7 +259,7 @@ object ProjectBase {
     /**
       * Irreversibly deletes this version.
       */
-    def deleteVersion(version: Model[Version])(implicit mdc: OreMDC): F[Model[Project]] = {
+    def deleteVersion(version: Model[Version]): F[Model[Project]] = {
       for {
         proj       <- prepareDeleteVersion(version)
         channel    <- version.channel
@@ -275,7 +278,7 @@ object ProjectBase {
       *
       * @param project Project to delete
       */
-    def delete(project: Model[Project])(implicit mdc: OreMDC): F[Int] = {
+    def delete(project: Model[Project]): F[Int] = {
       val fileEff = fileIO.executeBlocking(
         FileUtils.deleteDirectory(this.fileManager.getProjectDir(project.ownerName, project.name))
       )

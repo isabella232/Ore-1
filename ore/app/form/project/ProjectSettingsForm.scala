@@ -7,11 +7,10 @@ import ore.data.user.notification.NotificationType
 import ore.db.impl.OrePostgresDriver.api._
 import ore.db.impl.schema.{ProjectRoleTable, UserTable}
 import ore.db.{DbRef, Model, ModelService}
-import ore.models.project.io.ProjectFiles
 import ore.models.project.Project
+import ore.models.project.io.ProjectFiles
 import ore.models.user.{Notification, User}
 import ore.permission.role.Role
-import ore.util.OreMDC
 import ore.util.StringUtils.noneIfEmpty
 import util.FileIO
 import util.syntax._
@@ -20,7 +19,7 @@ import cats.Parallel
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.Async
 import cats.syntax.all._
-import com.typesafe.scalalogging.LoggerTakingImplicit
+import com.typesafe.scalalogging
 import slick.lifted.TableQuery
 
 /**
@@ -46,16 +45,17 @@ case class ProjectSettingsForm(
     keywordsRaw: String
 ) extends TProjectRoleSetBuilder {
 
-  def save[F[_]](project: Model[Project], logger: LoggerTakingImplicit[OreMDC])(
+  private val Logger = scalalogging.Logger("ProjectSettingsForm")
+
+  def save[F[_]](project: Model[Project])(
       implicit fileManager: ProjectFiles[F],
       fileIO: FileIO[F],
-      mdc: OreMDC,
       service: ModelService[F],
       F: Async[F],
       par: Parallel[F]
   ): EitherT[F, String, Model[Project]] = {
-    logger.debug("Saving project settings")
-    logger.debug(this.toString)
+    Logger.debug("Saving project settings")
+    Logger.debug(this.toString)
     val newOwnerId = this.ownerId.getOrElse(project.ownerId)
 
     val queryNewOwnerName = TableQuery[UserTable].filter(_.id === newOwnerId).map(_.name)

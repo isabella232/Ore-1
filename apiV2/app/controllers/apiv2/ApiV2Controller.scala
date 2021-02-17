@@ -35,6 +35,7 @@ import ore.models.user.{FakeUser, User}
 import ore.permission.scope.{GlobalScope, OrganizationScope, ProjectScope, Scope}
 import ore.permission.{NamedPermission, Permission}
 import _root_.util.syntax._
+import util.FiberSentry
 
 import akka.http.scaladsl.model.headers.{Authorization, HttpCredentials}
 import cats.data.{NonEmptyList, Validated}
@@ -109,7 +110,12 @@ class ApiV2Controller(
         res <- {
           if (info.expires.isBefore(OffsetDateTime.now())) {
             service.deleteWhere(ApiSession)(_.token === token) *> IO.fail(unAuth("Api session expired"))
-          } else ZIO.succeed(ApiRequest(info, request))
+          } else {
+            ZIO.foreach(info.user)(mdcPutUser) *>
+              FiberSentry
+                .configureScope(_.copy(user = info.user.map(userToSentryUser)))
+                .as(ApiRequest(info, request))
+          }
         }
       } yield res
 

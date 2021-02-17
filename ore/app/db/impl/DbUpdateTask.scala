@@ -6,7 +6,6 @@ import db.impl.access.ProjectBase
 import db.impl.query.StatTrackerQueries
 import ore.OreConfig
 import ore.db.ModelService
-import ore.util.OreMDC
 
 import cats.syntax.all._
 import com.typesafe.scalalogging
@@ -20,8 +19,7 @@ class DbUpdateTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: 
 
   val interval: duration.Duration = duration.Duration.fromScala(config.ore.homepage.updateInterval)
 
-  private val Logger               = scalalogging.Logger.takingImplicit[OreMDC]("DbUpdateTask")
-  implicit private val mdc: OreMDC = OreMDC.NoMDC
+  private val Logger = scalalogging.Logger("DbUpdateTask")
 
   Logger.info("DbUpdateTask starting")
 
@@ -43,7 +41,7 @@ class DbUpdateTask(config: OreConfig, lifecycle: ApplicationLifecycle, runtime: 
     runtime.unsafeRunToFuture(safeTask.repeat(schedule))
   }
 
-  private val homepageTask = runningTask(projects.refreshHomePage(Logger), homepageSchedule)
+  private val homepageTask = runningTask(projects.refreshHomePage, homepageSchedule)
 
   private def runMany(updates: Seq[doobie.Update0]) =
     service.runDbCon(updates.toList.traverse_(_.run))

@@ -30,7 +30,6 @@ import ore.models.project.factory.ProjectFactory
 import ore.models.project.io.{PluginFile, PluginUpload}
 import ore.models.user.{LoggedActionType, LoggedActionVersion, User}
 import ore.permission.Permission
-import ore.util.OreMDC
 import ore.util.StringUtils._
 import ore.{OreEnv, StatTracker}
 import util.UserActionLogger
@@ -59,8 +58,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
 
   private val self = controllers.project.routes.Versions
 
-  private val Logger    = scalalogging.Logger("Versions")
-  private val MDCLogger = scalalogging.Logger.takingImplicit[OreMDC](Logger.underlying)
+  private val Logger = scalalogging.Logger("Versions")
 
   private def VersionEditAction(author: String, slug: String) =
     AuthedProjectAction(author, slug, requireUnlock = true).andThen(ProjectPermissionAction(Permission.EditVersion))
@@ -828,7 +826,7 @@ class Versions(stats: StatTracker[UIO], forms: OreForms, factory: ProjectFactory
                       )
                       .unit
                   }
-                  .tapError(e => IO(MDCLogger.error("an error occurred while trying to send a plugin", e)))
+                  .tapError(e => IO(Logger.error("an error occurred while trying to send a plugin", e)))
                   .orDie
                   .as(Ok.sendPath(jarPath, onClose = () => Files.delete(jarPath)))
               }

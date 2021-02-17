@@ -16,7 +16,6 @@ import ore.db.{Model, ModelService}
 import ore.models.organization.Organization
 import ore.models.user.{Session, User}
 import ore.permission.Permission
-import ore.util.OreMDC
 import ore.util.StringUtils._
 import util.syntax._
 
@@ -37,7 +36,7 @@ trait UserBase[F[_]] {
     * @param username Username of user
     * @return User if found, None otherwise
     */
-  def withName(username: String)(implicit mdc: OreMDC): OptionT[F, Model[User]]
+  def withName(username: String): OptionT[F, Model[User]]
 
   /**
     * Returns the requested user when it is the requester or has the requested permission in the orga
@@ -48,9 +47,7 @@ trait UserBase[F[_]] {
     *
     * @return the requested user
     */
-  def requestPermission(user: Model[User], name: String, perm: Permission)(
-      implicit mdc: OreMDC
-  ): OptionT[F, Model[User]]
+  def requestPermission(user: Model[User], name: String, perm: Permission): OptionT[F, Model[User]]
 
   /**
     * Attempts to find the specified User in the database or creates a new User
@@ -81,7 +78,7 @@ trait UserBase[F[_]] {
     * @param session  Current session
     * @return         Authenticated user, if any, None otherwise
     */
-  def current(implicit session: Request[_], mdc: OreMDC): OptionT[F, Model[User]]
+  def current(implicit session: Request[_]): OptionT[F, Model[User]]
 }
 
 object UserBase {
@@ -92,14 +89,12 @@ object UserBase {
   class UserBaseF[F[_]](implicit service: ModelService[F], auth: SpongeAuthApi[F], config: OreConfig, F: Monad[F])
       extends UserBase[F] {
 
-    def withName(username: String)(implicit mdc: OreMDC): OptionT[F, Model[User]] =
+    def withName(username: String): OptionT[F, Model[User]] =
       ModelView.now(User).find(equalsIgnoreCase(_.name, username)).orElse {
         EitherT(auth.getUser(username)).map(_.toUser).toOption.semiflatMap(res => service.insert(res))
       }
 
-    def requestPermission(user: Model[User], name: String, perm: Permission)(
-        implicit mdc: OreMDC
-    ): OptionT[F, Model[User]] = {
+    def requestPermission(user: Model[User], name: String, perm: Permission): OptionT[F, Model[User]] = {
       this.withName(name).flatMap { toCheck =>
         if (user == toCheck) OptionT.pure[F](user) // Same user
         else
@@ -146,7 +141,7 @@ object UserBase {
           OptionT.some[F](session)
       }
 
-    def current(implicit session: Request[_], mdc: OreMDC): OptionT[F, Model[User]] =
+    def current(implicit session: Request[_]): OptionT[F, Model[User]] =
       OptionT
         .fromOption[F](session.cookies.get("_oretoken"))
         .flatMap(cookie => getSession(cookie.value))

@@ -10,13 +10,14 @@ import play.api.mvc.Results.Redirect
 import play.api.mvc._
 
 import controllers.sugar.Requests.OreRequest
+import util.{FiberSentry, FiberTranslator}
 
 import cats.Monad
 import cats.data.{EitherT, OptionT}
 import com.google.common.base.Preconditions.checkArgument
 import zio.blocking.Blocking
 import zio.clock.Clock
-import zio.{IO, ZIO}
+import zio.{Has, IO, ZEnv, ZIO}
 
 /**
   * A helper class for some common functions of controllers.
@@ -191,27 +192,21 @@ object ActionHelpers {
       form.bindFromRequest().fold(left.andThen(EitherT.leftT[F, B](_)), EitherT.rightT[F, A](_))
   }
 
-  private[sugar] def zioToFuture[A](
-      io: ZIO[Blocking with Clock, Nothing, A]
-  )(implicit runtime: zio.Runtime[Blocking with Clock]): Future[A] =
-    //TODO: If Sentry can't differentiate different errors here, log the error, and throw an exception ignored by Sentry instead
-    runtime.unsafeRunToFuture(io)
-
   class OreActionBuilderOps[R[_], B](private val action: ActionBuilder[R, B]) extends AnyVal {
 
     def asyncF(
-        fr: ZIO[Blocking, Result, Result]
-    )(implicit runtime: zio.Runtime[Blocking with Clock]): Action[AnyContent] =
-      action.async(zioToFuture(fr.either.map(_.merge)))
+        fr: ZIO[ZEnv with Has[FiberSentry], Result, Result]
+    )(implicit fiberTranslator: FiberTranslator): Action[AnyContent] =
+      action.async(fiberTranslator.fiberToFuture(fr.either.map(_.merge)))
 
     def asyncF(
-        fr: R[B] => ZIO[Blocking, Result, Result]
-    )(implicit runtime: zio.Runtime[Blocking with Clock]): Action[B] =
-      action.async(r => zioToFuture(fr(r).either.map(_.merge)))
+        fr: R[B] => ZIO[ZEnv with Has[FiberSentry], Result, Result]
+    )(implicit fiberTranslator: FiberTranslator): Action[B] =
+      action.async(r => fiberTranslator.fiberToFuture(fr(r).either.map(_.merge)))
 
-    def asyncF[A](
-        bodyParser: BodyParser[A]
-    )(fr: R[A] => ZIO[Blocking, Result, Result])(implicit runtime: zio.Runtime[Blocking with Clock]): Action[A] =
-      action.async(bodyParser)(r => zioToFuture(fr(r).either.map(_.merge)))
+    def asyncF[A](bodyParser: BodyParser[A])(
+        fr: R[A] => ZIO[ZEnv with Has[FiberSentry], Result, Result]
+    )(implicit fiberTranslator: FiberTranslator): Action[A] =
+      action.async(bodyParser)(r => fiberTranslator.fiberToFuture(fr(r).either.map(_.merge)))
   }
 }

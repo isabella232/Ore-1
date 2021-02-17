@@ -9,8 +9,7 @@ import com.typesafe.scalalogging
 
 object FileUtils {
 
-  private val Logger    = scalalogging.Logger("FileUtils")
-  private val MDCLogger = scalalogging.Logger.takingImplicit[OreMDC](Logger.underlying)
+  private val Logger = scalalogging.Logger("FileUtils")
 
   /**
     * Formats the number of bytes into a human readable file size
@@ -34,12 +33,12 @@ object FileUtils {
     *
     * @param dir The directory to delete
     */
-  def deleteDirectory(dir: Path)(implicit mdc: OreMDC): Unit = {
+  def deleteDirectory(dir: Path): Unit = {
     if (Files.exists(dir)) {
       Files.walkFileTree(dir, new DeleteFileVisitor)
       ()
     } else {
-      MDCLogger.debug(s"Tried to remove directory that doesn't exist: $dir")
+      Logger.debug(s"Tried to remove directory that doesn't exist: $dir")
     }
   }
 
@@ -48,12 +47,12 @@ object FileUtils {
     *
     * @param dir The directory to clean
     */
-  def cleanDirectory(dir: Path)(implicit mdc: OreMDC): Unit = {
+  def cleanDirectory(dir: Path): Unit = {
     if (Files.exists(dir)) {
       Files.walkFileTree(dir, new CleanFileVisitor(dir))
       ()
     } else {
-      MDCLogger.debug(s"Tried to clean directory that doesn't exist: $dir")
+      Logger.debug(s"Tried to clean directory that doesn't exist: $dir")
     }
   }
 
@@ -61,13 +60,13 @@ object FileUtils {
     * Represents a [[java.nio.file.FileVisitor]] which will recursively delete a directory
     * with all its contents.
     */
-  private class DeleteFileVisitor(implicit mdc: OreMDC) extends SimpleFileVisitor[Path] {
+  private class DeleteFileVisitor extends SimpleFileVisitor[Path] {
 
     override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
       if (Files.exists(file)) {
         Files.delete(file)
       } else {
-        MDCLogger.debug(s"Tried to remove file that doesn't exist: $file")
+        Logger.debug(s"Tried to remove file that doesn't exist: $file")
       }
       FileVisitResult.CONTINUE
     }
@@ -76,7 +75,7 @@ object FileUtils {
       if (Files.exists(dir)) {
         Files.delete(dir)
       } else {
-        MDCLogger.debug(s"Tried to remove directory that doesn't exist: $dir")
+        Logger.debug(s"Tried to remove directory that doesn't exist: $dir")
       }
       FileVisitResult.CONTINUE
     }
@@ -89,7 +88,7 @@ object FileUtils {
     *
     * @param dir The directory to clean
     */
-  private class CleanFileVisitor(private val dir: Path)(implicit mdc: OreMDC) extends DeleteFileVisitor {
+  private class CleanFileVisitor(private val dir: Path) extends DeleteFileVisitor {
 
     override def postVisitDirectory(dir: Path, exc: IOException): FileVisitResult = {
       if (dir != this.dir) {

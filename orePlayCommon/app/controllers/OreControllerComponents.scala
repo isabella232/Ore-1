@@ -14,17 +14,18 @@ import ore.OreConfig
 import ore.auth.SSOApi
 import ore.db.ModelService
 import ore.models.project.io.ProjectFiles
+import util.{FiberSentry, FiberTranslator}
 
 import zio.blocking.Blocking
-import zio.clock.Clock
-import zio.{UIO, ZIO}
+import zio.{Has, UIO, ZEnv, ZIO}
 
 trait OreControllerComponents extends ControllerComponents {
   def uioEffects: OreControllerEffects[UIO]
   def bakery: Bakery
   def config: OreConfig
   def projectFiles: ProjectFiles[ZIO[Blocking, Nothing, ?]]
-  def zioRuntime: zio.Runtime[Blocking with Clock]
+  def zioRuntime: zio.Runtime[ZEnv with Has[FiberSentry]]
+  def fiberTranslator: FiberTranslator
   def assetsFinder: AssetsFinder
 }
 
@@ -47,7 +48,8 @@ case class DefaultOreControllerComponents(
     fileMimeTypes: FileMimeTypes,
     executionContext: ExecutionContext,
     projectFiles: ProjectFiles[ZIO[Blocking, Nothing, ?]],
-    zioRuntime: zio.Runtime[Blocking with Clock],
+    zioRuntime: zio.Runtime[ZEnv with Has[FiberSentry]],
+    fiberTranslator: FiberTranslator,
     assetsFinder: AssetsFinder
 ) extends OreControllerComponents
 

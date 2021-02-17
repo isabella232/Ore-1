@@ -12,11 +12,9 @@ import ore.models.project.Project
 import ore.models.user.User
 import ore.permission.Permission
 import ore.permission.scope.{GlobalScope, HasScope}
-import ore.util.OreMDC
 import util.syntax._
 
 import cats.Applicative
-import org.slf4j.MDC
 
 /**
   * Contains the custom WrappedRequests used by Ore.
@@ -31,7 +29,7 @@ object Requests {
       globalPerms: Permission
   )
 
-  case class ApiRequest[A](apiInfo: ApiAuthInfo, request: Request[A]) extends WrappedRequest[A](request) with OreMDC {
+  case class ApiRequest[A](apiInfo: ApiAuthInfo, request: Request[A]) extends WrappedRequest[A](request) {
     def user: Option[Model[User]] = apiInfo.user
 
     def globalPermissions: Permission = apiInfo.globalPerms
@@ -43,58 +41,20 @@ object Requests {
           .map(_.permissionsIn(b))
           .orElse(apiInfo.user.map(_.permissionsIn(b)))
           .getOrElse(F.pure(globalPermissions))
-
-    override def logMessage(s: String): String = {
-      user.foreach(mdcPutUser)
-      s
-    }
-
-    override def afterLog(): Unit = mdcClear()
-  }
-
-  private def mdcPutUser(user: Model[User]): Unit = {
-    MDC.put("currentUserId", user.id.toString)
-    MDC.put("currentUserName", user.name)
-  }
-
-  private def mdcPutProject(project: Model[Project]): Unit = {
-    MDC.put("currentProjectId", project.id.toString)
-    MDC.put("currentProjectSlug", project.slug)
-  }
-
-  private def mdcPutOrg(orga: Model[Organization]): Unit = {
-    MDC.put("currentOrgaId", orga.id.toString)
-    MDC.put("currentOrgaName", orga.name)
-  }
-
-  private def mdcClear(): Unit = {
-    MDC.remove("currentUserId")
-    MDC.remove("currentUserName")
-    MDC.remove("currentProjectId")
-    MDC.remove("currentProjectSlug")
-    MDC.remove("currentOrgaId")
-    MDC.remove("currentOrgaName")
   }
 
   /**
     * Base Request for Ore that holds all data needed for rendering the header
     */
-  sealed trait OreRequest[A] extends WrappedRequest[A] with OreMDC {
+  sealed trait OreRequest[A] extends WrappedRequest[A] {
     def headerData: HeaderData
     def currentUser: Option[Model[User]] = headerData.currentUser
     def hasUser: Boolean                 = headerData.currentUser.isDefined
-
-    override def afterLog(): Unit = mdcClear()
   }
 
   final class SimpleOreRequest[A](val headerData: HeaderData, val request: Request[A])
       extends WrappedRequest[A](request)
-      with OreRequest[A] {
-    override def logMessage(s: String): String = {
-      currentUser.foreach(mdcPutUser)
-      s
-    }
-  }
+      with OreRequest[A]
 
   /** Represents a Request with a [[User]] and subject */
   sealed trait ScopedRequest[A] extends OreRequest[A] {
@@ -123,12 +83,7 @@ object Requests {
   final class AuthRequest[A](val user: Model[User], val headerData: HeaderData, request: Request[A])
       extends WrappedRequest[A](request)
       with OreRequest[A]
-      with UserScopedRequest[A] {
-    override def logMessage(s: String): String = {
-      mdcPutUser(user)
-      s
-    }
-  }
+      with UserScopedRequest[A]
 
   /**
     * A request that holds a [[Project]].
@@ -146,12 +101,6 @@ object Requests {
       with OreRequest[A] {
 
     def project: Model[Project] = data.project
-
-    override def logMessage(s: String): String = {
-      currentUser.foreach(mdcPutUser)
-      mdcPutProject(project)
-      s
-    }
   }
 
   /**
@@ -191,13 +140,7 @@ object Requests {
       val headerData: HeaderData,
       val request: Request[A]
   ) extends WrappedRequest[A](request)
-      with OreRequest[A] {
-    override def logMessage(s: String): String = {
-      currentUser.foreach(mdcPutUser)
-      mdcPutOrg(data.orga)
-      s
-    }
-  }
+      with OreRequest[A]
 
   /**
     * A request that holds an [[Organization]] and an [[AuthRequest]].
