@@ -21,7 +21,6 @@ import ore.permission.Permission
 
 import cats.Reducible
 import cats.data.NonEmptyList
-import cats.instances.list._
 import cats.syntax.all._
 import doobie._
 import doobie.implicits._
@@ -191,7 +190,7 @@ object APIV2Queries extends WebDoobieOreProtocol {
       limit: Long,
       offset: Long
   )(
-      implicit projectFiles: ProjectFiles[ZIO[Blocking, Nothing, ?]],
+      implicit projectFiles: ProjectFiles[ZIO[Blocking, Nothing, *]],
       requestHeader: RequestHeader,
       config: OreConfig
   ): Query0[ZIO[Blocking, Nothing, APIV2.Project]] = {
