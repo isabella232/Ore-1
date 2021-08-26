@@ -22,9 +22,9 @@ import cats.instances.option._
 import cats.syntax.all._
 import io.circe.{Decoder, Json}
 import slick.lifted.TableQuery
-import squeal.category._
-import squeal.category.syntax.all._
-import squeal.category.macros.Derive
+import perspective._
+import perspective.syntax.all._
+import perspective.macros.Derive
 import zio.ZIO
 import zio.interop.catz._
 
@@ -164,11 +164,13 @@ object Pages {
       parent: F[Option[String]]
   )
   object PatchPageF {
+    type Rep[A] = Finite[3]
+
     implicit val F: ApplicativeKC[PatchPageF] with TraverseKC[PatchPageF] with DistributiveKC[PatchPageF] =
-      Derive.allKC[PatchPageF]
+      Derive.allKC[PatchPageF, Rep]
 
     val patchDecoder: PatchPageF[PatchDecoder] =
-      PatchDecoder.fromName(Derive.namesWithProductImplicitsC[PatchPageF, Decoder])(
+      PatchDecoder.fromName(Derive.namesWithImplicitsC[PatchPageF, Decoder])(
         io.circe.derivation.renaming.snakeCase
       )
   }

@@ -124,7 +124,7 @@ lazy val apiV2 = project
       Deps.circeParser,
       Deps.scalaCache,
       Deps.scalaCacheCatsEffect,
-      Deps.squealCategoryMacro
+      Deps.perspectiveMacro
     ),
     libraryDependencies ++= Deps.playTestDeps
   )
@@ -138,7 +138,7 @@ lazy val oreClient = project
     Assets / webpackProdConfig := baseDirectory.value / "webpack.config.prod.js",
     Assets / webpackMonitoredDirectories += baseDirectory.value / "src" / "main" / "assets",
     Assets / webpackMonitoredFiles / includeFilter := "*.vue" || "*.js",
-    webpackMonitoredFiles in Assets ++= Seq(
+    Assets / webpackMonitoredFiles ++= Seq(
       baseDirectory.value / "webpack.config.common.js",
       baseDirectory.value / ".postcssrc.js",
       baseDirectory.value / ".browserlistrc"
@@ -191,7 +191,7 @@ lazy val ore = project
     swaggerV3 := true,
     PlayKeys.playMonitoredFiles += baseDirectory.value / "swagger.yml",
     PlayKeys.playMonitoredFiles += baseDirectory.value / "swagger-custom-mappings.yml",
-    WebKeys.exportedMappings in Assets := Seq(),
+    Assets / WebKeys.exportedMappings := Seq(),
     buildInfoKeys := Seq[BuildInfoKey](version, scalaVersion, resolvers, libraryDependencies),
     buildInfoOptions += BuildInfoOption.BuildTime,
     buildInfoPackage := "ore",

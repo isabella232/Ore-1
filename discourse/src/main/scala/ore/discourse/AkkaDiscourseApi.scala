@@ -51,6 +51,7 @@ class AkkaDiscourseApi[F[_]] private (
               )
 
               DiscourseError.RatelimitError(12.hours)
+            case Left(_: Error) => sys.error("impossible")
           }
 
         case None =>

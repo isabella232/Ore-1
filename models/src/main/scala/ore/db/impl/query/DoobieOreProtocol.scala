@@ -26,8 +26,7 @@ import cats.data.{NonEmptyList => NEL}
 import com.github.tminglei.slickpg.InetString
 import com.typesafe.scalalogging
 import doobie._
-import doobie.`enum`.JdbcType.{Char, Date, LongVarChar, Time, Timestamp, TimestampWithTimezone, VarChar}
-import doobie.enum.JdbcType
+import doobie.enumerated.JdbcType
 import doobie.postgres.implicits._
 import doobie.util.meta.Meta
 import enumeratum.values._
@@ -114,20 +113,11 @@ trait DoobieOreProtocol {
     }
   }
 
-  implicit val offsetDateTimeMeta: Meta[java.time.OffsetDateTime] =
-    Meta.Basic.one[java.time.OffsetDateTime](
-      Timestamp, //Appareantly Postgres reports TIMESTAMPTZ as TIMESTAMP and not TIMESTAMPWITHTIMEZONE
-      List(Char, VarChar, LongVarChar, Date, Time, TimestampWithTimezone),
-      _.getObject(_, classOf[java.time.OffsetDateTime]),
-      _.setObject(_, _),
-      _.updateObject(_, _)
-    )
-
-  implicit def objectIdMeta[A](implicit tt: TypeTag[ObjId[A]]): Meta[ObjId[A]] =
+  implicit def objectIdMeta[A]: Meta[ObjId[A]] =
     Meta[Long].timap(ObjId.apply[A])(_.value)
 
   implicit val objOffsetDateTime: Meta[ObjOffsetDateTime] =
-    offsetDateTimeMeta.timap(ObjOffsetDateTime.apply)(ObjOffsetDateTime.unwrapObjTimestamp)
+    JavaTimeOffsetDateTimeMeta.timap(ObjOffsetDateTime.apply)(ObjOffsetDateTime.unwrapObjTimestamp)
 
   implicit def modelRead[A](implicit raw: Read[(ObjId[A], ObjOffsetDateTime, A)]): Read[Model[A]] = raw.map {
     case (id, time, obj) => Model(id, time, obj)
@@ -161,12 +151,12 @@ trait DoobieOreProtocol {
     }.orNull
   }
 
-  def enumeratumMeta[V: TypeTag, E <: ValueEnumEntry[V]: TypeTag](
+  def enumeratumMeta[V, E <: ValueEnumEntry[V]](
       enum: ValueEnum[V, E]
   )(implicit meta: Meta[V]): Meta[E] =
     meta.timap[E](enum.withValue)(_.value)
 
-  def pgEnumEnumeratumMeta[E <: StringEnumEntry: TypeTag](typeName: String, enum: StringEnum[E]): Meta[E] =
+  def pgEnumEnumeratumMeta[E <: StringEnumEntry](typeName: String, enum: StringEnum[E]): Meta[E] =
     pgEnumString(typeName, enum.withValue, _.value)
 
   implicit val colorMeta: Meta[Color]                       = enumeratumMeta(Color)
@@ -229,13 +219,13 @@ trait DoobieOreProtocol {
   implicit val tagColorArrayMeta: Meta[List[TagColor]] =
     Meta[Array[Int]].timap(_.toList.map(TagColor.withValue))(_.map(_.value).toArray)
 
-  implicit def unsafeNelMeta[A](implicit listMeta: Meta[List[A]], typeTag: TypeTag[NEL[A]]): Meta[NEL[A]] =
+  implicit def unsafeNelMeta[A](implicit listMeta: Meta[List[A]]): Meta[NEL[A]] =
     listMeta.timap(NEL.fromListUnsafe)(_.toList)
 
-  implicit def unsafeNelGet[A](implicit listGet: Get[List[A]], typeTag: TypeTag[NEL[A]]): Get[NEL[A]] =
+  implicit def unsafeNelGet[A](implicit listGet: Get[List[A]]): Get[NEL[A]] =
     listGet.tmap(NEL.fromListUnsafe)
 
-  implicit def unsafeNelPut[A](implicit listPut: Put[List[A]], typeTag: TypeTag[NEL[A]]): Put[NEL[A]] =
+  implicit def unsafeNelPut[A](implicit listPut: Put[List[A]]): Put[NEL[A]] =
     listPut.tcontramap(_.toList)
 
   implicit val userModelRead: Read[Model[User]] =

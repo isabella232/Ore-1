@@ -8,6 +8,7 @@ import ore.db.impl.query.DoobieOreProtocol
 import ore.permission.role.Role
 
 import doobie._
+import doobie.postgres.implicits._
 import doobie.implicits._
 
 object UserPagesQueries extends DoobieOreProtocol {

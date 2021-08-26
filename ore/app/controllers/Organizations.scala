@@ -73,7 +73,7 @@ class Organizations(forms: OreForms)(
               organizations
                 .create(formData.name, user.id, formData.build())
                 .absolve
-                .bimap(
+                .mapBoth(
                   error => Redirect(failCall).withErrors(error),
                   organization => Redirect(routes.Users.showProjects(organization.name))
                 )

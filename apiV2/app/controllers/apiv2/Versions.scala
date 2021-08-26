@@ -40,9 +40,9 @@ import cats.Applicative
 import cats.data.{Const => _, _}
 import cats.syntax.all._
 import doobie.free.connection.ConnectionIO
-import squeal.category._
-import squeal.category.macros.Derive
-import squeal.category.syntax.all._
+import perspective._
+import perspective.macros.Derive
+import perspective.syntax.all._
 import zio.blocking.Blocking
 import zio.interop.catz._
 import zio.{IO, UIO, ZIO}
@@ -208,7 +208,7 @@ class Versions(
               }
 
               val needEdit =
-                version.foldLeftKC(false)(acc => Lambda[Option ~>: Const[Boolean]#λ](op => acc || op.isDefined))
+                version.foldLeftKC(false)(acc => Lambda[Option ~>: Const[Boolean, *]](op => acc || op.isDefined))
               val doEdit =
                 if (!needEdit) Applicative[ConnectionIO].unit
                 else APIV2Queries.updateVersion(projectOwner, projectSlug, name, version).run.void
@@ -546,12 +546,14 @@ object Versions {
       platforms: F[List[SimplePlatform]]
   )
   object EditableVersionF {
+    type Rep[A] = Finite[3]
+
     implicit val F
         : ApplicativeKC[EditableVersionF] with TraverseKC[EditableVersionF] with DistributiveKC[EditableVersionF] =
-      Derive.allKC[EditableVersionF]
+      Derive.allKC[EditableVersionF, Rep]
 
     val patchDecoder: EditableVersionF[PatchDecoder] =
-      PatchDecoder.fromName(Derive.namesWithProductImplicitsC[EditableVersionF, Decoder])(
+      PatchDecoder.fromName(Derive.namesWithImplicitsC[EditableVersionF, Decoder])(
         _root_.io.circe.derivation.renaming.snakeCase
       )
   }
@@ -561,9 +563,11 @@ object Versions {
       releaseType: F[Option[Version.ReleaseType]]
   )
   object DbEditableVersionF {
+    type Rep[A] = Finite[2]
+
     implicit val F: ApplicativeKC[DbEditableVersionF]
       with TraverseKC[DbEditableVersionF]
-      with DistributiveKC[DbEditableVersionF] = Derive.allKC[DbEditableVersionF]
+      with DistributiveKC[DbEditableVersionF] = Derive.allKC[DbEditableVersionF, Rep]
   }
 
   @SnakeCaseJsonCodec case class ScannedVersion(

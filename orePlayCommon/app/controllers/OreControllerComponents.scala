@@ -1,7 +1,5 @@
 package controllers
 
-import scala.language.higherKinds
-
 import scala.concurrent.ExecutionContext
 
 import play.api.http.FileMimeTypes
@@ -46,7 +44,7 @@ case class DefaultOreControllerComponents(
     langs: Langs,
     fileMimeTypes: FileMimeTypes,
     executionContext: ExecutionContext,
-    projectFiles: ProjectFiles[ZIO[Blocking, Nothing, ?]],
+    projectFiles: ProjectFiles[ZIO[Blocking, Nothing, *]],
     zioRuntime: zio.Runtime[Blocking with Clock],
     assetsFinder: AssetsFinder
 ) extends OreControllerComponents
