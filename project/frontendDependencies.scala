@@ -28,12 +28,12 @@ object NPMDeps {
   val webpackBundleAnalyzer = "webpack-bundle-analyzer" -> "3.6.1"
 
   val cssLoader         = "css-loader"                         -> "3.4.2"
-  val sassLoader        = "sass-loader"                        -> "8.0.2"
+  val sassLoader        = "sass-loader"                        -> "10.1.1"
   val postCssLoader     = "postcss-loader"                     -> "3.0.0"
   val miniCssExtractor  = "mini-css-extract-plugin"            -> "0.9.0"
   val optimizeCssAssets = "optimize-css-assets-webpack-plugin" -> "5.0.3"
   val autoprefixer      = "autoprefixer"                       -> "9.7.4"
-  val nodeSass          = "node-sass"                          -> "4.14.1"
+  val sass              = "sass"                               -> "1.43.4"
 }
 
 object WebjarsDeps {

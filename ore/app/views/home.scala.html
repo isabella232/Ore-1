@@ -52,7 +52,7 @@ sorted according to different criteria.
                     <span>Sponsored by</span>
                     <div class="panel-body">
                     @defining(randomSponsor) { sponsor =>
-                        <a href="@sponsor.link">
+                        <a href="@sponsor.link" class="logo-container">
                             <img class="logo" src="@assetsFinder.path(sponsor.image)" alt="Sponsor" />
                         </a>
                     }
