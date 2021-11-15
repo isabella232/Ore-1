@@ -167,7 +167,7 @@ lazy val oreClient = project
       NPMDeps.sassLoader,
       NPMDeps.postCssLoader,
       NPMDeps.autoprefixer,
-      NPMDeps.nodeSass,
+      NPMDeps.sass,
       NPMDeps.webpackCopy,
       NPMDeps.webpackBundleAnalyzer
     )
